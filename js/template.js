@@ -423,11 +423,12 @@ function getSectionChars(type) {
     return [];
 }
 
-// 列数取得
+// 列数取得（テンプレート用：CAMERA常に3列）
 function getActualColCounts() {
     const result = { ACTION: 7, CELL: 7, SOUND: 2, CAMERA: 3 };
     if (typeof sections !== 'undefined') {
         sections.forEach(sec => {
+            if (sec.type === 'CAMERA') return; // テンプレートでは常に3列
             if (result[sec.type] !== undefined) {
                 result[sec.type] = sec.cols;
             }
