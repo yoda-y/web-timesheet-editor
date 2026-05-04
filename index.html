@@ -57,6 +57,10 @@
   <span style="margin-left:12px; border-left:1px solid var(--border-color); padding-left:12px;"></span>
   <button onclick="exportTemplateImage('png')" data-i18n="preview.exportPng">PNG</button>
   <button onclick="exportTemplateImage('jpg')" data-i18n="preview.exportJpg">JPG</button>
+  <span style="margin-left:12px; border-left:1px solid var(--border-color); padding-left:12px;"></span>
+  <button id="bbox-toggle" onclick="toggleBboxEditMode()" data-i18n="preview.bboxEdit">枠編集</button>
+  <button onclick="resetBboxes(); renderBboxOverlay();" data-i18n="preview.bboxReset">枠リセット</button>
+  <button onclick="saveBboxes()" data-i18n="preview.bboxSave">枠保存</button>
 </div>
 
 <!-- モード切替タブ -->
@@ -643,6 +647,7 @@
 <script src="js/input.js"></script>
 <script src="js/frame-ops.js"></script>
 <script src="js/autosave.js"></script>
+<script src="js/template-bbox.js"></script>
 <script src="js/template.js"></script>
 <script src="js/preview.js"></script>
 <script src="js/menu.js"></script>
