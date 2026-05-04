@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>XDTS Editor - v1.60 (Custom Rules)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="context-menu" style="display:none; position:absolute; z-index:10000; background:var(--highlight); border:1px solid var(--border-color); border-radius:4px; padding:4px; box-shadow:0 4px 6px rgba(0,0,0,0.5); font-size:12px; cursor:pointer;">
+</div>
+
+<!-- VERSION (シート切替) ドロップダウン -->
+<div id="version-dropdown" class="menu-dropdown" style="min-width:200px;">
+  <div id="version-sheet-list"></div>
+  <div class="menu-sep"></div>
+  <div class="menu-row" data-version-action="rename" data-i18n="sheet.rename">シート名を変更</div>
+  <div class="menu-row" data-version-action="addSheet" data-i18n="sheet.add">新規シート作成...</div>
+  <div class="menu-row" data-version-action="copySheet" data-i18n="sheet.copy">現在のシートをコピー</div>
+  <div class="menu-row" data-version-action="deleteSheet" data-i18n="sheet.delete">現在のシートを削除</div>
+</div>
+
+<!-- シート追加モーダル -->
+<div id="sheet-add-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:400px;">
+    <h3 data-i18n="sheet.addTitle">シート追加</h3>
+    <div class="settings-row">
+      <label data-i18n="sheet.name">シート名:</label>
+      <input type="text" id="sheet-add-name" style="flex:1; max-width:200px;">
+    </div>
+    <div class="settings-row">
+      <label data-i18n="sheet.color">シート色:</label>
+      <input type="color" id="sheet-add-color" value="#cccccc" style="width:50px; height:28px; padding:0;">
+    </div>
+    <div class="settings-row">
+      <label data-i18n="sheet.source">引継ぎシート:</label>
+      <select id="sheet-add-source" style="flex:1; max-width:200px; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick); border-radius:3px;"></select>
+    </div>
+    <div class="settings-row" style="flex-direction:column; align-items:flex-start;">
+      <label style="font-weight:bold; margin-bottom:6px;" data-i18n="sheet.dataLabel">データ:</label>
+      <div class="io-radios">
+        <label><input type="radio" name="sheet-inherit" value="all" checked><span data-i18n="sheet.dataAll"> すべて（タイムテーブル + 補助データ）</span></label>
+        <label><input type="radio" name="sheet-inherit" value="sheet"><span data-i18n="sheet.dataSheet"> シートデータ（タイムテーブルのみ）</span></label>
+        <label><input type="radio" name="sheet-inherit" value="aux"><span data-i18n="sheet.dataAux"> 補助データ（メモ・BOOK等のみ）</span></label>
+        <label><input type="radio" name="sheet-inherit" value="new"><span data-i18n="sheet.dataNew"> 新規（引継ぎなし）</span></label>
+      </div>
+    </div>
+    <div class="settings-actions">
+      <button id="sheet-add-cancel" data-i18n="btn.cancel">キャンセル</button>
+      <button id="sheet-add-ok" class="primary" data-i18n="btn.ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- プレビューツールバー -->
+<div id="preview-toolbar" style="display:none;">
+  <button onclick="updateTemplatePreview()" data-i18n="preview.refresh">Refresh</button>
+  <span style="margin-left:12px; border-left:1px solid var(--border-color); padding-left:12px;"></span>
+  <button onclick="exportTemplateImage('png')" data-i18n="preview.exportPng">PNG</button>
+  <button onclick="exportTemplateImage('jpg')" data-i18n="preview.exportJpg">JPG</button>
+</div>
+
+<!-- モード切替タブ -->
+<div id="mode-tabs">
+  <div class="mode-tab active" data-mode="edit">Edit</div>
+  <div class="mode-tab" data-mode="preview">Preview</div>
+  <div class="mode-tab" data-mode="template">Template</div>
+  <div class="mode-tabs-spacer"></div>
+  <div id="mode-status" class="mode-status">未保存変更なし</div>
+</div>
+
+<!-- メニューバー -->
+<div id="menubar">
+  <div class="menu-item" data-menu="file" data-i18n="menu.file">ファイル</div>
+  <div class="menu-item" data-menu="edit" data-i18n="menu.edit">編集</div>
+  <div class="menu-item mode-only" data-menu="insert" data-show-modes="edit" data-i18n="menu.insert">挿入</div>
+  <div class="menu-item" data-menu="view" data-i18n="menu.view">表示</div>
+  <div class="menu-item" data-menu="settings" data-i18n="menu.settings">設定</div>
+  <div class="menu-item" data-menu="help" data-i18n="menu.help">ヘルプ</div>
+  <div class="menubar-spacer"></div>
+  <div class="menubar-inline" id="quick-palette" title="入力色を選択（次に入力するセルに自動適用）">
+    <span style="font-size:10px; color:var(--grid-medium);" data-i18n="label.inputColor">入力色:</span>
+    <button class="qp-swatch active" data-fc="0" title="ID 0"></button>
+    <button class="qp-swatch" data-fc="1" title="ID 1"></button>
+    <button class="qp-swatch" data-fc="2" title="ID 2"></button>
+    <button class="qp-swatch" data-fc="3" title="ID 3"></button>
+  </div>
+  <div class="menubar-inline">Zoom: <span id="zoomDisplay">100%</span></div>
+</div>
+
+<!-- gapSetting は描画設定モーダルへ。drawAll が参照するため hidden で保持 -->
+<input type="hidden" id="gapSetting" value="3">
+
+<!-- インポート/エクスポート フィールド選択モーダル -->
+<div id="io-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:440px;">
+    <h3 id="io-modal-title">インポート: ファイル名.tdts</h3>
+    <div id="io-modal-warn" class="io-warn" style="display:none;"></div>
+    <div class="settings-row" style="flex-direction:column; align-items:flex-start;">
+      <div style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:6px;">
+        <label style="font-weight:bold;" data-i18n="io.fields">取り込む / 出力する項目</label>
+        <button id="io-toggle-all" type="button" data-i18n="io.toggleAll" style="padding:2px 10px; font-size:11px;">全て選択 / 解除</button>
+      </div>
+      <div class="io-checks">
+        <label><input type="checkbox" data-io="meta" checked><span data-i18n="io.field.meta"> メタ情報 (TITLE/SCENE/CUT等)</span></label>
+        <label><input type="checkbox" data-io="direction" checked><span data-i18n="io.field.direction"> DIRECTION (指示)</span></label>
+        <label><input type="checkbox" data-io="action" checked><span data-i18n="io.field.action"> ACTION (原画)</span></label>
+        <label><input type="checkbox" data-io="sound" checked><span data-i18n="io.field.sound"> SOUND (セリフ)</span></label>
+        <label><input type="checkbox" data-io="cell" checked><span data-i18n="io.field.cell"> CELL (動画)</span></label>
+        <label><input type="checkbox" data-io="camera" checked><span data-i18n="io.field.camera"> CAMERA (撮影)</span></label>
+        <label><input type="checkbox" data-io="book" checked><span data-i18n="io.field.book"> BOOK</span></label>
+        <label><input type="checkbox" data-io="stroboMerge" checked><span data-i18n="io.field.stroboMerge"> ストロボ自動マージ (TDTSのみ)</span></label>
+      </div>
+    </div>
+
+    <!-- XDTS 特有: CELL マッピング -->
+    <div id="io-xdts-mapping" class="settings-row" style="flex-direction:column; align-items:flex-start; display:none;">
+      <label style="font-weight:bold; margin-bottom:6px;" data-i18n="io.xdts.cellTarget">XDTS の CELL フィールドの取込先</label>
+      <div class="io-radios">
+        <label><input type="radio" name="xdtsCellTarget" value="both" checked><span data-i18n="io.xdts.cellBoth"> ACTION と CELL の両方にコピー</span></label>
+        <label><input type="radio" name="xdtsCellTarget" value="action"><span data-i18n="io.xdts.cellAction"> ACTION のみ</span></label>
+        <label><input type="radio" name="xdtsCellTarget" value="cell"><span data-i18n="io.xdts.cellOnly"> CELL のみ</span></label>
+      </div>
+    </div>
+    <div id="io-xdts-export" class="settings-row" style="flex-direction:column; align-items:flex-start; display:none;">
+      <label style="font-weight:bold; margin-bottom:6px;" data-i18n="io.xdts.exportSource">XDTS の CELL フィールドへの出力ソース</label>
+      <div class="io-radios">
+        <label><input type="radio" name="xdtsExportSource" value="action" checked><span data-i18n="io.xdts.srcAction"> ACTION 優先</span></label>
+        <label><input type="radio" name="xdtsExportSource" value="cell"><span data-i18n="io.xdts.srcCell"> CELL 優先</span></label>
+        <label><input type="radio" name="xdtsExportSource" value="merge"><span data-i18n="io.xdts.srcMerge"> マージ (ACTIONがあればACTION、無ければCELL)</span></label>
+      </div>
+    </div>
+
+    <!-- インポート時のみ: 既存データの扱い -->
+    <div id="io-merge-mode" class="settings-row" style="flex-direction:column; align-items:flex-start;">
+      <label style="font-weight:bold; margin-bottom:6px;" data-i18n="io.merge.label">既存データの扱い</label>
+      <div class="io-radios">
+        <label><input type="radio" name="ioMerge" value="new" checked><span data-i18n="io.merge.new"> 新規 (新しいタイムシートとして開く)</span></label>
+        <label><input type="radio" name="ioMerge" value="overwrite"><span data-i18n="io.merge.overwrite"> 上書き (チェックした欄だけ既存を破棄して差替)</span></label>
+      </div>
+    </div>
+
+    <div class="settings-actions">
+      <button id="io-modal-cancel" data-i18n="btn.cancel">キャンセル</button>
+      <button id="io-modal-ok" class="primary" data-i18n="io.btn.run">実行</button>
+    </div>
+  </div>
+</div>
+
+<!-- ショートカット一覧モーダル（参照専用） -->
+<div id="help-shortcuts-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:560px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column;">
+    <h3 data-i18n="modal.helpShortcuts">ショートカット一覧</h3>
+    <input type="text" id="help-shortcut-search" placeholder="検索 (アクション名)" data-i18n-placeholder="shortcut.search" style="margin-bottom:6px; padding:6px 10px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick); border-radius:4px; font-size:12px;">
+    <div style="font-size:10px; color:var(--grid-medium); margin-bottom:6px;" data-i18n="shortcut.hint">行をクリックで選択、ダブルクリックで設定画面に直接遷移</div>
+    <div style="flex:1; overflow-y:auto; padding-right:4px;">
+      <table id="help-shortcut-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid var(--border-color);">
+            <th style="padding:6px 4px;" data-i18n="shortcut.action">アクション</th>
+            <th style="padding:6px 4px; width:120px;" data-i18n="shortcut.main">メイン</th>
+            <th style="padding:6px 4px; width:120px;" data-i18n="shortcut.sub">サブ</th>
+          </tr>
+        </thead>
+        <tbody id="help-shortcut-tbody"></tbody>
+      </table>
+    </div>
+    <div class="settings-actions">
+      <button id="help-shortcut-open-config" data-i18n="shortcut.openConfig">設定で変更...</button>
+      <button id="help-shortcut-close" class="primary" data-i18n="btn.close">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 簡易マニュアルモーダル -->
+<div id="help-manual-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:600px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column;">
+    <h3 data-i18n="modal.helpManual">簡易マニュアル</h3>
+    <div id="help-manual-content" style="flex:1; overflow-y:auto; padding:0 8px; font-size:12px; line-height:1.7;"></div>
+    <div class="settings-actions">
+      <button id="help-manual-close" class="primary" data-i18n="btn.close">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- バージョン情報モーダル -->
+<div id="help-about-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:340px;">
+    <h3 data-i18n="modal.about">バージョン情報</h3>
+    <div style="font-size:12px; line-height:1.8;">
+      <div><strong>web_timesheet_editer</strong></div>
+      <div>バージョン: <span id="about-version">0.5.0 (Phase F)</span></div>
+      <div style="margin-top:10px; color:var(--grid-medium); font-size:11px;">
+        ブラウザ向けタイムシートエディタ<br>
+        TDTS / XDTS フォーマット対応
+      </div>
+    </div>
+    <div class="settings-actions">
+      <button id="help-about-close" class="primary" data-i18n="btn.close">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ショートカット設定モーダル -->
+<div id="settings-shortcut-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:600px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column;">
+    <h3 data-i18n="modal.shortcut">ショートカット設定</h3>
+    <div id="shortcut-conflicts" class="io-warn" style="display:none;"></div>
+    <div style="flex:1; overflow-y:auto; padding-right:4px;">
+      <table id="shortcut-table" style="width:100%; border-collapse:collapse; font-size:12px;">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid var(--border-color);">
+            <th style="padding:6px 4px;" data-i18n="shortcut.action">アクション</th>
+            <th style="padding:6px 4px; width:140px;" data-i18n="shortcut.main">メイン</th>
+            <th style="padding:6px 4px; width:140px;" data-i18n="shortcut.sub">サブ</th>
+          </tr>
+        </thead>
+        <tbody id="shortcut-tbody"></tbody>
+      </table>
+    </div>
+    <div class="settings-actions">
+      <button id="shortcut-export" data-i18n="btn.export">JSON書き出し</button>
+      <button id="shortcut-import" data-i18n="btn.import">JSON読み込み</button>
+      <button id="shortcut-reset" data-i18n="btn.reset">デフォルトに戻す</button>
+      <button id="settings-shortcut-cancel" data-i18n="btn.cancel">キャンセル</button>
+      <button id="settings-shortcut-apply" data-i18n="btn.apply">適用</button>
+      <button id="settings-shortcut-ok" class="primary" data-i18n="btn.ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- 色設定モーダル -->
+<div id="settings-color-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:480px;">
+    <h3 data-i18n="modal.color">色設定</h3>
+    <div class="settings-row" style="flex-direction:column; align-items:flex-start;">
+      <label style="font-weight:bold; margin-bottom:6px;" data-i18n="color.fontPalette">文字色パレット (fontColorId 0-5)</label>
+      <div id="font-color-palette" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <!-- JSが生成 -->
+      </div>
+      <span class="settings-hint" style="margin-left:0;" data-i18n="color.fontPaletteHint">編集 → 文字色を変更 で各色を適用できます。リテイク赤などに利用</span>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="color.bookLine">BOOK線色:</label>
+      <input type="color" id="colorBookLine" style="width:50px; height:28px; padding:0;">
+      <button type="button" class="color-auto-btn" data-target="bookLine" data-i18n="color.auto" style="font-size:11px; padding:2px 8px;">自動</button>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="color.cellIcon">CELLアイコン色:</label>
+      <input type="color" id="colorCellIcon" style="width:50px; height:28px; padding:0;">
+      <button type="button" class="color-auto-btn" data-target="cellIcon" data-i18n="color.auto" style="font-size:11px; padding:2px 8px;">自動</button>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="color.selectBorder">選択枠の色:</label>
+      <input type="color" id="colorSelectBorder" style="width:50px; height:28px; padding:0;">
+      <button type="button" class="color-auto-btn" data-target="selectBorder" data-i18n="color.auto" style="font-size:11px; padding:2px 8px;">自動</button>
+    </div>
+    <div class="settings-actions">
+      <button id="settings-color-reset" data-i18n="draw.resetThis">この画面をリセット</button>
+      <button id="settings-color-cancel" data-i18n="btn.cancel">キャンセル</button>
+      <button id="settings-color-ok" class="primary" data-i18n="btn.ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- エディタ環境設定モーダル -->
+<div id="settings-editor-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:420px;">
+    <h3 data-i18n="modal.editor">エディタ環境設定</h3>
+    <div class="settings-row" style="flex-direction:column; align-items:flex-start;">
+      <label style="font-weight:bold; margin-bottom:6px;" data-i18n="editor.sharedMeta">カット共有メタデータ（変更を全シートに反映）</label>
+      <div class="io-checks" id="editor-shared-meta-checks">
+        <label><input type="checkbox" data-meta-key="title"><span data-i18n="editor.meta.title"> TITLE</span></label>
+        <label><input type="checkbox" data-meta-key="subTitle"><span data-i18n="editor.meta.subTitle"> EPISODE</span></label>
+        <label><input type="checkbox" data-meta-key="scene"><span data-i18n="editor.meta.scene"> SCENE</span></label>
+        <label><input type="checkbox" data-meta-key="cut"><span data-i18n="editor.meta.cut"> CUT</span></label>
+        <label><input type="checkbox" data-meta-key="lengthSec"><span data-i18n="editor.meta.lengthSec"> TIME（秒）</span></label>
+        <label><input type="checkbox" data-meta-key="lengthFrame"><span data-i18n="editor.meta.lengthFrame"> TIME（コマ）</span></label>
+        <label><input type="checkbox" data-meta-key="creator"><span data-i18n="editor.meta.creator"> NAME</span></label>
+        <label><input type="checkbox" data-meta-key="memo"><span data-i18n="editor.meta.memo"> DIRECTION（指示）</span></label>
+      </div>
+      <span class="settings-hint" style="margin-left:0;" data-i18n="editor.sharedMetaHint">チェック項目はシート間で同期されます。チェックを外すとシート個別の設定になります。</span>
+    </div>
+    <div class="settings-actions">
+      <button id="settings-editor-cancel" data-i18n="btn.cancel">キャンセル</button>
+      <button id="settings-editor-ok" class="primary" data-i18n="btn.ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- 描画設定モーダル -->
+<div id="settings-draw-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner">
+    <h3 data-i18n="modal.draw">描画設定</h3>
+    <div class="settings-row">
+      <label data-i18n="draw.lineGap">線発生ギャップ（コマ）:</label>
+      <input type="number" id="gapSettingInput" min="1" max="24" value="3">
+      <span class="settings-hint" data-i18n="draw.lineGapHint">この値以上の連続空セルで棒線/波線を描画</span>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="draw.tomeEnabled">止メ表示:</label>
+      <label style="min-width:0; display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="drawTomeEnabled"><span data-i18n="draw.tomeEnabledHint"> ON（先頭が「1」のみで他に番号無しの列に「止/メ」を表示）</span>
+      </label>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="draw.repeatColor">リピート点線色:</label>
+      <input type="color" id="drawRepeatColor" style="width:50px; height:28px; padding:0;">
+      <span class="settings-hint" data-i18n="draw.repeatColorHint">rep の下の青点線の色</span>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="draw.headMarginEnabled">先頭マージン:</label>
+      <label style="min-width:0; display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="drawHeadMarginEnabled"><span>ON</span>
+      </label>
+      <input type="number" id="drawHeadMargin" min="0" max="120" value="0" style="width:60px; margin-left:12px;">
+      <span class="settings-hint" data-i18n="draw.headMarginHint">コマ数</span>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="draw.tailMargin">末尾マージン（コマ）:</label>
+      <input type="number" id="drawTailMargin" min="0" max="120" value="18">
+      <span class="settings-hint" data-i18n="draw.tailMarginHint">カット末尾より後ろに表示する空白コマ数</span>
+    </div>
+    <div class="settings-actions">
+      <button id="settings-draw-reset" data-i18n="draw.resetThis">この画面をリセット</button>
+      <button id="settings-draw-cancel" data-i18n="btn.cancel">キャンセル</button>
+      <button id="settings-draw-ok" class="primary" data-i18n="btn.ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- ドロップダウンメニュー定義 -->
+<div id="menu-file" class="menu-dropdown">
+  <div class="menu-row" data-action="file.new" data-i18n="file.new">新規作成</div>
+  <div class="menu-row" data-action="file.open" data-i18n-keep="file.open">開く...<span class="menu-key">Ctrl+O</span></div>
+  <div class="menu-row" data-action="file.save" data-i18n-keep="file.save">上書き保存<span class="menu-key">Ctrl+S</span></div>
+  <div class="menu-row" data-action="file.saveAs" data-i18n-keep="file.saveAs">名前を付けて保存...<span class="menu-key">Ctrl+Shift+S</span></div>
+  <div class="menu-sep"></div>
+  <div class="menu-row menu-submenu" data-submenu="import" data-i18n-keep="file.import">
+    インポート<span class="submenu-arrow">▶</span>
+    <div class="menu-dropdown menu-sub">
+      <div class="menu-row" data-action="file.import.tdts" data-i18n="file.import.tdts">TDTSから...</div>
+      <div class="menu-row" data-action="file.import.xdts" data-i18n="file.import.xdts">XDTSから...</div>
+    </div>
+  </div>
+  <div class="menu-row menu-submenu" data-submenu="export" data-i18n-keep="file.export">
+    エクスポート<span class="submenu-arrow">▶</span>
+    <div class="menu-dropdown menu-sub">
+      <div class="menu-row" data-action="file.export.tdts" data-i18n="file.export.tdts">TDTSへ...</div>
+      <div class="menu-row" data-action="file.export.xdts" data-i18n="file.export.xdts">XDTSへ...</div>
+      <div class="menu-row menu-disabled" data-action="file.export.png" data-i18n="file.export.png">PNG画像</div>
+      <div class="menu-row menu-disabled" data-action="file.export.jpg" data-i18n="file.export.jpg">JPG画像</div>
+      <div class="menu-row menu-disabled" data-action="file.export.psd" data-i18n="file.export.psd">PSD（レイヤー保持）</div>
+    </div>
+  </div>
+  <div class="menu-sep"></div>
+  <div class="menu-row menu-disabled" data-action="file.recent" data-i18n="file.recent">最近使ったファイル ▶</div>
+  <div class="menu-sep"></div>
+  <div class="menu-row" data-action="file.settings.export" data-i18n="file.settings.export">設定をエクスポート (JSON)</div>
+  <div class="menu-row" data-action="file.settings.import" data-i18n="file.settings.import">設定をインポート (JSON)</div>
+</div>
+
+<div id="menu-edit" class="menu-dropdown">
+  <div class="menu-row" data-action="edit.undo" data-i18n-keep="edit.undo">元に戻す<span class="menu-key">Ctrl+Z</span></div>
+  <div class="menu-row" data-action="edit.redo" data-i18n-keep="edit.redo">やり直し<span class="menu-key">Ctrl+Y</span></div>
+  <div class="menu-sep"></div>
+  <div class="menu-row" data-action="edit.cut" data-i18n-keep="edit.cut">切り取り<span class="menu-key">Ctrl+X</span></div>
+  <div class="menu-row" data-action="edit.copy" data-i18n-keep="edit.copy">コピー<span class="menu-key">Ctrl+C</span></div>
+  <div class="menu-row" data-action="edit.paste" data-i18n-keep="edit.paste">貼り付け<span class="menu-key">Ctrl+V</span></div>
+  <div class="menu-row" data-action="edit.delete" data-i18n-keep="edit.delete">削除<span class="menu-key">Del</span></div>
+  <div class="menu-row menu-disabled" data-action="edit.selectAll" data-i18n-keep="edit.selectAll">すべて選択<span class="menu-key">Ctrl+A</span></div>
+  <div class="menu-sep"></div>
+  <div class="menu-row" data-action="edit.repeat" data-i18n="edit.repeat">リピート展開</div>
+  <div class="menu-row menu-disabled" data-action="edit.repeatDelete" data-i18n="edit.repeatDelete">リピート解除</div>
+  <div class="menu-sep"></div>
+  <div class="menu-row menu-submenu menu-disabled" data-submenu="color" data-i18n-keep="edit.color">
+    文字色を変更<span class="submenu-arrow">▶</span>
+    <div class="menu-dropdown menu-sub">
+      <div class="menu-row" data-action="edit.color.0" data-i18n="edit.color.0">黒</div>
+      <div class="menu-row" data-action="edit.color.1" data-i18n="edit.color.1">赤</div>
+      <div class="menu-row" data-action="edit.color.2" data-i18n="edit.color.2">緑</div>
+      <div class="menu-row" data-action="edit.color.3" data-i18n="edit.color.3">青</div>
+      <div class="menu-row" data-action="edit.color.4" data-i18n="edit.color.4">紫</div>
+      <div class="menu-row" data-action="edit.color.5" data-i18n="edit.color.5">橙</div>
+    </div>
+  </div>
+</div>
+
+<div id="menu-insert" class="menu-dropdown">
+  <div class="menu-row" data-action="insert.frame" data-i18n-keep="insert.frame">コマ挿入（選択列）<span class="menu-key">Ctrl+I</span></div>
+  <div class="menu-row" data-action="insert.frameDelete" data-i18n-keep="insert.frameDelete">コマ削除（選択列）<span class="menu-key">Ctrl+D</span></div>
+  <div class="menu-row" data-action="insert.frameAll" data-i18n-keep="insert.frameAll">全レイヤにコマ挿入<span class="menu-key">Ctrl+Shift+I</span></div>
+  <div class="menu-row" data-action="insert.frameAllDelete" data-i18n-keep="insert.frameAllDelete">全レイヤからコマ削除<span class="menu-key">Ctrl+Shift+D</span></div>
+  <div class="menu-sep"></div>
+  <div class="menu-row" data-action="insert.layerLeft" data-i18n="insert.layerLeft">レイヤー左に追加</div>
+  <div class="menu-row" data-action="insert.layerRight" data-i18n="insert.layerRight">レイヤー右に追加</div>
+  <div class="menu-row" data-action="insert.book" data-i18n="insert.book">BOOK追加</div>
+  <div class="menu-sep"></div>
+  <div class="menu-row" data-action="insert.camera" data-i18n="insert.camera">カメラブロック...</div>
+  <div class="menu-row" data-action="insert.dialogue" data-i18n="insert.dialogue">セリフブロック...</div>
+</div>
+
+<div id="menu-view" class="menu-dropdown">
+  <div class="menu-row" data-action="view.zoomIn" data-i18n-keep="view.zoomIn">ズームイン<span class="menu-key">Ctrl++</span></div>
+  <div class="menu-row" data-action="view.zoomOut" data-i18n-keep="view.zoomOut">ズームアウト<span class="menu-key">Ctrl+-</span></div>
+  <div class="menu-row" data-action="view.zoom100" data-i18n-keep="view.zoom100">100%<span class="menu-key">Ctrl+0</span></div>
+  <div class="menu-row" data-action="view.fit" data-i18n-keep="view.fit">ウィンドウにフィット<span class="menu-key">Ctrl+9</span></div>
+  <div class="menu-sep"></div>
+  <div class="menu-row" data-action="view.toggleDirection" data-i18n="view.toggleDirection">DIRECTION欄を展開/折りたたみ</div>
+  <div class="menu-row" data-action="view.togglePanel" data-i18n="view.togglePanel">セル構成パネル表示/非表示</div>
+  <div class="menu-sep"></div>
+  <div class="menu-row menu-disabled" data-action="view.theme.light" data-i18n="view.theme.light">ライトモード</div>
+  <div class="menu-row menu-disabled" data-action="view.theme.dark" data-i18n="view.theme.dark">ダークモード</div>
+  <div class="menu-row menu-disabled" data-action="view.theme.system" data-i18n="view.theme.system">システム連動</div>
+</div>
+
+<div id="menu-settings" class="menu-dropdown">
+  <div class="menu-row" data-action="settings.draw" data-i18n="settings.draw">描画設定...</div>
+  <div class="menu-row" data-action="settings.color" data-i18n="settings.color">色設定...</div>
+  <div class="menu-row" data-action="settings.shortcut" data-i18n="settings.shortcut">ショートカット設定...</div>
+  <div class="menu-row menu-disabled" data-action="settings.template" data-i18n="settings.template">テンプレート設定...</div>
+  <div class="menu-row" data-action="settings.editor" data-i18n="settings.editor">エディタ環境設定...</div>
+  <div class="menu-sep"></div>
+  <div class="menu-row" data-action="settings.reset" data-i18n="settings.reset">設定をリセット</div>
+</div>
+
+<div id="menu-help" class="menu-dropdown">
+  <div class="menu-row" data-action="help.manual" data-i18n="help.manual">簡易マニュアル...</div>
+  <div class="menu-row" data-action="help.shortcuts" data-i18n-keep="help.shortcuts">ショートカット一覧<span class="menu-key">F1</span></div>
+  <div class="menu-sep"></div>
+  <div class="menu-row menu-submenu" data-submenu="lang" data-i18n-keep="help.lang">
+    言語<span class="submenu-arrow">▶</span>
+    <div class="menu-dropdown menu-sub">
+      <div class="menu-row" data-action="help.lang.ja" data-i18n="help.lang.ja">日本語</div>
+      <div class="menu-row" data-action="help.lang.en" data-i18n="help.lang.en">English</div>
+    </div>
+  </div>
+  <div class="menu-sep"></div>
+  <div class="menu-row" data-action="help.about" data-i18n="help.about">バージョン情報</div>
+</div>
+
+<input type="file" id="fileInput" accept=".tdts,.xdts,.json" style="display:none">
+
+<div id="main-wrapper">
+  <div id="floating-panel">
+    <div class="panel-header" id="panel-header">
+      <span data-i18n="panel.cellLayout">セル構成</span>
+      <span id="panel-toggle-icon">▼</span>
+    </div>
+    <div class="panel-content" id="cell-config-list"></div>
+    <div class="panel-footer">
+      <button onclick="addNewCell()">+ CELL</button>
+      <button onclick="addNewBook()">+ BOOK</button>
+    </div>
+  </div>
+
+  <div id="editor-container">
+    <div id="header-static">
+      <div id="meta-wrapper">
+        <canvas id="metadataCanvas"></canvas>
+        <input type="text" id="metaInput" autocomplete="off">
+        <textarea id="metaTextArea" autocomplete="off"></textarea>
+      </div>
+    </div>
+    <div id="scroll-viewport">
+      <div id="canvas-wrapper">
+        <canvas id="columnHeaderCanvas"></canvas>
+        <canvas id="gridCanvas"></canvas>
+        <input type="text" id="cellInput" autocomplete="off" inputmode="url">
+        <input type="text" id="bookInput" autocomplete="off">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- プレビューコンテナ -->
+<div id="preview-container" style="display:none; flex:1; overflow:auto; background:#888; padding:20px;">
+</div>
+
+<div id="dialogue-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:var(--bg-color); border:1px solid var(--border-color); padding:15px; border-radius:5px; z-index:10000; box-shadow:0 4px 15px rgba(0,0,0,0.5); width:300px;">
+    <h3 style="margin:0 0 10px 0; font-size:14px; color:var(--text-color);" data-i18n="dlg.dialogueTitle">セリフ入力</h3>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="dlg.speaker">話者:</label>
+      <input type="text" id="speakerNameInput" placeholder="A" onkeydown="handleDialogueKey(event)" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="dlg.dialogueText">セリフ:</label>
+      <input type="text" id="dialogueTextInput" placeholder="あいうえお" onkeydown="handleDialogueKey(event)" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+      <div style="width:45%;">
+        <label style="font-size:10px; color:var(--text-color); display:block;" data-i18n="dlg.startFrame">開始Frame:</label>
+        <input type="number" id="dialogueStartInput" onkeydown="handleDialogueKey(event)" style="width:100%; box-sizing:border-box; padding:2px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+      </div>
+      <div style="width:45%;">
+        <label style="font-size:10px; color:var(--text-color); display:block;" data-i18n="dlg.endFrame">終了Frame:</label>
+        <input type="number" id="dialogueEndInput" onkeydown="handleDialogueKey(event)" style="width:100%; box-sizing:border-box; padding:2px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+      </div>
+    </div>
+    <div style="text-align:right;">
+      <button onclick="saveDialogueBlock()" data-i18n="dlg.confirm" style="padding:4px 12px; margin-right:5px; background:var(--select-bg); color:#fff; border:none; cursor:pointer; border-radius:3px;">確定</button>
+      <button onclick="closeDialogueModal()" data-i18n="btn.cancel" style="padding:4px 12px; background:transparent; color:var(--text-color); border:1px solid var(--border-color); cursor:pointer; border-radius:3px;">キャンセル</button>
+    </div>
+  </div>
+
+  <div id="camera-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:var(--bg-color); border:1px solid var(--border-color); padding:15px; border-radius:5px; z-index:10000; box-shadow:0 4px 15px rgba(0,0,0,0.5); width:360px;">
+    <h3 style="margin:0 0 12px 0; font-size:14px; color:var(--text-color);" data-i18n="cam.title">カメラワーク入力</h3>
+    <div style="margin-bottom:10px; display:flex; gap:10px;">
+      <div style="flex:1;">
+        <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="cam.group">グループ:</label>
+        <select id="cameraCategorySelect" onchange="updateCameraKindList()" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+          <option value="全て" data-i18n="cam.cat.all">全て (96種)</option>
+          <option value="1. カメラワーク" data-i18n="cam.cat.1">1. カメラワーク</option>
+          <option value="2. 画面動" data-i18n="cam.cat.2">2. 画面動</option>
+          <option value="3. 場面転換" data-i18n="cam.cat.3">3. 場面転換</option>
+          <option value="4. 露出" data-i18n="cam.cat.4">4. 露出</option>
+          <option value="5. 透過光系" data-i18n="cam.cat.5">5. 透過光系</option>
+          <option value="6. フィルター" data-i18n="cam.cat.6">6. フィルター</option>
+          <option value="7. ブラー系" data-i18n="cam.cat.7">7. ブラー系</option>
+          <option value="8. 光系" data-i18n="cam.cat.8">8. 光系</option>
+          <option value="9. その他" data-i18n="cam.cat.9">9. その他</option>
+        </select>
+      </div>
+      <div style="flex:1.5;">
+        <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="cam.kind">種別 (Kind):</label>
+        <input type="text" id="cameraKindInput" list="camera-kind-list" oninput="handleCameraKindChange()" onkeydown="handleCameraKey(event)" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);" placeholder="検索または選択" data-i18n-placeholder="cam.kindPlaceholder">
+        <datalist id="camera-kind-list"></datalist>
+      </div>
+    </div>
+    <div id="cameraDynamicArea" style="min-height:30px; margin-bottom:10px; border-left: 2px solid var(--select-bg); padding-left: 8px;">
+        <div id="vt-fromTo" style="display:none; margin-bottom:5px;">
+            <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="cam.fromToLabel">移動範囲・経路 (From → To):</label>
+            <div style="display:flex; flex-direction:column; gap:4px; margin-top:4px;">
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <span style="font-size:11px; color:var(--text-color); width:35px;" data-i18n="cam.from">From:</span>
+                    <input type="text" id="camFromText" placeholder="Aセル" data-i18n-placeholder="cam.fromPlaceholder" onkeydown="handleCameraKey(event)" style="flex:1; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+                </div>
+                <div id="camWaypointsContainer" style="display:flex; flex-direction:column; gap:4px; padding-left:15px; border-left:2px dotted var(--grid-medium); margin-left:15px;"></div>
+                <div style="padding-left:15px; margin-left:15px; margin-bottom:2px;">
+                    <button onclick="addCamWaypointRow()" data-i18n="cam.addWaypoint" style="font-size:10px; padding:2px 8px; background:var(--grid-thick); color:var(--text-color); border:1px solid var(--border-color); cursor:pointer; border-radius:2px;">+ 中間点追加</button>
+                </div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <span style="font-size:11px; color:var(--text-color); width:35px;" data-i18n="cam.to">To:</span>
+                    <input type="text" id="camToText" placeholder="Bセル" data-i18n-placeholder="cam.toPlaceholder" onkeydown="handleCameraKey(event)" style="flex:1; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+                </div>
+                <div style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--grid-thick);">
+                    <label style="font-size:11px; color:var(--text-color); cursor:pointer;">
+                        <input type="checkbox" id="camAddFairingCheck" onchange="document.getElementById('camFairingUI').style.display = this.checked ? 'block' : 'none';"><span data-i18n="cam.addFairing"> 部分フェアリングを追加</span>
+                    </label>
+                    <div id="camFairingUI" style="display:none; margin-top:6px; padding-left:10px; border-left:2px solid var(--select-bg);">
+                        <select id="camSubFairingMode" style="width:100%; padding:2px; margin-bottom:4px; font-size:11px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+                            <option value="in" data-i18n="cam.fairingIn">IN (スローイン / 止まり際)</option>
+                            <option value="out" data-i18n="cam.fairingOut">OUT (スローアウト / 動き出し)</option>
+                            <option value="both" data-i18n="cam.fairingBoth">BOTH (両端)</option>
+                        </select>
+                        <div style="display:flex; gap:5px;">
+                            <input type="number" id="camSubFairingStart" placeholder="開始Fr" data-i18n-placeholder="cam.subFairingStart" style="width:50%; padding:2px; font-size:11px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+                            <input type="number" id="camSubFairingEnd" placeholder="終了Fr" data-i18n-placeholder="cam.subFairingEnd" style="width:50%; padding:2px; font-size:11px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="vt-fromToLayers" style="display:none; margin-bottom:5px;">
+            <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="cam.layerTransition">レイヤー遷移 (From ⋈ To):</label>
+            <div style="display:flex; align-items:center; gap:5px;">
+                <input type="text" id="camLayersFrom" placeholder="Aセル" data-i18n-placeholder="cam.fromPlaceholder" title="カンマ区切りで複数可" onkeydown="handleCameraKey(event)" style="width:45%; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+                <span style="color:var(--text-color);">⋈</span>
+                <input type="text" id="camLayersTo" placeholder="Bセル" data-i18n-placeholder="cam.toPlaceholder" title="カンマ区切りで複数可" onkeydown="handleCameraKey(event)" style="width:45%; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+            </div>
+        </div>
+        <div id="vt-multiLayerDirection" style="display:none; margin-bottom:5px;">
+            <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="cam.multiLayerDir">レイヤー別 方向設定:</label>
+            <div id="camMultiDirContainer" style="display:flex; flex-direction:column; gap:4px; margin-bottom:4px;"></div>
+            <button onclick="addCamMultiDirRow('', 'TD')" data-i18n="cam.addLayer" style="font-size:10px; padding:2px 8px; background:var(--grid-thick); color:var(--text-color); border:1px solid var(--border-color); cursor:pointer; border-radius:2px;">+ レイヤー追加</button>
+        </div>
+        <div id="vt-numericFr" style="display:none; margin-bottom:5px;">
+            <label style="font-size:12px; color:var(--text-color); display:block;" id="camValueLabel" data-i18n="cam.intervalFr">間隔フレーム (fr):</label>
+            <div style="display:flex; align-items:center; gap:5px;">
+                <input type="number" id="camNumericFr" placeholder="3" onkeydown="handleCameraKey(event)" style="width:50%; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+                <span id="camUnitSpan" style="color:var(--text-color); font-size:12px;">fr</span>
+            </div>
+        </div>
+        <div id="vt-fairing" style="display:none; margin-bottom:5px;">
+            <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="cam.curve">カーブ (Curve):</label>
+            <select id="camFairingMode" onkeydown="handleCameraKey(event)" style="width:100%; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+                <option value="const" data-i18n="cam.curveConst">等速</option>
+                <option value="in" data-i18n="cam.curveIn">IN (スローイン)</option>
+                <option value="out" data-i18n="cam.curveOut">OUT (スローアウト)</option>
+                <option value="both" data-i18n="cam.curveBoth">両端 (IN & OUT)</option>
+            </select>
+        </div>
+        <div id="vt-freeText" style="display:none; margin-bottom:5px;">
+            <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="cam.freeText">テキスト指示:</label>
+            <input type="text" id="camFreeText" placeholder="自由に指示を入力" data-i18n-placeholder="cam.freeTextPlaceholder" onkeydown="handleCameraKey(event)" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+        </div>
+    </div>
+    <div id="cam-target-area" style="margin-bottom:10px;">
+      <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="cam.targetLayers">対象レイヤー (Target):</label>
+      <input type="text" id="camTargetLayers" placeholder="Aセル, BOOK1 など" data-i18n-placeholder="cam.targetPlaceholder" autocomplete="off" onkeydown="handleCameraKey(event)" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+      <div id="camera-target-suggestions" style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;"></div>
+    </div>
+    <div style="margin-bottom:10px;">
+        <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="cam.memo">備考 (Memo):</label>
+        <input type="text" id="camMemo" placeholder="その他補足など" data-i18n-placeholder="cam.memoPlaceholder" onkeydown="handleCameraKey(event)" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+      <div style="width:45%;">
+        <label style="font-size:10px; color:var(--text-color); display:block;" data-i18n="dlg.startFrame">開始Frame:</label>
+        <input type="number" id="cameraStartInput" onkeydown="handleCameraKey(event)" style="width:100%; box-sizing:border-box; padding:2px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+      </div>
+      <div style="width:45%;">
+        <label style="font-size:10px; color:var(--text-color); display:block;" data-i18n="dlg.endFrame">終了Frame:</label>
+        <input type="number" id="cameraEndInput" onkeydown="handleCameraKey(event)" style="width:100%; box-sizing:border-box; padding:2px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+      </div>
+    </div>
+    <div style="margin-bottom:15px; text-align:right;">
+        <label style="font-size:11px; color:var(--text-color); cursor:pointer; margin-right:10px; display:inline-block;" title="チェックすると枠の中を透明にし、直接セルを打ち込めるようになります。" data-i18n-title="cam.inlineEditTitle">
+            <input type="checkbox" id="camInlineEditCheck" style="vertical-align:middle;"><span data-i18n="cam.inlineEdit"> セル直接入力モード</span>
+        </label>
+        <label style="font-size:11px; color:var(--text-color); cursor:pointer; display:inline-block;">
+            <input type="checkbox" id="camAutoDirCheck" checked style="vertical-align:middle;"><span data-i18n="cam.autoDir"> Direction欄に自動追記</span>
+        </label>
+    </div>
+    <div style="text-align:right;">
+      <button onclick="saveCameraBlock()" data-i18n="dlg.confirm" style="padding:4px 12px; margin-right:5px; background:var(--select-bg); color:#fff; border:none; cursor:pointer; border-radius:3px;">確定</button>
+      <button onclick="closeCameraModal()" data-i18n="btn.cancel" style="padding:4px 12px; background:transparent; color:var(--text-color); border:1px solid var(--border-color); cursor:pointer; border-radius:3px;">キャンセル</button>
+    </div>
+  </div>
+<script src="js/state.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/history.js"></script>
+<script src="js/repeat.js"></script>
+<script src="js/sections.js"></script>
+<script src="js/dialogue.js"></script>
+<script src="js/camera.js"></script>
+<script src="js/draw.js"></script>
+<script src="js/sheets.js"></script>
+<script src="js/io-common.js"></script>
+<script src="js/xdts-io.js"></script>
+<script src="js/tdts-io.js"></script>
+<script src="js/input.js"></script>
+<script src="js/frame-ops.js"></script>
+<script src="js/autosave.js"></script>
+<script src="js/template.js"></script>
+<script src="js/preview.js"></script>
+<script src="js/menu.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

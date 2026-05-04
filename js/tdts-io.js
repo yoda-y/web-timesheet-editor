@@ -1,0 +1,573 @@
+// === .tdts ファイル 読み込み・書き出し ===
+
+// 単一の timeTable を解析するヘルパー（TDTS本体内の1シート分）
+function _parseTDTSSingleTable(header, table, opts) {
+    const meta = {};
+    meta.cut = header.cut || "";
+    meta.scene = header.scene || "";
+    meta.creator = table.operatorName || "";
+    const rawEpisode = header.episode || "";
+    if (rawEpisode.includes(" / ")) { const parts = rawEpisode.split(" / "); meta.title = parts[0]; meta.subTitle = parts.slice(1).join(" / "); }
+    else if (rawEpisode.includes("/")) { const parts = rawEpisode.split("/"); meta.title = parts[0]; meta.subTitle = parts.slice(1).join("/"); }
+    else { meta.title = rawEpisode; meta.subTitle = ""; }
+    const d = table.duration || 144;
+    meta.lengthSec = Math.floor(d / 24).toString();
+    meta.lengthFrame = String(d % 24).padStart(2, '0');
+    meta.sheetName = table.name || "sheet1";
+    const direction = table.direction || "";
+    // headDummykomas/footDummykomas をマージン設定として記録
+    if (typeof settings !== 'undefined' && settings.draw) {
+        if (typeof table.headDummykomas === 'number') settings.draw.headMargin = table.headDummykomas;
+        if (typeof table.footDummykomas === 'number') settings.draw.tailMargin = table.footDummykomas;
+    }
+
+    // セクション(レイヤー名/数)
+    const sectionsMeta = JSON.parse(JSON.stringify(sections));
+    if (table.timeTableHeaders) table.timeTableHeaders.forEach(th => {
+        const colType = REVERSE_FIELD_MAP[th.fieldId];
+        const sec = sectionsMeta.find(s => s.type === colType);
+        if (sec && th.names) { sec.cols = th.names.length; sec.chars = th.names; }
+    });
+
+    // BOOKS
+    const booksOut = { "ACTION": {}, "SOUND": {}, "CELL": {}, "CAMERA": {} };
+    if (table.books) table.books.forEach(b => {
+        const cType = REVERSE_FIELD_MAP[b.fieldId];
+        if (cType && b.tracks) b.tracks.forEach(t => {
+            if (t.texts && t.texts.length > 0) booksOut[cType][t.trackNo] = [...t.texts].reverse();
+        });
+    });
+
+    // ブロック (ファイル内の dialogueBlocks/cameraBlocks プロパティを優先)
+    let dialogueBlocksOut = table.dialogueBlocks ? JSON.parse(JSON.stringify(table.dialogueBlocks)) : [];
+    let cameraBlocksOut = table.cameraBlocks ? JSON.parse(JSON.stringify(table.cameraBlocks)) : [];
+    const hasDialogueInFile = (dialogueBlocksOut.length > 0);
+    const hasCameraInFile = (cameraBlocksOut.length > 0);
+
+    // セルデータ + ブロック復元
+    const cellOut = {};
+    if (table.fields) table.fields.forEach(field => {
+        const colType = REVERSE_FIELD_MAP[field.fieldId];
+        if (!colType || !field.tracks) return;
+        field.tracks.forEach(track => {
+            const colIdx = track.trackNo;
+            let currentDialogue = null, currentCamera = null;
+            if (!track.frames) return;
+            const sorted = [...track.frames].sort((a, b) => a.frame - b.frame);
+            sorted.forEach(fr => {
+                if (!(fr.data && fr.data.length > 0 && fr.data[0].values && fr.data[0].values.length > 0)) return;
+                const vals = fr.data[0].values;
+                let v = vals[0], txt = null;
+                if (colType === "SOUND") {
+                    if (v === "SYMBOL_HYPHEN") v = "―";
+                    else if (vals.length >= 2) { const speaker = vals[0]; const content = vals[1]; v = speaker; txt = content; }
+                } else if (colType === "CAMERA") {
+                    let cleanV = String(v).replace(/['"]/g, '').trim();
+                    if (cleanV === "SYMBOL_HYPHEN") { v = "―"; txt = ""; }
+                    else {
+                        const parsedId = parseInt(cleanV, 10);
+                        if (!isNaN(parsedId) && String(parsedId) === cleanV && TDTS_ID_TO_CAMERA_MAP[parsedId] !== undefined) v = TDTS_ID_TO_CAMERA_MAP[parsedId];
+                        else v = cleanV;
+                        txt = (hasCameraInFile && vals.length >= 2) ? String(vals[1]).replace(/['"]/g, '').trim() : "";
+                    }
+                } else {
+                    if (v === "SYMBOL_TICK_1") v = "●";
+                    else if (v === "SYMBOL_TICK_2") v = "○";
+                    else if (v === "SYMBOL_NULL_CELL") v = "×";
+                    else if (v === "SYMBOL_HYPHEN") v = "―";
+                }
+                let opt = null;
+                const ext = fr.data[0];
+                // 標準形式の options 配列を最優先
+                if (ext.options && Array.isArray(ext.options) && ext.options.length > 0) {
+                    const o = ext.options[0];
+                    if (o === "OPTION_KEYFRAME" || o === "OPTION_REFERENCEFRAME") opt = o;
+                }
+                // 後方互換: 旧 _option フィールド
+                else if (ext._option === 'K') opt = "OPTION_KEYFRAME";
+                else if (ext._option === 'R') opt = "OPTION_REFERENCEFRAME";
+                // 自動推定: ACTION で数値
+                else if (colType === "ACTION" && /^\d+$/.test(v)) opt = "OPTION_KEYFRAME";
+                const fcidIn = ext.fontColorId || 0;
+                cellOut[`${colType}-${colIdx}-${fr.frame}`] = { value: v, option: opt, text: txt, fontColorId: fcidIn };
+                // ブロック自動復元
+                if (colType === "SOUND" && !hasDialogueInFile) {
+                    if (v !== "―" && v !== "" && v !== "SYMBOL_NULL_CELL" && v !== "×") {
+                        if (currentDialogue) { currentDialogue.endFrame = fr.frame - 1; dialogueBlocksOut.push(currentDialogue); }
+                        currentDialogue = { id: Date.now() + Math.random(), colIndex: colIdx, speakerName: v, text: txt || "", startFrame: fr.frame, endFrame: fr.frame };
+                    } else if (v === "―" && currentDialogue) currentDialogue.endFrame = fr.frame;
+                }
+                if (colType === "CAMERA" && !hasCameraInFile) {
+                    if (v !== "―" && v !== "" && v !== "SYMBOL_NULL_CELL" && v !== "×") {
+                        if (currentCamera) { currentCamera.endFrame = fr.frame - 1; cameraBlocksOut.push(currentCamera); }
+                        let rawKind = v; if (rawKind.includes(',')) rawKind = rawKind.split(',')[0];
+                        const vt = getCameraValueType(rawKind);
+                        currentCamera = { id: Date.now() + Math.random(), colIndex: colIdx, startFrame: fr.frame, endFrame: fr.frame, kind: rawKind, valueType: vt, value: txt || "", colspan: 1, targetLayers: [], waypoints: [], isInlineEdit: false };
+                        if (rawKind === "Rolling") currentCamera.isInlineEdit = true;
+                    } else if (v === "―" && currentCamera) currentCamera.endFrame = fr.frame;
+                }
+            });
+            if (currentDialogue && !hasDialogueInFile) dialogueBlocksOut.push(currentDialogue);
+            if (currentCamera && !hasCameraInFile) cameraBlocksOut.push(currentCamera);
+        });
+    });
+
+    // ストロボ自動マージ
+    // ファイル内に cameraBlocks が既にあればブロックは完成済みなのでスキップ
+    // （フレームデータから自動検出したチャンク列に対してのみ有効）
+    if (opts.stroboMerge && !hasCameraInFile) {
+        cameraBlocksOut.sort((a, b) => a.colIndex !== b.colIndex ? a.colIndex - b.colIndex : a.startFrame - b.startFrame);
+        const merged = []; let i = 0;
+        while (i < cameraBlocksOut.length) {
+            const b = cameraBlocksOut[i];
+            if (b.kind === "Strobo1" || b.kind === "Strobo2") {
+                const seq = [b]; let j = i + 1;
+                let expectedNextStart = b.endFrame + 1;
+                const chunkSize = b.endFrame - b.startFrame + 1;
+                while (j < cameraBlocksOut.length) {
+                    const nb = cameraBlocksOut[j];
+                    if (nb.colIndex === b.colIndex && nb.startFrame === expectedNextStart && (nb.kind === "Strobo1" || nb.kind === "Strobo2")) {
+                        const ncs = nb.endFrame - nb.startFrame + 1;
+                        if (ncs === chunkSize || j === cameraBlocksOut.length - 1 || (j < cameraBlocksOut.length - 1 && cameraBlocksOut[j + 1].colIndex !== b.colIndex)) {
+                            seq.push(nb); expectedNextStart = nb.endFrame + 1; j++;
+                            if (ncs !== chunkSize) break;
+                        } else break;
+                    } else break;
+                }
+                if (seq.length > 1 || (seq.length === 1 && chunkSize > 0)) {
+                    const first = seq[0]; const last = seq[seq.length - 1];
+                    merged.push({ id: first.id, colIndex: first.colIndex, startFrame: first.startFrame, endFrame: last.endFrame, kind: first.kind, valueType: "numericFr", numericFr: chunkSize * 2, value: first.value, colspan: 1, targetLayers: first.targetLayers || [], waypoints: [], isInlineEdit: false });
+                    i = j; continue;
+                }
+            }
+            merged.push(b); i++;
+        }
+        cameraBlocksOut = merged;
+    }
+
+    return {
+        meta, direction,
+        sectionsMeta,
+        cellData: cellOut,
+        booksData: booksOut,
+        dialogueBlocks: dialogueBlocksOut,
+        cameraBlocks: cameraBlocksOut,
+        customRepeats: []
+    };
+}
+
+// TDTS テキスト → raw データ。複数シートを含む場合 sheets[] を返す。
+// 互換のため最初のシートの内容を top-level にも展開
+function parseTDTSToRaw(text, opts) {
+    opts = opts || { stroboMerge: true };
+    const prefix1 = "toeiDigitalTimeSheet Save Data\n";
+    const prefix2 = "toeiDigitalTimeSheet Save Data\r\n";
+    if (text.startsWith(prefix1)) text = text.substring(prefix1.length);
+    else if (text.startsWith(prefix2)) text = text.substring(prefix2.length);
+    const imported = JSON.parse(text);
+    if (!(imported.timeSheets && imported.timeSheets.length > 0)) return null;
+
+    const allSheets = [];
+    imported.timeSheets.forEach(sheet => {
+        const header = sheet.header || {};
+        if (sheet.timeTables) {
+            sheet.timeTables.forEach(table => {
+                const parsed = _parseTDTSSingleTable(header, table, opts);
+                if (parsed) {
+                    parsed.name = (table.name || 'sheet');
+                    parsed.color = table.color || 0;
+                    allSheets.push(parsed);
+                }
+            });
+        }
+    });
+    if (allSheets.length === 0) return null;
+
+    // 互換: 最初のシートを top-level に展開
+    const first = allSheets[0];
+    return Object.assign({}, first, { sheets: allSheets });
+}
+
+// fileInput change: 自動判定 → ダイアログ → 適用
+document.getElementById('fileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async function(evt) {
+        try {
+            const text = evt.target.result;
+            const fmt = detectFileFormat(text);
+            if (!fmt) { alert("読み込みエラー: 対応していないファイル形式です。"); return; }
+            const fileName = file.name;
+            const opts = await openIOModal({
+                title: `インポート: ${fileName}`,
+                mode: 'import',
+                format: fmt,
+                warning: fmt === 'xdts' ? '[注意] XDTSのカメラ位置(X/Y)・拡大率・回転情報は取り込みません（指示文字のみ）。' : null
+            });
+            if (!opts) return; // キャンセル
+            let raw;
+            if (fmt === 'tdts') raw = parseTDTSToRaw(text, { stroboMerge: opts.checks.stroboMerge });
+            else raw = parseXDTSToRaw(text, { cellTarget: opts.xdtsCellTarget });
+            if (!raw) { alert("読み込みエラー: ファイル構造が無効です。"); return; }
+            // 取込前の状態をUndoスタックに積む（Ctrl+Zで戻れるように）
+            pushHistory();
+            applyImportData(raw, opts.checks, opts.merge);
+            // UI 状態リセット（undoStack は維持）
+            redoStack = [];
+            selectionStart = null; selectionEnd = null; selectedMeta = null;
+            selectedDialogueId = null; selectedCameraId = null;
+            cellInput.style.display = 'none'; metaInput.style.display = 'none';
+            metaTextArea.style.display = 'none'; bookInput.style.display = 'none';
+            updateSectionPositions(); drawAll();
+        } catch (err) {
+            console.error(err);
+            alert("読み込みエラー: " + (err.message || "ファイルが破損している可能性があります。"));
+        }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+});
+
+/* === 旧 import コードは削除（parseTDTSToRaw + applyImportData に統合済） === */
+/* LEGACY_BEGIN_REMOVED
+function _legacyDirectImportTDTS(e) { if (false) {
+            if (true) {
+                const sheet = imported.timeSheets[0];
+                const header = sheet.header || {};
+                const table = sheet.timeTables ? sheet.timeTables[0] : {};
+                metaData.cut = header.cut || "";
+                metaData.scene = header.scene || "";
+                metaData.memo = table.direction || "";
+                metaData.creator = table.operatorName || "";
+                let rawEpisode = header.episode || "";
+                if (rawEpisode.includes(" / ")) { let parts = rawEpisode.split(" / "); metaData.title = parts[0]; metaData.subTitle = parts.slice(1).join(" / "); }
+                else if (rawEpisode.includes("/")) { let parts = rawEpisode.split("/"); metaData.title = parts[0]; metaData.subTitle = parts.slice(1).join("/"); }
+                else { metaData.title = rawEpisode; metaData.subTitle = ""; }
+
+                let d = table.duration || 144;
+                metaData.lengthSec = Math.floor(d / 24).toString();
+                metaData.lengthFrame = String(d % 24).padStart(2, '0');
+                metaData.sheetName = table.name || "sheet1";
+
+                booksData = { "ACTION": {}, "SOUND": {}, "CELL": {}, "CAMERA": {} };
+                if (table.books) table.books.forEach(b => {
+                    let cType = REVERSE_FIELD_MAP[b.fieldId];
+                    if (cType && b.tracks) b.tracks.forEach(t => {
+                        if (t.texts && t.texts.length > 0) booksData[cType][t.trackNo] = [...t.texts].reverse();
+                    });
+                });
+                if (table.timeTableHeaders) table.timeTableHeaders.forEach(th => {
+                    let colType = REVERSE_FIELD_MAP[th.fieldId];
+                    let sec = sections.find(s => s.type === colType);
+                    if (sec && th.names) { sec.cols = th.names.length; sec.chars = th.names; }
+                });
+                cellData = {}; customRepeats = [];
+
+                dialogueBlocks = table.dialogueBlocks ? JSON.parse(JSON.stringify(table.dialogueBlocks)) : [];
+                cameraBlocks = table.cameraBlocks ? JSON.parse(JSON.stringify(table.cameraBlocks)) : [];
+                const hasDialogueInFile = (dialogueBlocks.length > 0);
+                const hasCameraInFile = (cameraBlocks.length > 0);
+
+                if (table.fields) table.fields.forEach(field => {
+                    let colType = REVERSE_FIELD_MAP[field.fieldId];
+                    if (!colType || !field.tracks) return;
+                    field.tracks.forEach(track => {
+                        let colIdx = track.trackNo;
+                        let currentDialogue = null;
+                        let currentCamera = null;
+                        if (!track.frames) return;
+                        let sortedFrames = [...track.frames].sort((a, b) => a.frame - b.frame);
+                        sortedFrames.forEach(fr => {
+                            if (fr.data && fr.data.length > 0 && fr.data[0].values && fr.data[0].values.length > 0) {
+                                let vals = fr.data[0].values;
+                                let v = vals[0], txt = null;
+
+                                if (colType === "SOUND") {
+                                    if (v === "SYMBOL_HYPHEN") v = "―";
+                                    else if (vals.length >= 2) { let speaker = vals[0]; let content = vals[1]; v = speaker; txt = content; }
+                                } else if (colType === "CAMERA") {
+                                    let cleanV = String(v).replace(/['"]/g, '').trim();
+                                    if (cleanV === "SYMBOL_HYPHEN") {
+                                        v = "―"; txt = "";
+                                    } else {
+                                        let parsedId = parseInt(cleanV, 10);
+                                        if (!isNaN(parsedId) && String(parsedId) === cleanV && TDTS_ID_TO_CAMERA_MAP[parsedId] !== undefined) {
+                                            v = TDTS_ID_TO_CAMERA_MAP[parsedId];
+                                        } else { v = cleanV; }
+                                        if (hasCameraInFile && vals.length >= 2) { txt = String(vals[1]).replace(/['"]/g, '').trim(); }
+                                        else { txt = ""; }
+                                    }
+                                } else {
+                                    if (v === "SYMBOL_TICK_1") v = "●";
+                                    else if (v === "SYMBOL_TICK_2") v = "○";
+                                    else if (v === "SYMBOL_NULL_CELL") v = "×";
+                                    else if (v === "SYMBOL_HYPHEN") v = "―";
+                                }
+
+                                let opt = null;
+                                if (colType === "ACTION" && /^\d+$/.test(v)) opt = "OPTION_KEYFRAME";
+                                cellData[`${colType}-${colIdx}-${fr.frame}`] = { value: v, option: opt, text: txt };
+
+                                if (colType === "SOUND" && !hasDialogueInFile) {
+                                    if (v !== "―" && v !== "" && v !== "SYMBOL_NULL_CELL" && v !== "×") {
+                                        if (currentDialogue) { currentDialogue.endFrame = fr.frame - 1; dialogueBlocks.push(currentDialogue); }
+                                        currentDialogue = { id: Date.now() + Math.random(), colIndex: colIdx, speakerName: v, text: txt || "", startFrame: fr.frame, endFrame: fr.frame };
+                                    } else if (v === "―" && currentDialogue) { currentDialogue.endFrame = fr.frame; }
+                                }
+
+                                if (colType === "CAMERA" && !hasCameraInFile) {
+                                    if (v !== "―" && v !== "" && v !== "SYMBOL_NULL_CELL" && v !== "×") {
+                                        if (currentCamera) { currentCamera.endFrame = fr.frame - 1; cameraBlocks.push(currentCamera); }
+                                        let rawKind = v;
+                                        if (rawKind.includes(',')) rawKind = rawKind.split(',')[0];
+                                        let vt = getCameraValueType(rawKind);
+                                        currentCamera = {
+                                            id: Date.now() + Math.random(), colIndex: colIdx, startFrame: fr.frame, endFrame: fr.frame,
+                                            kind: rawKind, valueType: vt, value: txt || "", colspan: 1, targetLayers: [], waypoints: [], isInlineEdit: false
+                                        };
+                                        if (rawKind === "Rolling") currentCamera.isInlineEdit = true;
+                                    } else if (v === "―" && currentCamera) { currentCamera.endFrame = fr.frame; }
+                                }
+                            }
+                        });
+                        if (currentDialogue && !hasDialogueInFile) dialogueBlocks.push(currentDialogue);
+                        if (currentCamera && !hasCameraInFile) cameraBlocks.push(currentCamera);
+                    });
+                });
+
+                cameraBlocks.sort((a, b) => a.colIndex !== b.colIndex ? a.colIndex - b.colIndex : a.startFrame - b.startFrame);
+                let mergedCameraBlocks = [];
+                let i = 0;
+                while (i < cameraBlocks.length) {
+                    let b = cameraBlocks[i];
+                    if (b.kind === "Strobo1" || b.kind === "Strobo2") {
+                        let seq = [b]; let j = i + 1;
+                        let expectedNextKind = b.kind === "Strobo1" ? "Strobo2" : "Strobo1";
+                        let expectedNextStart = b.endFrame + 1;
+                        let chunkSize = b.endFrame - b.startFrame + 1;
+                        while (j < cameraBlocks.length) {
+                            let nextB = cameraBlocks[j];
+                            if (nextB.colIndex === b.colIndex && nextB.startFrame === expectedNextStart && (nextB.kind === "Strobo1" || nextB.kind === "Strobo2")) {
+                                let nextChunkSize = nextB.endFrame - nextB.startFrame + 1;
+                                if (nextChunkSize === chunkSize || (j === cameraBlocks.length - 1) || (j < cameraBlocks.length - 1 && cameraBlocks[j + 1].colIndex !== b.colIndex)) {
+                                    seq.push(nextB);
+                                    expectedNextKind = expectedNextKind === "Strobo1" ? "Strobo2" : "Strobo1";
+                                    expectedNextStart = nextB.endFrame + 1;
+                                    j++;
+                                    if (nextChunkSize !== chunkSize) break;
+                                } else { break; }
+                            } else { break; }
+                        }
+                        if (seq.length > 1 || (seq.length === 1 && chunkSize > 0)) {
+                            let firstB = seq[0]; let lastB = seq[seq.length - 1];
+                            mergedCameraBlocks.push({ id: firstB.id, colIndex: firstB.colIndex, startFrame: firstB.startFrame, endFrame: lastB.endFrame, kind: firstB.kind, valueType: "numericFr", numericFr: chunkSize * 2, value: firstB.value, colspan: 1, targetLayers: firstB.targetLayers || [], waypoints: [], isInlineEdit: false });
+                            i = j; continue;
+                        }
+                    }
+                    mergedCameraBlocks.push(b); i++;
+                }
+                cameraBlocks = mergedCameraBlocks;
+
+                undoStack = []; redoStack = [];
+                selectionStart = null; selectionEnd = null; selectedMeta = null;
+                selectedDialogueId = null; selectedCameraId = null;
+                cellInput.style.display = 'none'; metaInput.style.display = 'none';
+                metaTextArea.style.display = 'none'; bookInput.style.display = 'none';
+                updateSectionPositions(); drawAll();
+            }
+        } catch (err) { console.error(err); alert("読み込みエラー: ファイルが破損している可能性があります。"); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+} }
+LEGACY_END_REMOVED */
+
+// 1シート分の timeTable JSON を組み立て
+function _buildTDTSTimeTable(sheetData, checks) {
+    const md = sheetData.metaData;
+    const sx = sheetData.sections;
+    const cells = sheetData.cellData;
+    const books = sheetData.booksData;
+    const dialogues = sheetData.dialogueBlocks;
+    const cameras = sheetData.cameraBlocks;
+
+    const duration = (parseInt(md.lengthSec) || 0) * 24 + (parseInt(md.lengthFrame) || 0);
+    const fieldEnabled = { ACTION: checks.action, SOUND: checks.sound, CELL: checks.cell, CAMERA: checks.camera };
+
+    let outBooks = [];
+    if (checks.book) {
+        for (let cType in books) {
+            if (!fieldEnabled[cType]) continue;
+            let fId = FIELD_MAP[cType]; if (fId === undefined) continue;
+            let tracks = [];
+            for (let tNo in books[cType]) if (books[cType][tNo] && books[cType][tNo].length > 0) tracks.push({ "trackNo": parseInt(tNo), "texts": [...books[cType][tNo]].reverse() });
+            if (tracks.length > 0) outBooks.push({ "fieldId": fId, "tracks": tracks });
+        }
+    }
+    let outHeaders = [];
+    sx.forEach(s => {
+        if (!fieldEnabled[s.type]) return;
+        let fId = FIELD_MAP[s.type]; if (fId !== undefined) outHeaders.push({ "fieldId": fId, "names": s.chars });
+    });
+
+    const exportCameraBlocks = checks.camera ? cameras.map(b => { let e = JSON.parse(JSON.stringify(b)); e.kind = e.kind.split(' (')[0].trim(); return e; }) : [];
+    const exportDialogueBlocks = checks.sound ? dialogues : [];
+
+    let fieldsObj = {};
+    for (let sec of sx) {
+        if (!fieldEnabled[sec.type]) continue;
+        let fId = FIELD_MAP[sec.type]; if (fId === undefined) continue;
+        fieldsObj[fId] = {};
+        for (let i = 0; i < sec.cols; i++) fieldsObj[fId][i] = [];
+    }
+
+    for (let key in cells) {
+        const _kp = parseCellKey(key); if (!_kp) continue; let colType = _kp[0], colIdx = _kp[1], frame = _kp[2];
+        colIdx = parseInt(colIdx); frame = parseInt(frame);
+        if (colType === "SOUND" || colType === "CAMERA") continue;
+        if (!fieldEnabled[colType]) continue;
+        let fieldId = FIELD_MAP[colType]; if (fieldId === undefined) continue;
+        let val = cells[key].value, outVal = val;
+        if (val === "●") outVal = "SYMBOL_TICK_1";
+        else if (val === "○") outVal = "SYMBOL_TICK_2";
+        else if (val === "×") outVal = "SYMBOL_NULL_CELL";
+        else if (val === "―" || val === "-") outVal = "SYMBOL_HYPHEN";
+        const fontColorId = cells[key].fontColorId || 0;
+        const dataObj = { "fontColorId": fontColorId, "id": 0, "values": [outVal] };
+        const opt = cells[key].option;
+        if (opt === "OPTION_KEYFRAME" || opt === "OPTION_REFERENCEFRAME") dataObj.options = [opt];
+        fieldsObj[fieldId][colIdx].push({ "frame": frame, "data": [dataObj] });
+    }
+
+    let sndFid = FIELD_MAP["SOUND"];
+    if (checks.sound && fieldsObj[sndFid]) dialogues.forEach(b => {
+        let colI = b.colIndex;
+        if (!fieldsObj[sndFid][colI]) fieldsObj[sndFid][colI] = [];
+        for (let f = b.startFrame; f <= b.endFrame; f++) {
+            let vArr = ["SYMBOL_HYPHEN"];
+            if (f === b.startFrame) vArr = [b.speakerName || "", b.text || ""];
+            fieldsObj[sndFid][colI].push({ "frame": f, "data": [{ "fontColorId": 0, "id": 0, "values": vArr }] });
+        }
+    });
+
+    let camFid = FIELD_MAP["CAMERA"];
+    if (checks.camera && fieldsObj[camFid]) cameras.forEach(b => {
+        let colI = b.colIndex;
+        if (!fieldsObj[camFid][colI]) fieldsObj[camFid][colI] = [];
+        let pKind = b.kind.split(' (')[0].trim();
+        if (b.valueType === 'numericFr' && (pKind === "Strobo1" || pKind === "Strobo2")) {
+            let chunkSize = Math.max(1, Math.floor((b.numericFr || 4) / 2));
+            for (let f = b.startFrame; f <= b.endFrame; f++) {
+                let vArr = ["SYMBOL_HYPHEN"];
+                let chunkIndex = Math.floor((f - b.startFrame) / chunkSize);
+                let isKind1 = (pKind === "Strobo1") ? (chunkIndex % 2 === 0) : (chunkIndex % 2 !== 0);
+                let currentKind = isKind1 ? "Strobo1" : "Strobo2";
+                if ((f - b.startFrame) % chunkSize === 0) {
+                    let kindId = TDTS_CAMERA_ID_MAP[currentKind];
+                    vArr = [String(kindId !== undefined ? kindId : currentKind), ""];
+                }
+                fieldsObj[camFid][colI].push({ "frame": f, "data": [{ "fontColorId": 0, "id": 0, "values": vArr }] });
+            }
+        } else {
+            for (let f = b.startFrame; f <= b.endFrame; f++) {
+                let vArr = ["SYMBOL_HYPHEN"];
+                if (f === b.startFrame) {
+                    let dispTxt = b.freeText || "";
+                    if (b.valueType === "fromTo") dispTxt = b.value || "";
+                    else if (b.valueType === "fromToLayers") dispTxt = `${(b.layersFrom || []).join(',')}⋈${(b.layersTo || []).join(',')}`;
+                    else if (b.valueType === "multiLayerDirection") dispTxt = (b.multiDirs || []).map(d => `${d.layer}(${d.direction})`).join(', ');
+                    else if (b.valueType === "fairing") dispTxt = b.fairingMode;
+                    let kindId = TDTS_CAMERA_ID_MAP[pKind];
+                    if (kindId !== undefined) vArr = [String(kindId), dispTxt]; else vArr = [pKind, dispTxt];
+                }
+                fieldsObj[camFid][colI].push({ "frame": f, "data": [{ "fontColorId": 0, "id": 0, "values": vArr }] });
+            }
+        }
+    });
+
+    const fields = [];
+    for (let fId in fieldsObj) {
+        let tracks = [];
+        for (let tId in fieldsObj[fId]) {
+            if (fieldsObj[fId][tId].length > 0) {
+                fieldsObj[fId][tId].sort((a, b) => a.frame - b.frame);
+                tracks.push({ "trackNo": parseInt(tId), "frames": fieldsObj[fId][tId] });
+            }
+        }
+        if (tracks.length > 0) fields.push({ "fieldId": parseInt(fId), "tracks": tracks });
+    }
+
+    const exportName = checks.meta ? (sheetData.name || md.sheetName || "sheet1") : "sheet1";
+    const exportCreator = checks.meta ? (md.creator || "") : "";
+    const exportDirection = checks.direction ? (md.memo || "") : "";
+    const headDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.headMargin === 'number') ? settings.draw.headMargin : 24;
+    const footDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.tailMargin === 'number') ? settings.draw.tailMargin : 24;
+    return {
+        "duration": duration || 144,
+        "direction": exportDirection,
+        "operatorName": exportCreator,
+        "name": exportName,
+        "color": sheetData.color || 0,
+        "headDummykomas": headDummy,
+        "footDummykomas": footDummy,
+        "timeTableHeaders": outHeaders,
+        "books": outBooks,
+        "dialogueBlocks": exportDialogueBlocks,
+        "cameraBlocks": exportCameraBlocks,
+        "fields": fields
+    };
+}
+
+window.exportTDTS = async function(arg) {
+    const saveAs = arg && arg.saveAs === true;
+    saveInput(); saveBookInput();
+
+    const opts = await openIOModal({
+        title: 'エクスポート: TDTS',
+        mode: 'export',
+        format: 'tdts'
+    });
+    if (!opts) return;
+    const checks = opts.checks;
+
+    // 全シートのデータを取得
+    const allSheetData = (typeof exportAllSheetsData === 'function')
+        ? exportAllSheetsData()
+        : [{ name: metaData.sheetName, color: 0, metaData, cellData, booksData, customRepeats, dialogueBlocks, cameraBlocks, sections }];
+
+    // 各シートを timeTable に変換
+    const timeTables = allSheetData.map(s => _buildTDTSTimeTable(s, checks));
+
+    // ヘッダはアクティブシートのメタから（共有メタの代表）
+    const md = allSheetData[0].metaData;
+    let combinedEpisode = md.title || "";
+    if (md.subTitle) combinedEpisode += (combinedEpisode ? " / " : "") + md.subTitle;
+    const exportEpisode = checks.meta ? combinedEpisode : "";
+    const exportCut = checks.meta ? (md.cut || "") : "";
+    const exportScene = checks.meta ? (md.scene || "") : "";
+
+    const tdts = {
+        "version": 11,
+        "timeSheets": [{
+            "free": [],
+            "header": {
+                "cut": exportCut,
+                "episode": exportEpisode,
+                "scene": exportScene,
+                "showHeadDummy": false,
+                "timeTableFontColors": [[0,0,0],[224,0,0],[32,128,32],[32,32,192],[192,32,192],[255,128,32]]
+            },
+            "timeTables": timeTables
+        }]
+    };
+    const fileContent = "toeiDigitalTimeSheet Save Data\n" + JSON.stringify(tdts, null, 4);
+    const fileName = `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.tdts`;
+    try {
+        await saveFileWithPicker('tdts', fileName, fileContent, {
+            description: 'Toei Digital Time Sheet',
+            types: { 'application/octet-stream': ['.tdts'] }
+        }, { saveAs });
+        if (typeof markClean === 'function') markClean();
+    } catch (err) { if (err.name !== 'AbortError') alert("保存に失敗しました。"); }
+};
