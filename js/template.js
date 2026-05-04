@@ -36,7 +36,13 @@ const TEMPLATE = {
     FRAMES_PER_PAGE: 144,
 
     // タイムラインヘッダー
-    COL_HEADER_HEIGHT: 10
+    COL_HEADER_HEIGHT: 10,
+
+    // 罫線太さ（エクスポート時に消えないよう太めに）
+    LINE_THICK: 3,      // 外枠・セクション境界
+    LINE_MEDIUM: 2,     // 12コマ線
+    LINE_THIN: 1.5,     // 通常線
+    LINE_FINE: 1        // 細線
 };
 
 // mm → px 変換
@@ -66,9 +72,6 @@ function renderTemplate(dpi, pageIndex = 0) {
     // ヘッダー
     drawHeader(ctx, scale);
 
-    // Memo/BOOK領域
-    drawMemoArea(ctx, scale);
-
     // Body幅計算（左右マージン内に収める）
     const contentW = m(TEMPLATE.WIDTH_MM - TEMPLATE.MARGIN_LEFT - TEMPLATE.MARGIN_RIGHT);
     const bodyW = (contentW - m(TEMPLATE.BODY_H_MARGIN)) / 2;
@@ -77,6 +80,11 @@ function renderTemplate(dpi, pageIndex = 0) {
     const timelineH = m(TEMPLATE.FRAMES_PER_COL * TEMPLATE.ROW_HEIGHT + TEMPLATE.COL_HEADER_HEIGHT);
     // 下余白を上余白と同じにする
     const bodyY = m(TEMPLATE.HEIGHT_MM - TEMPLATE.MARGIN_BOTTOM) - timelineH;
+
+    // Direction/BOOK領域（タイムライン上部）
+    const directionY = m(TEMPLATE.MARGIN_TOP + TEMPLATE.HEADER_HEIGHT + 5);
+    const directionH = bodyY - directionY - m(5);
+    drawDirectionArea(ctx, scale, directionY, directionH, bodyW, pageIndex);
 
     // Body 1 (左: frame 0-71)
     const body1X = m(TEMPLATE.MARGIN_LEFT);
@@ -119,7 +127,7 @@ function drawHeader(ctx, scale) {
     const h = m(TEMPLATE.HEADER_HEIGHT);
 
     ctx.strokeStyle = TEMPLATE.TEMPLATE_COLOR;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = TEMPLATE.LINE_THIN;
 
     // ヘッダーフィールド（edit準拠、VERSION除外、SHEET半分）
     const fields = [
@@ -134,7 +142,7 @@ function drawHeader(ctx, scale) {
 
     let cx = x;
     const labelSize = m(2.2);
-    const baseValueSize = m(4.5);  // 基本サイズ大きめ
+    const baseValueSize = m(4.5);
 
     fields.forEach((f) => {
         const fw = totalW * f.ratio;
@@ -154,24 +162,20 @@ function drawHeader(ctx, scale) {
         ctx.textBaseline = 'bottom';
 
         if (f.key === 'time') {
-            // TIME: "+" をテンプレートカラーで中央に
             const sec = metaData.lengthSec || '0';
             const fr = metaData.lengthFrame || '00';
 
             const valueSize = fitTextSize(ctx, sec + '+' + fr, fw - m(2), h - m(3), baseValueSize);
             ctx.font = `bold ${valueSize}px sans-serif`;
 
-            // "+"
             ctx.fillStyle = TEMPLATE.TEMPLATE_COLOR;
             ctx.textAlign = 'center';
             ctx.fillText('+', cx + fw / 2, y + h - m(1));
 
-            // 秒（左側）
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             ctx.textAlign = 'right';
             ctx.fillText(sec, cx + fw / 2 - m(1.5), y + h - m(1));
 
-            // コマ（右側）
             ctx.textAlign = 'left';
             ctx.fillText(fr, cx + fw / 2 + m(1.5), y + h - m(1));
         } else if (f.key === 'sheet') {
@@ -204,38 +208,110 @@ function drawHeader(ctx, scale) {
     ctx.textBaseline = 'alphabetic';
 }
 
-// Memo/BOOK領域
-function drawMemoArea(ctx, scale) {
+// Direction/BOOK領域描画
+function drawDirectionArea(ctx, scale, startY, areaH, bodyW, pageIndex) {
     const m = (mm) => mm * scale;
     const x = m(TEMPLATE.MARGIN_LEFT);
-    const y = m(TEMPLATE.MARGIN_TOP + TEMPLATE.HEADER_HEIGHT + 5);
+    const totalW = m(TEMPLATE.WIDTH_MM - TEMPLATE.MARGIN_LEFT - TEMPLATE.MARGIN_RIGHT);
 
-    ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-    ctx.font = `${m(2.5)}px sans-serif`;
+    // Direction枠描画
+    ctx.strokeStyle = TEMPLATE.TEMPLATE_COLOR;
+    ctx.lineWidth = TEMPLATE.LINE_THIN;
+    ctx.strokeRect(x, startY, totalW, areaH);
 
-    // BOOKデータ
-    if (typeof booksData !== 'undefined' && booksData['ACTION']) {
-        let bx = x;
-        let by = y;
-        const lineH = m(5);
+    // Directionラベル
+    ctx.fillStyle = TEMPLATE.TEMPLATE_COLOR;
+    ctx.font = `${m(2.2)}px sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Direction / BOOK', x + m(1), startY + m(1));
 
+    // Directionテキスト描画
+    if (typeof metaData !== 'undefined' && metaData.direction) {
+        ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+        ctx.font = `${m(3)}px sans-serif`;
+        ctx.textBaseline = 'top';
+        const lines = metaData.direction.split('\n');
+        let ty = startY + m(6);
+        lines.forEach(line => {
+            ctx.fillText(line, x + m(3), ty);
+            ty += m(4);
+        });
+    }
+
+    // BOOK描画（edit風）
+    drawBooksInArea(ctx, scale, startY, areaH, bodyW, pageIndex);
+}
+
+// BOOK描画（edit準拠レイアウト）
+function drawBooksInArea(ctx, scale, areaY, areaH, bodyW, pageIndex) {
+    const m = (mm) => mm * scale;
+    if (typeof booksData === 'undefined') return;
+
+    const cols = getActualColCounts();
+    const frameNumW = m(5);
+    const contentW = m(TEMPLATE.WIDTH_MM - TEMPLATE.MARGIN_LEFT - TEMPLATE.MARGIN_RIGHT);
+    const availW = bodyW - frameNumW;
+
+    // 列幅計算
+    const actionRatio = 0.8;
+    const soundRatio = 1.5;
+    const totalParts = cols.ACTION + cols.SOUND * soundRatio + cols.CELL + cols.CAMERA;
+    const unitW = availW / totalParts;
+    const actionColW = unitW * actionRatio;
+
+    const baseX = m(TEMPLATE.MARGIN_LEFT);
+    const bookBoxW = m(12);
+    const bookBoxH = m(5);
+    const bookRowH = m(7);
+
+    // タイムライン高さ計算（BOOKのラインを引くため）
+    const timelineH = m(TEMPLATE.FRAMES_PER_COL * TEMPLATE.ROW_HEIGHT + TEMPLATE.COL_HEADER_HEIGHT);
+    const timelineY = m(TEMPLATE.HEIGHT_MM - TEMPLATE.MARGIN_BOTTOM) - timelineH;
+    const colHeaderH = m(TEMPLATE.COL_HEADER_HEIGHT);
+    const gridY = timelineY + colHeaderH;
+
+    // ACTION列のBOOKのみ描画
+    if (booksData['ACTION']) {
         for (const lineIdx in booksData['ACTION']) {
             const books = booksData['ACTION'][lineIdx];
-            books.forEach(bookName => {
-                const textW = ctx.measureText(bookName).width + m(4);
-                const contentW = m(TEMPLATE.WIDTH_MM - TEMPLATE.MARGIN_LEFT - TEMPLATE.MARGIN_RIGHT);
-                if (bx + textW > x + contentW) {
-                    bx = x;
-                    by += lineH;
-                }
+            const colIndex = parseInt(lineIdx);
+            const colX = baseX + colIndex * actionColW;
+
+            books.forEach((bookName, bookIdx) => {
+                const boxX = colX + m(3);
+                const boxY = areaY + areaH - m(8) - bookIdx * bookRowH;
+
+                // ブランチライン（BOOKから列ヘッダーまで）
                 ctx.strokeStyle = TEMPLATE.TEMPLATE_COLOR;
-                ctx.lineWidth = 1;
-                ctx.strokeRect(bx, by - m(3), textW, m(4));
-                ctx.fillText(bookName, bx + m(2), by);
-                bx += textW + m(2);
+                ctx.lineWidth = TEMPLATE.LINE_FINE;
+                ctx.beginPath();
+                ctx.moveTo(boxX + bookBoxW / 2, boxY + bookBoxH);
+                ctx.lineTo(colX + actionColW / 2, boxY + bookBoxH);
+                ctx.lineTo(colX + actionColW / 2, gridY);
+                ctx.stroke();
+
+                // BOOKボックス
+                ctx.fillStyle = TEMPLATE.BG_COLOR;
+                ctx.strokeStyle = TEMPLATE.TEMPLATE_COLOR;
+                ctx.lineWidth = TEMPLATE.LINE_FINE;
+                ctx.beginPath();
+                ctx.roundRect(boxX, boxY, bookBoxW, bookBoxH, m(1));
+                ctx.fill();
+                ctx.stroke();
+
+                // BOOKテキスト
+                ctx.fillStyle = TEMPLATE.TEMPLATE_COLOR;
+                ctx.font = `bold ${m(2.5)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(bookName, boxX + bookBoxW / 2, boxY + bookBoxH / 2);
             });
         }
     }
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
 }
 
 // タイムラインカラム描画（edit風）
@@ -252,53 +328,55 @@ function drawTimelineColumn(ctx, scale, startX, startY, bodyW, startFrame, pageI
     const frameNumW = m(5);
     const availW = bodyW - frameNumW;
 
-    // 基本単位幅を計算（ACTIONは80%相当、SOUNDは1.5倍）
     const actionRatio = 0.8;
     const soundRatio = 1.5;
-    // 全列が使う「部品数」
     const totalParts = cols.ACTION + cols.SOUND * soundRatio + cols.CELL + cols.CAMERA;
     const unitW = availW / totalParts;
 
     const actionColW = unitW * actionRatio;
     const soundColW = unitW * soundRatio;
     const cellColW = unitW;
-    // ACTIONから節約した分をCAMERAに追加
     const actionSaved = unitW * cols.ACTION * (1 - actionRatio);
     const cameraColW = unitW + actionSaved / cols.CAMERA;
 
     const gridY = startY + colHeaderH;
 
-    // 全体の外枠を先に描画（統一した太さ）
+    // 全体の外枠
     ctx.strokeStyle = TEMPLATE.TEMPLATE_COLOR;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = TEMPLATE.LINE_THICK;
     ctx.strokeRect(startX, gridY, bodyW, gridH);
 
     // タイムラインヘッダー描画
     drawTimelineHeader(ctx, scale, startX, startY, bodyW, frameNumW, actionColW, soundColW, cellColW, cameraColW, cols, colHeaderH);
 
     let x = startX;
+    const absoluteStart = startFrame + pageIndex * TEMPLATE.FRAMES_PER_PAGE;
 
-    // ACTION（内部のみ描画、外枠は既に描画済み）
+    // ACTION
     drawDataBlockInner(ctx, x, gridY, actionColW, cols.ACTION, rowH, 'ACTION', startFrame, pageIndex, scale);
+    drawBarLines(ctx, x, gridY, actionColW, cols.ACTION, rowH, 'ACTION', absoluteStart, scale);
     x += actionColW * cols.ACTION;
 
-    // フレーム番号列（ACTIONとSOUNDの間）
-    drawFrameNumberColumn(ctx, x, gridY, frameNumW, rowH, startFrame + pageIndex * TEMPLATE.FRAMES_PER_PAGE, scale, gridH);
+    // フレーム番号列
+    drawFrameNumberColumn(ctx, x, gridY, frameNumW, rowH, absoluteStart, scale, gridH);
     x += frameNumW;
 
-    // SOUND
+    // SOUND（セリフブロック）
     drawDataBlockInner(ctx, x, gridY, soundColW, cols.SOUND, rowH, 'SOUND', startFrame, pageIndex, scale);
+    drawDialogueBlocksTemplate(ctx, x, gridY, soundColW, cols.SOUND, rowH, absoluteStart, scale);
     x += soundColW * cols.SOUND;
 
     // CELL
     drawDataBlockInner(ctx, x, gridY, cellColW, cols.CELL, rowH, 'CELL', startFrame, pageIndex, scale);
+    drawBarLines(ctx, x, gridY, cellColW, cols.CELL, rowH, 'CELL', absoluteStart, scale);
     x += cellColW * cols.CELL;
 
     // CAMERA
     drawDataBlockInner(ctx, x, gridY, cameraColW, cols.CAMERA, rowH, 'CAMERA', startFrame, pageIndex, scale);
+    drawCameraBlocksTemplate(ctx, x, gridY, cameraColW, cols.CAMERA, rowH, absoluteStart, scale);
 }
 
-// タイムラインヘッダー描画（edit風）
+// タイムラインヘッダー描画
 function drawTimelineHeader(ctx, scale, startX, startY, bodyW, frameNumW, actionColW, soundColW, cellColW, cameraColW, cols, headerH) {
     const m = (mm) => mm * scale;
 
@@ -308,34 +386,33 @@ function drawTimelineHeader(ctx, scale, startX, startY, bodyW, frameNumW, action
     ctx.strokeStyle = TEMPLATE.TEMPLATE_COLOR;
 
     // ヘッダー全体の外枠
-    ctx.lineWidth = 2;
+    ctx.lineWidth = TEMPLATE.LINE_THICK;
     ctx.strokeRect(startX, startY, bodyW, headerH);
 
-    // ACTION + FRAME を一体として描画
     const actionTotalW = actionColW * cols.ACTION;
     const actionFrameW = actionTotalW + frameNumW;
 
-    // ACTION セクション名（ACTION列+FRAME列の中央）
+    // ACTION セクション名
     ctx.fillStyle = TEMPLATE.TEMPLATE_COLOR;
     ctx.font = `bold ${m(2.2)}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('ACTION', startX + actionFrameW / 2, startY + sectionLabelH / 2);
 
-    // ACTION+FRAME 中央の横線
-    ctx.lineWidth = 1;
+    // 中央の横線
+    ctx.lineWidth = TEMPLATE.LINE_FINE;
     ctx.beginPath();
     ctx.moveTo(startX, startY + sectionLabelH);
     ctx.lineTo(startX + actionFrameW, startY + sectionLabelH);
     ctx.stroke();
 
-    // ACTION 列名と縦線
+    // ACTION 列名
     const actionChars = getSectionChars('ACTION');
     ctx.font = `${m(2)}px sans-serif`;
     for (let i = 0; i < cols.ACTION; i++) {
         const cx = startX + i * actionColW;
         if (i > 0) {
-            ctx.lineWidth = 0.5;
+            ctx.lineWidth = TEMPLATE.LINE_FINE;
             ctx.beginPath();
             ctx.moveTo(cx, startY + sectionLabelH);
             ctx.lineTo(cx, startY + headerH);
@@ -347,14 +424,11 @@ function drawTimelineHeader(ctx, scale, startX, startY, bodyW, frameNumW, action
     }
 
     // ACTION と FRAME の間の細線
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = TEMPLATE.LINE_FINE;
     ctx.beginPath();
     ctx.moveTo(startX + actionTotalW, startY + sectionLabelH);
     ctx.lineTo(startX + actionTotalW, startY + headerH);
     ctx.stroke();
-
-    // FRAME 列ラベル（空欄または番号記号）
-    ctx.fillText('', startX + actionTotalW + frameNumW / 2, startY + sectionLabelH + colLabelH / 2);
 
     // 残りのセクション
     let x = startX + actionFrameW;
@@ -369,7 +443,7 @@ function drawTimelineHeader(ctx, scale, startX, startY, bodyW, frameNumW, action
         const totalW = sec.colW * sec.count;
 
         // セクション区切り線
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = TEMPLATE.LINE_MEDIUM;
         ctx.beginPath();
         ctx.moveTo(x, startY);
         ctx.lineTo(x, startY + headerH);
@@ -383,7 +457,7 @@ function drawTimelineHeader(ctx, scale, startX, startY, bodyW, frameNumW, action
         ctx.fillText(sec.type, x + totalW / 2, startY + sectionLabelH / 2);
 
         // 中央の横線
-        ctx.lineWidth = 1;
+        ctx.lineWidth = TEMPLATE.LINE_FINE;
         ctx.beginPath();
         ctx.moveTo(x, startY + sectionLabelH);
         ctx.lineTo(x + totalW, startY + sectionLabelH);
@@ -395,7 +469,7 @@ function drawTimelineHeader(ctx, scale, startX, startY, bodyW, frameNumW, action
         for (let i = 0; i < sec.count; i++) {
             const cx = x + i * sec.colW;
             if (i > 0) {
-                ctx.lineWidth = 0.5;
+                ctx.lineWidth = TEMPLATE.LINE_FINE;
                 ctx.beginPath();
                 ctx.moveTo(cx, startY + sectionLabelH);
                 ctx.lineTo(cx, startY + headerH);
@@ -428,7 +502,7 @@ function getActualColCounts() {
     const result = { ACTION: 7, CELL: 7, SOUND: 2, CAMERA: 3 };
     if (typeof sections !== 'undefined') {
         sections.forEach(sec => {
-            if (sec.type === 'CAMERA') return; // テンプレートでは常に3列
+            if (sec.type === 'CAMERA') return;
             if (result[sec.type] !== undefined) {
                 result[sec.type] = sec.cols;
             }
@@ -437,42 +511,41 @@ function getActualColCounts() {
     return result;
 }
 
-// フレーム番号列（ACTIONとSOUNDの間）
+// フレーム番号列
 function drawFrameNumberColumn(ctx, x, y, w, rowH, startFrame, scale, gridH) {
     const m = (mm) => mm * scale;
 
-    // 左の境界線（細線：ACTIONとの境界）
+    // 左の境界線
     ctx.strokeStyle = TEMPLATE.TEMPLATE_COLOR;
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = TEMPLATE.LINE_FINE;
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x, y + gridH);
     ctx.stroke();
 
-    // 右の境界線（太線：SOUNDとの境界）
-    ctx.lineWidth = 1.5;
+    // 右の境界線
+    ctx.lineWidth = TEMPLATE.LINE_MEDIUM;
     ctx.beginPath();
     ctx.moveTo(x + w, y);
     ctx.lineTo(x + w, y + gridH);
     ctx.stroke();
 
-    // フレーム番号はテンプレートカラー
     ctx.fillStyle = TEMPLATE.TEMPLATE_COLOR;
 
     for (let i = 0; i < TEMPLATE.FRAMES_PER_COL; i++) {
         const frameNum = startFrame + i + 1;
         const fy = y + i * rowH;
 
-        // 横線（最後の行は外枠で描画済みなのでスキップ）
+        // 横線
         if (i < TEMPLATE.FRAMES_PER_COL - 1 || frameNum % 24 !== 0) {
             if (frameNum % 24 === 0) {
-                ctx.lineWidth = 2.5;
+                ctx.lineWidth = TEMPLATE.LINE_THICK;
             } else if (frameNum % 12 === 0) {
-                ctx.lineWidth = 1.5;
+                ctx.lineWidth = TEMPLATE.LINE_MEDIUM;
             } else if (frameNum % 6 === 0) {
-                ctx.lineWidth = 1;
+                ctx.lineWidth = TEMPLATE.LINE_THIN;
             } else {
-                ctx.lineWidth = 0.5;
+                ctx.lineWidth = TEMPLATE.LINE_FINE;
             }
             ctx.strokeStyle = TEMPLATE.TEMPLATE_COLOR;
             ctx.beginPath();
@@ -481,7 +554,7 @@ function drawFrameNumberColumn(ctx, x, y, w, rowH, startFrame, scale, gridH) {
             ctx.stroke();
         }
 
-        // 2コマごとにフレーム番号（右寄せ）
+        // 2コマごとにフレーム番号
         if (frameNum % 2 === 0) {
             ctx.font = `${m(1.8)}px monospace`;
             ctx.textAlign = 'right';
@@ -500,7 +573,7 @@ function drawFrameNumberColumn(ctx, x, y, w, rowH, startFrame, scale, gridH) {
     ctx.textBaseline = 'alphabetic';
 }
 
-// データブロック内部描画（外枠は別途描画済み）
+// データブロック内部描画
 function drawDataBlockInner(ctx, x, y, colW, colCount, rowH, colType, startFrame, pageIndex, scale) {
     const m = (mm) => mm * scale;
     const totalW = colW * colCount;
@@ -510,33 +583,33 @@ function drawDataBlockInner(ctx, x, y, colW, colCount, rowH, colType, startFrame
 
     ctx.strokeStyle = TEMPLATE.TEMPLATE_COLOR;
 
-    // セクション左端の縦線（太め）
-    ctx.lineWidth = 1.5;
+    // セクション左端の縦線
+    ctx.lineWidth = TEMPLATE.LINE_MEDIUM;
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x, y + totalH);
     ctx.stroke();
 
-    // 内部縦線（列区切り）
+    // 内部縦線
     for (let c = 1; c < colCount; c++) {
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = TEMPLATE.LINE_FINE;
         ctx.beginPath();
         ctx.moveTo(x + c * colW, y);
         ctx.lineTo(x + c * colW, y + totalH);
         ctx.stroke();
     }
 
-    // 横線（最後の行は外枠で描画済み）
+    // 横線
     for (let i = 1; i < TEMPLATE.FRAMES_PER_COL; i++) {
         const frameNum = startFrame + i;
         if (frameNum % 24 === 0) {
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = TEMPLATE.LINE_THICK;
         } else if (frameNum % 12 === 0) {
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = TEMPLATE.LINE_MEDIUM;
         } else if (frameNum % 6 === 0) {
-            ctx.lineWidth = 1;
+            ctx.lineWidth = TEMPLATE.LINE_THIN;
         } else {
-            ctx.lineWidth = 0.5;
+            ctx.lineWidth = TEMPLATE.LINE_FINE;
         }
         ctx.beginPath();
         ctx.moveTo(x, y + i * rowH);
@@ -548,7 +621,7 @@ function drawDataBlockInner(ctx, x, y, colW, colCount, rowH, colType, startFrame
     drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFrame, pageIndex, scale);
 }
 
-// セルデータ描画（縦書き）
+// セルデータ描画（中央配置）
 function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFrame, pageIndex, scale) {
     const m = (mm) => mm * scale;
     if (typeof cellData === 'undefined') return;
@@ -564,36 +637,245 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
             if (!data || !data.value) continue;
 
             const cx = x + ci * colW + colW / 2;
-            const cy = y + (f - absoluteStart) * rowH;
+            const cy = y + (f - absoluteStart) * rowH + rowH / 2;
 
-            drawVerticalText(ctx, data.value, cx, cy + m(0.2), m(1.8), rowH * 0.9);
+            drawVerticalTextCentered(ctx, data.value, cx, cy, m(2), rowH * 0.85);
         }
     }
 }
 
-// 縦書きテキスト
-function drawVerticalText(ctx, text, x, y, fontSize, maxH) {
-    ctx.font = `${fontSize}px sans-serif`;
+// 縦書きテキスト（中央配置）
+function drawVerticalTextCentered(ctx, text, x, y, fontSize, maxH) {
+    ctx.font = `bold ${fontSize}px sans-serif`;
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
+    ctx.textBaseline = 'middle';
 
     const chars = String(text).split('');
     const charH = fontSize * 1.1;
-    const totalH = chars.length * charH;
+    let totalH = chars.length * charH;
 
     let drawScale = 1;
     if (totalH > maxH) {
         drawScale = maxH / totalH;
+        totalH = maxH;
     }
 
-    let cy = y;
-    chars.forEach(ch => {
-        ctx.fillText(ch, x, cy);
-        cy += charH * drawScale;
+    let startY = y - totalH / 2 + charH * drawScale / 2;
+
+    chars.forEach((ch, i) => {
+        ctx.fillText(ch, x, startY + i * charH * drawScale);
     });
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
+}
+
+// 棒線・波線描画
+function drawBarLines(ctx, x, y, colW, colCount, rowH, colType, absoluteStart, scale) {
+    const m = (mm) => mm * scale;
+    if (typeof cellData === 'undefined') return;
+
+    const endFrame = absoluteStart + TEMPLATE.FRAMES_PER_COL;
+    const lineGap = 3;
+
+    const getVal = (ci, f) => {
+        const key = `${colType}-${ci}-${f}`;
+        const d = cellData[key];
+        return d ? d.value : '';
+    };
+
+    const isLinePiercing = (v) => v === '' || v === '―';
+
+    ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
+    ctx.lineWidth = TEMPLATE.LINE_THIN;
+
+    for (let ci = 0; ci < colCount; ci++) {
+        const tx = x + ci * colW + colW / 2;
+
+        for (let f = absoluteStart; f < endFrame; f++) {
+            const val = getVal(ci, f);
+            if (!isLinePiercing(val)) continue;
+
+            // 上方向で値を探す
+            let startF = -1, startVal = '';
+            for (let tmp = f - 1; tmp >= 0; tmp--) {
+                const tmpV = getVal(ci, tmp);
+                if (!isLinePiercing(tmpV)) {
+                    startF = tmp;
+                    startVal = tmpV;
+                    break;
+                }
+            }
+            if (startF === -1) continue;
+
+            // 下方向で終端を探す
+            let nextF = endFrame;
+            for (let tmp = f + 1; tmp < endFrame; tmp++) {
+                if (!isLinePiercing(getVal(ci, tmp))) {
+                    nextF = tmp;
+                    break;
+                }
+            }
+
+            const gap = nextF - startF - 1;
+            if (gap < lineGap) continue;
+            if (colType === 'ACTION' && (f - startF >= 9)) continue;
+
+            const drawY_top = y + (f - absoluteStart) * rowH;
+            const drawY_bottom = y + (f - absoluteStart + 1) * rowH;
+
+            if (startVal === '×') {
+                // 波線
+                const offset = rowH / 4;
+                ctx.beginPath();
+                ctx.moveTo(tx, drawY_top);
+                ctx.bezierCurveTo(tx - offset, drawY_top + offset, tx + offset, drawY_bottom - offset, tx, drawY_bottom);
+                ctx.stroke();
+            } else {
+                // 棒線
+                ctx.beginPath();
+                ctx.moveTo(tx, drawY_top);
+                ctx.lineTo(tx, drawY_bottom);
+                ctx.stroke();
+            }
+        }
+    }
+}
+
+// セリフブロック描画（テンプレート用）
+function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart, scale) {
+    const m = (mm) => mm * scale;
+    if (typeof dialogueBlocks === 'undefined') return;
+
+    const endFrame = absoluteStart + TEMPLATE.FRAMES_PER_COL;
+
+    dialogueBlocks.forEach(block => {
+        if (block.startFrame >= endFrame || block.endFrame < absoluteStart) return;
+        if (block.colIndex >= colCount) return;
+
+        const sF = Math.max(block.startFrame, absoluteStart);
+        const eF = Math.min(block.endFrame, endFrame - 1);
+
+        const tx = x + block.colIndex * colW;
+        const startY = y + (sF - absoluteStart) * rowH;
+        const endY = y + (eF - absoluteStart + 1) * rowH;
+        const blockH = endY - startY;
+
+        // 背景
+        ctx.fillStyle = getSpeakerColorTemplate(block.speakerName);
+        ctx.fillRect(tx, startY, colW, blockH);
+
+        // 上下線
+        ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
+        ctx.lineWidth = TEMPLATE.LINE_THIN;
+        ctx.beginPath();
+        ctx.moveTo(tx, startY);
+        ctx.lineTo(tx + colW, startY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(tx, endY);
+        ctx.lineTo(tx + colW, endY);
+        ctx.stroke();
+
+        // テキスト
+        ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+        let textStartY = startY + m(4);
+        const isShort = blockH <= rowH * 2;
+
+        if (block.speakerName && !isShort) {
+            ctx.font = `bold ${m(2.5)}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(block.speakerName, tx + colW / 2, startY + m(3));
+            textStartY = startY + m(7);
+        }
+
+        if (block.text) {
+            ctx.font = `bold ${m(3)}px sans-serif`;
+            ctx.textAlign = 'center';
+            const chars = block.text.split('');
+            const charH = m(3.5);
+            const availH = endY - textStartY - m(1);
+            const spacing = Math.min(charH, availH / chars.length);
+
+            chars.forEach((ch, i) => {
+                if (ch === 'ー') ch = '丨';
+                ctx.fillText(ch, tx + colW / 2, textStartY + i * spacing + charH / 2);
+            });
+        }
+    });
+}
+
+// 話者カラー（テンプレート用）
+function getSpeakerColorTemplate(name) {
+    const colors = [
+        'rgba(255, 200, 200, 0.5)',
+        'rgba(200, 255, 200, 0.5)',
+        'rgba(200, 200, 255, 0.5)',
+        'rgba(255, 255, 200, 0.5)',
+        'rgba(255, 200, 255, 0.5)',
+        'rgba(200, 255, 255, 0.5)'
+    ];
+    if (!name) return colors[0];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+}
+
+// カメラブロック描画（テンプレート用）
+function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart, scale) {
+    const m = (mm) => mm * scale;
+    if (typeof cameraBlocks === 'undefined') return;
+
+    const endFrame = absoluteStart + TEMPLATE.FRAMES_PER_COL;
+
+    cameraBlocks.forEach(block => {
+        if (block.startFrame >= endFrame || block.endFrame < absoluteStart) return;
+        if (block.colIndex >= colCount) return;
+
+        const sF = Math.max(block.startFrame, absoluteStart);
+        const eF = Math.min(block.endFrame, endFrame - 1);
+
+        const tx = x + block.colIndex * colW;
+        const startY = y + (sF - absoluteStart) * rowH;
+        const endY = y + (eF - absoluteStart + 1) * rowH;
+        const blockH = endY - startY;
+
+        // 背景
+        ctx.fillStyle = 'rgba(200, 200, 255, 0.3)';
+        ctx.fillRect(tx, startY, colW, blockH);
+
+        // 上下線
+        ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
+        ctx.lineWidth = TEMPLATE.LINE_THIN;
+        ctx.beginPath();
+        ctx.moveTo(tx, startY);
+        ctx.lineTo(tx + colW, startY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(tx, endY);
+        ctx.lineTo(tx + colW, endY);
+        ctx.stroke();
+
+        // テキスト描画
+        ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+        ctx.font = `bold ${m(2.5)}px sans-serif`;
+        ctx.textAlign = 'center';
+
+        const lines = [];
+        if (block.cameraWork) lines.push(block.cameraWork);
+        if (block.text) lines.push(...block.text.split('\n'));
+
+        const lineH = m(3.5);
+        const totalTextH = lines.length * lineH;
+        let textY = startY + (blockH - totalTextH) / 2 + lineH / 2;
+
+        lines.forEach(line => {
+            ctx.fillText(line, tx + colW / 2, textY);
+            textY += lineH;
+        });
+    });
 }
 
 // プレビュー用
