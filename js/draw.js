@@ -2,7 +2,7 @@
 
 function resizeCanvases() {
     const lines = (metaData.memo || "").split(/\r?\n/);
-    const memoH = isMemoExpanded ? Math.max(87, lines.length * 18 + 15) : 40;
+    const memoH = isMemoExpanded ? Math.max(87, lines.length * 18 + 15) : 105;
     metadataH = 65 + memoH + 10;
     const mc = document.getElementById('metadataCanvas');
     mc.width = baseWidth * dpr; mc.height = metadataH * dpr;
@@ -67,6 +67,7 @@ function drawAll() {
     updateCellConfigPanel();
     const zd = document.getElementById('zoomDisplay');
     if (zd) zd.innerText = Math.round(currentZoom * 100) + '%';
+    updatePageIndicator();
 }
 
 // ズーム制御
@@ -98,21 +99,50 @@ function drawMetadata() {
         ctx.fillStyle = getStyle('--grid-medium'); ctx.font = "bold 9px sans-serif";
         ctx.fillText(f.label, f.x + 5, f.y + 11);
         ctx.fillStyle = getStyle('--text-color'); ctx.font = "bold 14px sans-serif";
-        ctx.fillText(metaData[f.id] || "", f.x + 8, f.y + 30);
+        if (f.id === 'cut' && Array.isArray(metaData.sharedCuts) && metaData.sharedCuts.length > 1) {
+            const cuts = metaData.sharedCuts;
+            const currentCut = String(metaData.cut || '');
+            ctx.font = "bold 14px sans-serif";
+            ctx.fillStyle = getStyle('--text-color');
+            ctx.fillText(currentCut, f.x + 8, f.y + 30);
+
+            const otherCuts = cuts.filter(cut => String(cut) !== currentCut);
+            const lineH = 14;
+            let lineY = f.y + 18 + lineH * 0.75;
+            ctx.font = "bold 9px sans-serif";
+            ctx.textAlign = "right";
+            ctx.fillStyle = "rgba(120, 120, 120, 0.7)";
+            ctx.fillText("兼用", f.x + f.w - 5, f.y + 11);
+            ctx.textAlign = "center";
+            const listX = f.x + f.w - 16;
+            if (otherCuts.length) {
+                ctx.fillStyle = getStyle('--bg-color');
+                ctx.fillRect(listX - 18, f.y + 12, 36, Math.max(f.h - 12, otherCuts.length * lineH + 8));
+            }
+            otherCuts.forEach(cut => {
+                ctx.font = "bold 13px sans-serif";
+                ctx.fillStyle = 'rgba(120, 120, 120, 0.65)';
+                ctx.fillText(cut, listX, lineY);
+                lineY += lineH;
+            });
+            ctx.textAlign = "left";
+        } else {
+            ctx.fillText(metaData[f.id] || "", f.x + 8, f.y + 30);
+        }
     });
     const lines = (metaData.memo || "").split(/\r?\n/);
-    const memoH = isMemoExpanded ? Math.max(87, lines.length * 18 + 15) : 40;
+    const memoH = isMemoExpanded ? Math.max(87, lines.length * 18 + 15) : 105;
     ctx.strokeStyle = (selectedMeta === "memo") ? getStyle('--select-border') : getStyle('--border-color');
     ctx.lineWidth = (selectedMeta === "memo") ? 2 : 1;
     ctx.strokeRect(25, 60, baseWidth - 50, memoH);
     ctx.fillStyle = getStyle('--grid-medium'); ctx.font = "bold 9px sans-serif";
     ctx.fillText("DIRECTION (指示)", 30, 71);
     ctx.fillStyle = getStyle('--text-color'); ctx.font = "bold 13px sans-serif";
-    const maxDraw = isMemoExpanded ? lines.length : Math.min(2, lines.length);
+    const maxDraw = isMemoExpanded ? lines.length : Math.min(5, lines.length);
     for (let i = 0; i < maxDraw; i++) if (memoScrollLine + i < lines.length) ctx.fillText(lines[memoScrollLine + i], 33, 90 + i * 18);
-    if (!isMemoExpanded && lines.length > 2) {
+    if (!isMemoExpanded && lines.length > 5) {
         ctx.fillStyle = getStyle('--border-color'); ctx.fillRect(baseWidth - 35, 62, 8, memoH - 4);
-        ctx.fillStyle = getStyle('--grid-thick'); ctx.fillRect(baseWidth - 35, 62 + (memoH - 24) * (memoScrollLine / (lines.length - 2)), 8, 15);
+        ctx.fillStyle = getStyle('--grid-thick'); ctx.fillRect(baseWidth - 35, 62 + (memoH - 24) * (memoScrollLine / Math.max(1, lines.length - 5)), 8, 15);
         ctx.fillStyle = getStyle('--select-bg'); ctx.fillRect(baseWidth - 85, 60 + memoH - 22, 55, 18);
         ctx.fillStyle = getStyle('--text-color'); ctx.textAlign = "center"; ctx.font = "10px sans-serif";
         ctx.fillText("▼ 展開", baseWidth - 57, 60 + memoH - 9);
@@ -239,10 +269,24 @@ function drawGrid() {
         if (d && d.value !== "") return d.value;
         let rep = customRepeats.find(r => r.colType === ct && r.colIndex === ci && f >= r.startF && f <= r.endF);
         if (rep) {
-            let pData = rep.pattern[(f - rep.startF) % rep.pattern.length];
+            let pData = getEffectiveRepeatPatternData(rep, f);
             if (pData && pData.value !== "") return pData.value;
         }
         return "";
+    };
+    const getEffectiveRepeatPatternData = (rep, f) => {
+        const data = (typeof getRepeatPatternData === 'function') ? getRepeatPatternData(rep, f) : null;
+        if (!data) return null;
+        if (rep.colType === "CELL" && !data.option) {
+            const patternIndex = (f - rep.startF) % rep.pattern.length;
+            const sourceFrame = rep.startF - rep.pattern.length + patternIndex;
+            const inheritedOption = cellData[`ACTION-${rep.colIndex}-${sourceFrame}`]?.option;
+            if (inheritedOption) return { ...data, option: inheritedOption };
+        }
+        return data;
+    };
+    const getLineCellValue = (ct, ci, f) => {
+        return getEffectiveCellValue(ct, ci, f);
     };
     const isLinePiercing = (v) => v === "" || v === "―";
 
@@ -258,20 +302,24 @@ function drawGrid() {
                 if (s.type === "ACTION") {
                     if (autoRepeats.some(r => !r.isHold && r.colIndex === ci && f >= r.startF + r.chunkLen && f < r.endF)) skipLine = true;
                     if (autoRepeats.some(r => r.isHold && r.colIndex === ci && f >= 1 && f < r.endF)) skipLine = true;
-                    if (customRepeats.some(rep => rep.colIndex === ci && f >= rep.startF && f <= rep.endF)) skipLine = true;
+                    if (customRepeats.some(rep => {
+                        const patternLen = Array.isArray(rep.pattern) ? rep.pattern.length : 0;
+                        const sourceStart = rep.startF - patternLen;
+                        return rep.colType === s.type && rep.colIndex === ci && patternLen > 0 && f >= sourceStart && f <= rep.endF;
+                    })) skipLine = true;
                 }
                 if (skipLine) continue;
-                let val = getEffectiveCellValue(s.type, ci, f);
+                let val = getLineCellValue(s.type, ci, f);
                 if (isLinePiercing(val)) {
                     let startF = -1, startVal = "";
                     for (let tmp_f = f - 1; tmp_f >= 0; tmp_f--) {
-                        let tmpV = getEffectiveCellValue(s.type, ci, tmp_f);
+                        let tmpV = getLineCellValue(s.type, ci, tmp_f);
                         if (!isLinePiercing(tmpV)) { startF = tmp_f; startVal = tmpV; break; }
                     }
                     if (startF !== -1) {
                         let nextF = targetFrames;
                         for (let tmp_f = f + 1; tmp_f < targetFrames; tmp_f++) {
-                            if (!isLinePiercing(getEffectiveCellValue(s.type, ci, tmp_f))) { nextF = tmp_f; break; }
+                            if (!isLinePiercing(getLineCellValue(s.type, ci, tmp_f))) { nextF = tmp_f; break; }
                         }
                         let currentGap = nextF - startF - 1;
                         if (currentGap >= lineGap && (s.type === "CELL" || (f - startF < 9))) {
@@ -309,7 +357,7 @@ function drawGrid() {
         let chunkStartFrame = r.startF + r.chunkLen;
         let firstCellData = cellData[`${r.colType}-${r.colIndex}-${r.startF}`];
         let firstVal = firstCellData ? firstCellData.value : "";
-        drawRepMark(ctx, sec, r.colIndex, chunkStartFrame, r.endF, firstVal);
+        drawRepMark(ctx, sec, r.colIndex, chunkStartFrame, r.endF, firstVal, firstCellData, 'rep');
         ctx.globalAlpha = 1.0;
     });
 
@@ -321,13 +369,14 @@ function drawGrid() {
         let isSelectedCol = (selectionStart && selectionStart.colType === sec.type && selectionStart.colIndex === rep.colIndex);
         ctx.globalAlpha = isSelectedCol ? 0.3 : 1.0;
         if (sec.type === "ACTION") {
-            let firstVal = rep.pattern[0] ? rep.pattern[0].value : "";
-            drawRepMark(ctx, sec, rep.colIndex, rep.startF, rep.endF + 1, firstVal);
+            let firstData = rep.pattern[0] || null;
+            let firstVal = firstData ? firstData.value : "";
+            drawRepMark(ctx, sec, rep.colIndex, rep.startF, rep.endF + 1, firstVal, firstData, typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep');
         } else {
             ctx.fillStyle = "rgba(200, 200, 200, 0.5)"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
             let endF = Math.min(rep.endF, targetFrames - 1);
             for (let f = rep.startF; f <= endF; f++) {
-                let pData = rep.pattern[(f - rep.startF) % rep.pattern.length];
+                let pData = getEffectiveRepeatPatternData(rep, f);
                 if (pData && pData.value !== "") {
                     let ty = frameY(f) + 16;
                     if (pData.value === "●") { ctx.beginPath(); ctx.arc(tx, ty - 4, 2.5, 0, Math.PI * 2); ctx.fill(); }
@@ -350,12 +399,15 @@ function drawGrid() {
 
     // セルデータの描画
     ctx.textAlign = "center";
+    const internalSymbols = ['SYMBOL_HYPHEN', 'SYMBOL_TICK', 'SYMBOL_NULL', 'SYMBOL_STOP', 'SYMBOL_START'];
     for (const key in cellData) {
         const data = cellData[key], p = parseCellKey(key);
         if (!p) continue;
         const ct = p[0], ci = parseInt(p[1]), f = parseInt(p[2]);
         if (selectionStart && selectionStart.colType === ct && selectionStart.colIndex === ci && selectionStart.frame === f) continue;
         if (ct === "SOUND") continue;
+        // 内部記号はスキップ
+        if (data.value && internalSymbols.includes(data.value)) continue;
         // マージン部含めて描画（cut外も表示）
         let tx = 0, ty = frameY(f) + 16;
         const sec = sections.find(s => s.type === ct);
@@ -399,6 +451,8 @@ function drawGrid() {
         ctx.globalAlpha = 1.0;
     }
 
+    drawMotionInstructionMarks(ctx);
+
     // 止メのテキスト描画（自動解析）
     if (typeof settings === 'undefined' || settings.draw.tomeEnabled !== false) {
         autoRepeats.forEach(r => {
@@ -438,11 +492,211 @@ function drawGrid() {
         const maxX = Math.max(selectionStart.x + selectionStart.w, selectionEnd.x + selectionEnd.w);
         const minF = Math.min(selectionStart.frame, selectionEnd.frame);
         const maxF = Math.max(selectionStart.frame, selectionEnd.frame);
-        ctx.fillStyle = getStyle('--range-bg');
+        ctx.fillStyle = selectionMoveInfo ? "rgba(77, 208, 225, 0.18)" : getStyle('--range-bg');
         ctx.fillRect(minX, frameY(minF), maxX - minX, (maxF - minF + 1) * rowHeight);
-        ctx.strokeStyle = getStyle('--select-border'); ctx.lineWidth = 1;
+        ctx.strokeStyle = selectionMoveInfo ? "rgba(77, 208, 225, 0.95)" : getStyle('--select-border'); ctx.lineWidth = selectionMoveInfo ? 2 : 1;
+        if (selectionMoveInfo) ctx.setLineDash([5, 3]);
         ctx.strokeRect(minX, frameY(minF), maxX - minX, (maxF - minF + 1) * rowHeight);
+        if (selectionMoveInfo) ctx.setLineDash([]);
         ctx.fillStyle = getStyle('--select-bg');
         ctx.fillRect(selectionStart.x, frameY(selectionStart.frame), selectionStart.w, rowHeight);
+        if (selectionMoveInfo) drawSelectionMoveGhost(ctx, minX, minF);
     }
+}
+
+function drawSelectionMoveGhost(ctx, minLOrX, minF) {
+    if (!selectionMoveInfo || !selectionStart) return;
+    const targetL = Math.min(
+        getLogicalColIndex(selectionStart.colType, selectionStart.colIndex),
+        getLogicalColIndex(selectionEnd.colType, selectionEnd.colIndex)
+    );
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = "bold 12px sans-serif";
+    selectionMoveInfo.items.forEach(item => {
+        const cell = getCellByLogical(targetL + item.rL, minF + item.rF);
+        if (!cell) return;
+        const y = frameY(cell.frame);
+        ctx.fillStyle = item.data ? "rgba(77, 208, 225, 0.12)" : "rgba(255, 255, 255, 0.05)";
+        ctx.fillRect(cell.x + 1, y + 1, cell.w - 2, rowHeight - 2);
+        if (!item.data) return;
+        const tx = cell.x + cell.w / 2;
+        const ty = y + 16;
+        const value = item.data.text ? `${item.data.value}/${item.data.text}` : item.data.value;
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = getStyle('--text-color');
+        if (value === "●") {
+            ctx.beginPath();
+            ctx.arc(tx, ty - 4, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (value === "―") {
+            ctx.strokeStyle = getStyle('--text-color');
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(tx - 6, ty - 4);
+            ctx.lineTo(tx + 6, ty - 4);
+            ctx.stroke();
+        } else {
+            ctx.fillText(value, tx, ty);
+        }
+        ctx.globalAlpha = 1;
+    });
+    ctx.restore();
+}
+
+function drawMotionInstructionMarks(ctx) {
+    if (typeof getMotionInstruction !== 'function') return;
+    for (let s of sections) {
+        if (s.type !== "ACTION" && s.type !== "CELL") continue;
+        for (let ci = 0; ci < s.cols; ci++) {
+            const tx = s.x + ci * s.cw + s.cw / 2;
+            for (let f = 0; f < targetFrames; f++) {
+                const data = cellData[`${s.type}-${ci}-${f}`];
+                const mark = getMotionInstruction(data?.value);
+                if (!mark) continue;
+                let endF = targetFrames - 1;
+                for (let nf = f + 1; nf < targetFrames; nf++) {
+                    const next = cellData[`${s.type}-${ci}-${nf}`];
+                    if (next && String(next.value || '').trim() && !["―", "×"].includes(String(next.value).trim())) {
+                        endF = nf - 1;
+                        break;
+                    }
+                }
+                drawMotionInstructionMark(ctx, tx, f, endF, mark);
+            }
+        }
+    }
+}
+
+function drawMotionInstructionMark(ctx, tx, startF, endF, mark) {
+    const textY = frameY(startF);
+    ctx.save();
+    const labelBottomY = drawVerticalRepeatLabel(ctx, tx, textY, mark.label);
+    const lineStartF = startF + 1;
+    if (endF >= lineStartF) {
+        ctx.strokeStyle = mark.random
+            ? "rgba(180, 90, 220, 0.85)"
+            : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)");
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash(mark.random ? [2, 3] : []);
+        ctx.beginPath();
+        const top = Math.max(frameY(lineStartF), labelBottomY + 4);
+        const bottom = frameY(endF + 1);
+        const amp = mark.random ? 4 : 3;
+        const step = rowHeight / 2;
+        ctx.moveTo(tx, top);
+        for (let y = top; y <= bottom; y += step) {
+            const phase = (y - top) / step;
+            ctx.lineTo(tx + Math.sin(phase * Math.PI) * amp, y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+    ctx.restore();
+}
+
+// === ページ送り ===
+function getHeadMarginForPage() {
+    // 先頭マージンがONの場合のみ値を返す
+    if (typeof settings !== 'undefined' && settings.draw && settings.draw.headMarginEnabled) {
+        return settings.draw.headMargin || 0;
+    }
+    return 0;
+}
+
+function hasPage0() {
+    // 先頭マージンがONのときのみ0ページ目を作成
+    return getHeadMarginForPage() > 0;
+}
+
+function getNormalPageCount() {
+    // 通常ページ数（0ページを除く）
+    const framesPerPage = (typeof TEMPLATE !== 'undefined' && TEMPLATE.FRAMES_PER_PAGE) ? TEMPLATE.FRAMES_PER_PAGE : 144;
+    return targetFrames > 144 ? Math.ceil(targetFrames / framesPerPage) : 1;
+}
+
+function getTotalPages() {
+    const normalPages = getNormalPageCount();
+    // 先頭マージンON: 0ページ + 通常ページ
+    // 先頭マージンOFF: 通常ページのみ
+    return hasPage0() ? 1 + normalPages : normalPages;
+}
+
+function getPageStartFrame(pageIndex) {
+    const framesPerPage = (typeof TEMPLATE !== 'undefined' && TEMPLATE.FRAMES_PER_PAGE) ? TEMPLATE.FRAMES_PER_PAGE : 144;
+    const headMargin = getHeadMarginForPage();
+
+    if (headMargin > 0) {
+        if (pageIndex === 0) {
+            // 0ページ目: -headMargin から開始（先頭マージンのみ）
+            return -headMargin;
+        }
+        // 1ページ目以降: 0, 144, 288...
+        return (pageIndex - 1) * framesPerPage;
+    }
+    // 先頭マージンOFF: 0, 144, 288...
+    return pageIndex * framesPerPage;
+}
+
+// シート番号表記取得（0ページは "0/N"、通常は "M/N"）
+function getSheetLabel(pageIndex) {
+    const normalPages = getNormalPageCount();
+    if (hasPage0()) {
+        if (pageIndex === 0) {
+            return `0/${normalPages}`;
+        }
+        return `${pageIndex}/${normalPages}`;
+    }
+    return `${pageIndex + 1}/${normalPages}`;
+}
+
+function updatePageIndicator() {
+    const pageNav = document.getElementById('page-nav');
+    const indicator = document.getElementById('page-indicator');
+    const prevBtn = document.getElementById('page-prev');
+    const nextBtn = document.getElementById('page-next');
+    const cutSelect = document.getElementById('preview-cut-select');
+    const totalPages = getTotalPages();
+
+    // Previewモードのみ表示
+    if (pageNav) {
+        pageNav.classList.toggle('visible', currentMode === 'preview');
+    }
+
+    if (indicator) indicator.textContent = `${currentPage + 1} / ${totalPages}`;
+    if (prevBtn) prevBtn.disabled = currentPage <= 0;
+    if (nextBtn) nextBtn.disabled = currentPage >= totalPages - 1;
+    if (cutSelect) {
+        const cuts = (typeof getSharedCutList === 'function') ? getSharedCutList() : [];
+        const visible = currentMode === 'preview' && cuts.length > 1;
+        cutSelect.style.display = visible ? 'inline-block' : 'none';
+        if (visible) {
+            const current = String(metaData.cut || '');
+            cutSelect.innerHTML = cuts.map(cut => {
+                const value = String(cut).replace(/"/g, '&quot;');
+                return `<option value="${value}"${String(cut) === current ? ' selected' : ''}>CUT ${cut}</option>`;
+            }).join('');
+            cutSelect.value = current;
+        }
+    }
+}
+
+function goToPage(pageIndex) {
+    const totalPages = getTotalPages();
+    const newPage = Math.max(0, Math.min(totalPages - 1, pageIndex));
+    if (newPage !== currentPage) {
+        currentPage = newPage;
+        updatePageIndicator();
+        if (currentMode === 'preview') {
+            updateTemplatePreview();
+        }
+    }
+}
+
+function goToPrevPage() {
+    goToPage(currentPage - 1);
+}
+
+function goToNextPage() {
+    goToPage(currentPage + 1);
 }

@@ -22,10 +22,15 @@ const DEFAULT_SETTINGS = {
         bookLine: 'auto',
         cellIcon: 'auto',
         selectBorder: 'auto',
-        gridThick: 'auto'
+        gridThick: 'auto',
+        handwritingSelect: '#00a8ff',
+        handwritingTransform: '#d81b60'
     },
     editor: {
-        sharedMetaKeys: ['title', 'subTitle', 'scene', 'cut', 'lengthSec', 'lengthFrame', 'creator']
+        sharedMetaKeys: ['title', 'subTitle', 'scene', 'lengthSec', 'lengthFrame', 'creator']
+    },
+    appearance: {
+        theme: 'system'             // 'system' | 'light' | 'dark'
     },
     shortcuts: {
         // [actionId]: { main, sub }
@@ -35,6 +40,7 @@ const DEFAULT_SETTINGS = {
         'edit.copy':            { main: 'Ctrl+C',       sub: '' },
         'edit.paste':           { main: 'Ctrl+V',       sub: '' },
         'edit.delete':          { main: 'Delete',       sub: 'Backspace' },
+        'edit.assist.nextNumber': { main: 'F7',         sub: '' },
         'edit.repeat':          { main: 'Ctrl+R',       sub: '' },
         'insert.frame':         { main: 'Ctrl+I',       sub: '' },
         'insert.frameDelete':   { main: 'Ctrl+D',       sub: '' },
@@ -60,6 +66,34 @@ const DEFAULT_SETTINGS = {
         'edit.color.3':         { main: '',             sub: '' },
         'edit.color.4':         { main: '',             sub: '' },
         'edit.color.5':         { main: '',             sub: '' },
+        'preview.tool.pen':     { main: 'B',            sub: '' },
+        'preview.tool.eraser':  { main: 'E',            sub: '' },
+        'preview.tool.rect':    { main: 'M',            sub: '' },
+        'preview.tool.lasso':   { main: 'L',            sub: '' },
+        'preview.tool.transform': { main: 'Ctrl+T',     sub: '' },
+        'preview.tool.hand':    { main: 'H',            sub: '' },
+        'preview.temporaryHand': { main: 'Space',        sub: '' },
+        'preview.undo':          { main: 'Ctrl+Z',       sub: '' },
+        'preview.redo':          { main: 'Ctrl+Shift+Z', sub: 'Ctrl+Y' },
+        'preview.confirm':      { main: 'Enter',        sub: '' },
+        'preview.cancel':       { main: 'Esc',          sub: '' },
+        'preview.clearSelection': { main: 'Ctrl+D',     sub: '' },
+        'preview.deleteSelection': { main: 'Delete',    sub: 'Backspace' },
+    },
+    preview: {
+        sidebarPosition: 'right',  // 'left' | 'right'
+        exportFilenameTemplate: '%title_%scene_%cut',
+        saveFilenameTemplate: '%title_%scene_%cut',
+        imageExportFormat: 'png',
+        imageExportDpi: 300,
+        imageExportIncludeHandwriting: true,
+        includePageZero: false,    // 書き出し時に0ページを含めるか
+        sectionOrder: ['template', 'tools', 'import', 'export', 'zoom'],
+        previewZoom: 1,
+        sidebarCollapsed: false,
+        collapsedSections: [],
+        penSize: 'medium',         // 'large' | 'medium' | 'small'
+        eraserSize: 'medium'       // 'large' | 'medium' | 'small'
     }
 };
 
@@ -71,7 +105,11 @@ const ACTION_LABELS = {
     'edit.copy': 'コピー',
     'edit.paste': '貼り付け',
     'edit.delete': '削除',
+    'edit.assist.nextNumber': '次の連番を入力',
     'edit.repeat': 'リピート展開',
+    'edit.shake': 'ブレ展開',
+    'edit.randomShake': 'ランダムブレ展開',
+    'edit.convertActionToCell': 'すべての原画を動画に一括変換',
     'insert.frame': 'コマ挿入（選択列）',
     'insert.frameDelete': 'コマ削除（選択列）',
     'insert.frameAll': '全レイヤにコマ挿入',
@@ -96,6 +134,19 @@ const ACTION_LABELS = {
     'edit.color.3': '文字色 3 (青)',
     'edit.color.4': '文字色 4 (紫)',
     'edit.color.5': '文字色 5 (橙)',
+    'preview.tool.pen': '手書き: ペン',
+    'preview.tool.eraser': '手書き: 消しゴム',
+    'preview.tool.rect': '手書き: 矩形選択',
+    'preview.tool.lasso': '手書き: 投げ縄選択',
+    'preview.tool.transform': '手書き: 変形',
+    'preview.tool.hand': '手書き: ハンド',
+    'preview.temporaryHand': '手書き: 一時ハンド',
+    'preview.undo': '手書き: 元に戻す',
+    'preview.redo': '手書き: やり直し',
+    'preview.confirm': '手書き: 確定',
+    'preview.cancel': '手書き: キャンセル',
+    'preview.clearSelection': '手書き: 選択解除',
+    'preview.deleteSelection': '手書き: 選択削除',
 };
 
 let settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
@@ -135,6 +186,8 @@ function resetSettings() {
 
 // 設定をDOM（CSS変数・hidden input）に反映
 function applySettingsToDOM() {
+    applyThemeSetting();
+
     // 線発生ギャップ → hidden input
     const gapInput = document.getElementById('gapSetting');
     if (gapInput) gapInput.value = settings.draw.lineGap;
@@ -150,6 +203,26 @@ function applySettingsToDOM() {
     else root.style.removeProperty('--select-border');
     if (overrides.gridThick !== 'auto') root.style.setProperty('--grid-thick', overrides.gridThick);
     else root.style.removeProperty('--grid-thick');
+
+    if (typeof refreshDrawingSizeControls === 'function') refreshDrawingSizeControls();
+    if (typeof refreshPreviewToolButtons === 'function') refreshPreviewToolButtons();
+}
+
+function applyThemeSetting() {
+    const theme = settings?.appearance?.theme || 'system';
+    if (theme === 'light' || theme === 'dark') {
+        document.documentElement.dataset.theme = theme;
+    } else {
+        delete document.documentElement.dataset.theme;
+    }
+}
+
+function setThemeMode(theme) {
+    if (!['system', 'light', 'dark'].includes(theme)) return;
+    if (!settings.appearance) settings.appearance = {};
+    settings.appearance.theme = theme;
+    saveSettings();
+    if (typeof drawAll === 'function') drawAll();
 }
 
 // fontColorId から実色を取得
@@ -206,7 +279,8 @@ function eventToCombo(e) {
     if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
     if (e.shiftKey) parts.push('Shift');
     if (e.altKey) parts.push('Alt');
-    let key = e.key;
+    let key = e.key || e.code || '';
+    if (!key) return parts.join('+');
     if (key === ' ') key = 'Space';
     else if (key === 'Escape') key = 'Esc';
     else if (key.length === 1) key = key.toUpperCase();

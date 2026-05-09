@@ -20,6 +20,36 @@ function getDialogueHit(zX, zY) {
 
 window.handleDialogueKey = function(e) { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); saveDialogueBlock(); } };
 
+function clearDialogueBlockCells(block) {
+    if (!block) return;
+    for (let f = block.startFrame; f <= block.endFrame; f++) {
+        delete cellData[`SOUND-${block.colIndex}-${f}`];
+    }
+}
+
+window.normalizeDialogueBlockCells = function(block, previousBlock = null) {
+    if (!block) return;
+    if (previousBlock) clearDialogueBlockCells(previousBlock);
+    clearDialogueBlockCells(block);
+    for (let f = block.startFrame; f <= block.endFrame; f++) {
+        const key = `SOUND-${block.colIndex}-${f}`;
+        if (f === block.startFrame) {
+            cellData[key] = {
+                value: block.speakerName || '',
+                text: block.text || '',
+                option: null,
+                fontColorId: 0
+            };
+        } else {
+            cellData[key] = { value: '―', option: null, text: null, fontColorId: 0 };
+        }
+    }
+};
+
+window.normalizeAllDialogueBlockCells = function() {
+    dialogueBlocks.forEach(block => window.normalizeDialogueBlockCells(block));
+};
+
 window.openDialogueModal = function() {
     let existingBlock = null; let minF, maxF;
     if (selectedDialogueId) { existingBlock = dialogueBlocks.find(b => b.id === selectedDialogueId); }
@@ -50,6 +80,7 @@ window.saveDialogueBlock = function() {
     let startF = parseInt(document.getElementById('dialogueStartInput').value, 10) - 1;
     let endF = parseInt(document.getElementById('dialogueEndInput').value, 10) - 1;
     let blockToEdit = dialogueBlocks.find(b => b.id === editingDialogueId);
+    let previousBlock = blockToEdit ? JSON.parse(JSON.stringify(blockToEdit)) : null;
     let colIndex = blockToEdit ? blockToEdit.colIndex : (selectionStart ? selectionStart.colIndex : 0);
     if (isNaN(startF) || isNaN(endF)) { alert("開始/終了フレームを入力してください。"); return; }
     if (startF > endF) { let temp = startF; startF = endF; endF = temp; }
@@ -61,8 +92,11 @@ window.saveDialogueBlock = function() {
         blockToEdit.text = text;
         blockToEdit.startFrame = startF;
         blockToEdit.endFrame = endF;
+        window.normalizeDialogueBlockCells(blockToEdit, previousBlock);
     } else {
-        dialogueBlocks.push({ id: Date.now(), colIndex: colIndex, speakerName: speakerName, text: text, startFrame: startF, endFrame: endF });
+        let newBlock = { id: Date.now(), colIndex: colIndex, speakerName: speakerName, text: text, startFrame: startF, endFrame: endF };
+        dialogueBlocks.push(newBlock);
+        window.normalizeDialogueBlockCells(newBlock);
     }
     window.closeDialogueModal();
     selectedDialogueId = null;
@@ -87,10 +121,11 @@ function drawDialogueBlocks(ctx) {
     if (!sndSec) return;
     dialogueBlocks.forEach(block => {
         let sF = block.startFrame; let eF = block.endFrame; let colI = block.colIndex;
-        if (sF >= targetFrames) return;
+        // ダミー部分（マージン）も含めて描画（numFramesを使用）
+        if (sF >= numFrames) return;
         let tx = sndSec.x + colI * sndSec.cw;
         let startY = frameY(sF);
-        let endY = frameY(Math.min(eF, targetFrames - 1) + 1);
+        let endY = frameY(Math.min(eF, numFrames - 1) + 1);
         if (selectedDialogueId === block.id) { ctx.strokeStyle = getStyle('--select-border'); ctx.lineWidth = 2; ctx.strokeRect(tx, startY, sndSec.cw, endY - startY); }
         ctx.fillStyle = getSpeakerColor(block.speakerName);
         ctx.fillRect(tx, startY, sndSec.cw, endY - startY);
@@ -128,7 +163,7 @@ function drawDialogueBlocks(ctx) {
         if (dragDialogueInfo && dragDialogueInfo.id === block.id) {
             let gTx = sndSec.x + dragDialogueInfo.currentCol * sndSec.cw;
             let gStartY = frameY(dragDialogueInfo.currentStart);
-            let gEndY = frameY(Math.min(dragDialogueInfo.currentEnd, targetFrames - 1) + 1);
+            let gEndY = frameY(Math.min(dragDialogueInfo.currentEnd, numFrames - 1) + 1);
             let isR = dragDialogueInfo.isColliding;
             ctx.fillStyle = isR ? 'rgba(255, 0, 0, 0.4)' : 'rgba(255, 255, 255, 0.3)';
             ctx.fillRect(gTx, gStartY, sndSec.cw, gEndY - gStartY);

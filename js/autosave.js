@@ -27,6 +27,7 @@ function updateModeStatus() {
 function markDirty() {
     isDirty = true;
     updateModeStatus();
+    if (typeof updateActiveDocumentTabMeta === 'function') updateActiveDocumentTabMeta();
     if (autosaveTimer) clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(autoSave, AUTOSAVE_DEBOUNCE_MS);
 }
@@ -34,26 +35,84 @@ function markDirty() {
 function markClean() {
     isDirty = false;
     updateModeStatus();
+    if (typeof updateActiveDocumentTabMeta === 'function') updateActiveDocumentTabMeta();
     if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
+    clearLastSession();
 }
 
 function buildSessionSnapshot() {
     // 全シートを保存
     const allSheets = (typeof exportAllSheetsData === 'function') ? exportAllSheetsData() : null;
+    const draft = getActiveInputDraft();
+    const snapMetaData = JSON.parse(JSON.stringify(metaData));
+    const snapCellData = JSON.parse(JSON.stringify(cellData));
+    if (draft?.type === 'meta') {
+        snapMetaData[draft.key] = draft.value;
+    } else if (draft?.type === 'cell') {
+        if (draft.value === "") delete snapCellData[draft.key];
+        else snapCellData[draft.key] = draft.data;
+    }
+    if (allSheets && typeof currentSheetIndex !== 'undefined' && allSheets[currentSheetIndex]) {
+        if (draft?.type === 'meta') {
+            allSheets[currentSheetIndex].metaData[draft.key] = draft.value;
+        } else if (draft?.type === 'cell') {
+            if (draft.value === "") delete allSheets[currentSheetIndex].cellData[draft.key];
+            else allSheets[currentSheetIndex].cellData[draft.key] = draft.data;
+        }
+    }
     return {
         savedAt: Date.now(),
         version: 2,
         sheets: allSheets,
         currentSheetIndex: (typeof currentSheetIndex !== 'undefined') ? currentSheetIndex : 0,
         // 互換: 単一シートとしても残す
-        metaData,
-        cellData,
+        metaData: snapMetaData,
+        cellData: snapCellData,
         booksData,
         customRepeats,
         dialogueBlocks,
         cameraBlocks,
+        handwritingPages: (typeof exportHandwritingData === 'function') ? exportHandwritingData() : {},
         sections: JSON.parse(JSON.stringify(sections))
     };
+}
+
+function getActiveInputDraft() {
+    if (typeof selectedMeta !== 'undefined' && selectedMeta) {
+        const isMemo = selectedMeta === "memo";
+        const input = isMemo ? metaTextArea : metaInput;
+        if (input && input.style.display !== 'none') {
+            let value = isMemo ? input.value : input.value.trim();
+            if (selectedMeta === "lengthFrame") {
+                let frm = parseInt(value, 10) || 0;
+                value = String(frm % 24).padStart(2, '0');
+            } else if (selectedMeta === "lengthSec") {
+                value = (parseInt(value, 10) || 0).toString();
+            }
+            return { type: 'meta', key: selectedMeta, value };
+        }
+    }
+    if (typeof selectionStart !== 'undefined' && selectionStart && typeof cellInput !== 'undefined' && cellInput.style.display !== 'none') {
+        const key = `${selectionStart.colType}-${selectionStart.colIndex}-${selectionStart.frame}`;
+        let value = cellInput.value.trim();
+        if (value === "-") value = "―";
+        if (value.toLowerCase() === "x") value = "×";
+        if (value === "") return { type: 'cell', key, value: "", data: null };
+        const oldData = cellData[key] || {};
+        const data = {
+            value,
+            option: oldData.option || null,
+            text: null,
+            fontColorId: oldData.fontColorId || 0
+        };
+        if (selectionStart.colType === "SOUND" && value.match(/[\/,]/)) {
+            const p = value.split(/[\/,]/);
+            data.value = p[0];
+            data.text = p[1];
+        }
+        return { type: 'cell', key, value, data };
+    }
+    return null;
 }
 
 function autoSave() {
@@ -63,6 +122,12 @@ function autoSave() {
     } catch (e) {
         console.warn('autosave failed', e);
     }
+}
+
+function flushAutoSave() {
+    if (!isDirty) return;
+    if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
+    autoSave();
 }
 
 function loadLastSession() {
@@ -87,6 +152,7 @@ function applySession(snap) {
     customRepeats = snap.customRepeats || [];
     dialogueBlocks = snap.dialogueBlocks || [];
     cameraBlocks = snap.cameraBlocks || [];
+    if (typeof importHandwritingData === 'function') importHandwritingData(snap.handwritingPages || {});
     if (snap.sections) sections = snap.sections;
     if (typeof initSheets === 'function') initSheets();
     if (typeof updateSectionPositions === 'function') updateSectionPositions();
@@ -116,9 +182,14 @@ function maybeOfferSessionRestore() {
 
 // 未保存警告
 window.addEventListener('beforeunload', (e) => {
+    flushAutoSave();
     if (isDirty) {
         e.preventDefault();
         e.returnValue = '未保存の変更があります。本当にページを閉じますか？';
         return e.returnValue;
     }
+});
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushAutoSave();
 });

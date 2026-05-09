@@ -9,6 +9,7 @@ let endX = 0;
 let currentZoom = 1.0;
 let numFrames = 144;
 let targetFrames = 144;
+let currentPage = 0;  // 0-indexed
 
 let sections = [
   {type:"ACTION", x:25, cols:7, cw:32, chars:["A","B","C","D","E","F","G"]},
@@ -17,7 +18,7 @@ let sections = [
   {type:"CAMERA", x:0, cols:3, cw:58, chars:["CAM1","CAM2","CAM3"]}
 ];
 
-let metaData = { title:"", subTitle:"", scene:"", cut:"", lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"" };
+let metaData = { title:"", subTitle:"", scene:"", cut:"", sharedCuts: [], lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"" };
 let isMemoExpanded = true;
 let memoScrollLine = 0;
 let booksData = { "ACTION": {}, "SOUND": {}, "CELL": {}, "CAMERA": {} };
@@ -49,6 +50,10 @@ let undoStack = [];
 let redoStack = [];
 let selectionStart = null, selectionEnd = null, selectedMeta = null;
 let isDragging = false;
+let selectionMoveInfo = null;
+let pendingSelectionMove = null;
+let cellInputDirty = false;
+let isGridPointerDown = false;
 let clipboard = null;
 let draggedListItem = null;
 
@@ -79,7 +84,16 @@ const CAMERA_CATEGORIES = {
 };
 for (let key in CAMERA_CATEGORIES) { if (key !== "全て") CAMERA_CATEGORIES["全て"] = CAMERA_CATEGORIES["全て"].concat(CAMERA_CATEGORIES[key]); }
 
-const VALUE_TYPE_MAP = { "fromTo": ["PAN", "PAN UP", "PAN DOWN", "TILT", "TU", "TB", "ZI", "ZO", "CU", "CD", "SL", "ParsSL", "Q TU", "Q TB", "D TU", "D TB", "GondolaTU", "GondolaTB", "Rotate TU", "Rotate TB", "PAN TU", "PAN TB", "JumpSL", "Bar", "FOLLOW", "FollowPan", "Tuke Pan", "FI", "FO", "WI", "WO"], "fromToLayers": ["OL"], "multiLayerDirection": ["MULTI", "DOLLY"], "numericFr": ["Strobo", "Strobo1", "Strobo2"], "fairing": ["Fairing"], "freeText": ["FIX", "Rolling"] };
+const VALUE_TYPE_MAP = {
+  "fromTo": ["PAN", "PAN UP", "PAN DOWN", "TILT", "TU", "TB", "ZI", "ZO", "CU", "CD", "SL", "ParsSL", "Q TU", "Q TB", "D TU", "D TB", "GondolaTU", "GondolaTB", "Rotate TU", "Rotate TB", "PAN TU", "PAN TB", "JumpSL", "Bar", "FOLLOW", "FollowPan", "Tuke Pan", "FI", "FO", "WI", "WO", "Focus IN", "Focus Out"],
+  "fromToLayers": ["OL", "Wipe"],
+  "multiLayerDirection": ["MULTI", "DOLLY"],
+  "numericFr": ["Strobo", "Strobo1", "Strobo2"],
+  "iris": ["IrisIN", "IrisOut"],
+  "fairing": ["Fairing"],
+  "freeText": ["FIX", "Rolling", "WipeIN"],
+  "instructionText": ["SUBLINA", "TFlash", "HI CON", "Rack Focus", "OverEX", "UnderEX", "DF1", "DF2", "DF3", "Fog1", "Fog2", "Fog3", "BOKEH S", "BOKEH M", "BOKEH L", "WaveGlass S", "WaveGlass M", "WaveGlass L", "Insert", "CutIN", "Blur1", "Blur2", "Blur3", "Stream Filter", "Radial Filter", "Stream Blur", "Radial Blur", "I Light", "Flare", "Para", "Lens Flare", "Lens Ghost", "Tflash Burst", "Shadow Burst", "Harmony", "Tflash Aura", "Tflash Pinhole", "Tflash Cross", "MotionBlur1", "MotionBlur2", "MotionBlur3", "Wxp"]
+};
 
 const LABEL_MAP = { 'A': ['ア','イ','ウ','エ','オ'], 'B': ['カ','キ','ク','ケ','コ'], 'C': ['サ','シ','ス','セ','ソ'], 'D': ['タ','チ','ツ','テ','ト'], 'E': ['ナ','ニ','ヌ','ネ','ノ'], 'F': ['ハ','ヒ','フ','ヘ','ホ'], 'G': ['マ','ミ','ム','メ','モ'], 'a': ['a1','a2','a3','a4','a5'], 'DEFAULT': ['①','②','③','④','⑤'] };
 

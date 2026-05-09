@@ -36,6 +36,46 @@ async function getLastFileHandle(format) {
 // 現在編集中のファイル（最後に開いた/保存したハンドル）
 let currentFileHandle = null;
 let currentFileFormat = null;
+let currentDirectoryHandle = null;
+let currentFileName = '';
+
+function updateCurrentFileLabel() {
+    const el = document.getElementById('current-file-label');
+    if (!el) return;
+    const name = currentFileName || '未保存';
+    el.textContent = name;
+    el.title = currentFileFormat ? `${name} (${currentFileFormat.toUpperCase()})` : name;
+}
+
+function setCurrentFileName(name, format) {
+    currentFileName = name || '';
+    if (format !== undefined) currentFileFormat = format || null;
+    updateCurrentFileLabel();
+    if (typeof updateActiveDocumentTabMeta === 'function') updateActiveDocumentTabMeta();
+}
+
+document.addEventListener('DOMContentLoaded', updateCurrentFileLabel);
+
+function sanitizeSaveFilename(name) {
+    return String(name || '').replace(/[\\/:*?"<>|]/g, '_');
+}
+
+function buildTimesheetSaveFilename(formatKey) {
+    const ext = String(formatKey || 'tdts').replace(/^\./, '').toLowerCase();
+    const template = (typeof settings !== 'undefined' && settings.preview && settings.preview.saveFilenameTemplate)
+        ? settings.preview.saveFilenameTemplate
+        : '%title_%scene_%cut';
+    let baseName = template
+        .replace(/%title/g, metaData.title || 'timesheet')
+        .replace(/%episode/g, metaData.subTitle || '')
+        .replace(/%scene/g, metaData.scene || '')
+        .replace(/%cut/g, metaData.cut || '001')
+        .replace(/%sheet/g, metaData.sheetName || 'sheet1')
+        .replace(/%format/g, ext);
+    baseName = baseName.replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    baseName = sanitizeSaveFilename(baseName || 'timesheet');
+    return `${baseName}.${ext}`;
+}
 
 // 既存ハンドルへ silent 書き込み（上書き保存）
 async function silentSaveToHandle(handle, fileContent) {
@@ -60,7 +100,10 @@ async function saveFileWithPicker(formatKey, suggestedName, fileContent, accept,
     if (!saveAs && currentFileHandle && currentFileFormat === formatKey) {
         try {
             const ok = await silentSaveToHandle(currentFileHandle, fileContent);
-            if (ok) return currentFileHandle;
+            if (ok) {
+                setCurrentFileName(currentFileHandle.name || currentFileName || suggestedName, formatKey);
+                return currentFileHandle;
+            }
         } catch (e) { /* fallthrough to picker */ }
     }
 
@@ -82,6 +125,7 @@ async function saveFileWithPicker(formatKey, suggestedName, fileContent, accept,
         await saveLastFileHandle(formatKey, handle);
         currentFileHandle = handle;
         currentFileFormat = formatKey;
+        setCurrentFileName(handle.name || suggestedName, formatKey);
         return handle;
     } else {
         // フォールバック: a タグダウンロード（同名ファイル上書きはOSダウンロード設定に従う）
@@ -90,6 +134,7 @@ async function saveFileWithPicker(formatKey, suggestedName, fileContent, accept,
         const a = document.createElement('a');
         a.href = url; a.download = suggestedName; a.click();
         URL.revokeObjectURL(url);
+        setCurrentFileName(suggestedName, formatKey);
         return null;
     }
 }
@@ -99,12 +144,19 @@ async function saveFileWithPicker(formatKey, suggestedName, fileContent, accept,
 let _ioModalResolve = null;
 
 function openIOModal(opts) {
-    // opts: { title, mode: 'import'|'export', format: 'tdts'|'xdts', warning?: string }
+    // opts: { title, mode: 'import'|'export', format: 'tdts'|'xdts', source?: 'file'|'folder', warning?: string }
     const modal = document.getElementById('io-modal');
     document.getElementById('io-modal-title').innerText = opts.title;
     const warnEl = document.getElementById('io-modal-warn');
     if (opts.warning) { warnEl.innerText = opts.warning; warnEl.style.display = 'block'; }
     else warnEl.style.display = 'none';
+    const noteEl = document.getElementById('io-modal-note');
+    const noteKey = opts.mode === 'import'
+        ? (opts.source === 'folder' ? 'io.note.importFolder' : 'io.note.importFile')
+        : (opts.format === 'xdts' ? 'io.note.exportXdts' : 'io.note.exportTdts');
+    if (noteEl) noteEl.innerText = (typeof t === 'function') ? t(noteKey) : '';
+    const mergeHint = document.getElementById('io-merge-hint');
+    if (mergeHint) mergeHint.innerText = (typeof t === 'function') ? t('io.merge.hint') : '';
 
     // XDTS用UI表示
     document.getElementById('io-xdts-mapping').style.display =
@@ -181,7 +233,7 @@ function applyImportData(raw, checks, mode) {
     if (mode === 'new' && raw.sheets && raw.sheets.length > 1 && typeof loadAllSheetsData === 'function') {
         const sheetArr = raw.sheets.map(rs => {
             const meta = rs.meta || {};
-            const md = { title: meta.title || "", subTitle: meta.subTitle || "", scene: meta.scene || "", cut: meta.cut || "", lengthSec: meta.lengthSec || "6", lengthFrame: meta.lengthFrame || "00", creator: meta.creator || "", sheetName: rs.name || meta.sheetName || "sheet1", page: "1/1", memo: rs.direction || "" };
+            const md = { title: meta.title || "", subTitle: meta.subTitle || "", scene: meta.scene || "", cut: meta.cut || "", sharedCuts: Array.isArray(meta.sharedCuts) ? meta.sharedCuts : [], lengthSec: meta.lengthSec || "6", lengthFrame: meta.lengthFrame || "00", creator: meta.creator || "", sheetName: rs.name || meta.sheetName || "sheet1", page: "1/1", memo: rs.direction || "" };
             // フィールドフィルタ反映
             const cells = {};
             if (rs.cellData) {
@@ -198,16 +250,22 @@ function applyImportData(raw, checks, mode) {
             return {
                 name: rs.name || md.sheetName,
                 color: rs.color || 0,
+                isSharedCut: !!rs.isSharedCut,
                 metaData: md,
                 cellData: cells,
                 booksData: books,
                 customRepeats: rs.customRepeats || [],
                 dialogueBlocks: checks.sound ? (rs.dialogueBlocks || []) : [],
                 cameraBlocks: checks.camera ? (rs.cameraBlocks || []) : [],
+                handwritingPages: {},
                 sections: rs.sectionsMeta || JSON.parse(JSON.stringify(sections))
             };
         });
+        if (typeof resetHandwritingData === 'function') resetHandwritingData();
         loadAllSheetsData(sheetArr, 0);
+        if (checks.sound && typeof window.normalizeAllDialogueBlockCells === 'function') window.normalizeAllDialogueBlockCells();
+        if (checks.camera && typeof window.normalizeAllCameraBlockCells === 'function') window.normalizeAllCameraBlockCells();
+        if (typeof saveCurrentSheetData === 'function') saveCurrentSheetData();
         return;
     }
 
@@ -218,8 +276,9 @@ function applyImportData(raw, checks, mode) {
         customRepeats = [];
         dialogueBlocks = [];
         cameraBlocks = [];
-        metaData = { title: "", subTitle: "", scene: "", cut: "", lengthSec: "6", lengthFrame: "00", creator: "", sheetName: "sheet1", page: "1/1", memo: "" };
+        metaData = { title: "", subTitle: "", scene: "", cut: "", sharedCuts: [], lengthSec: "6", lengthFrame: "00", creator: "", sheetName: "sheet1", page: "1/1", memo: "" };
         if (raw.sectionsMeta) sections = raw.sectionsMeta;
+        if (typeof resetHandwritingData === 'function') resetHandwritingData();
         if (typeof initSheets === 'function') initSheets();
     } else {
         // overwrite: チェック項目だけ既存をクリア
@@ -279,4 +338,6 @@ function applyImportData(raw, checks, mode) {
     if (checks.sound && raw.dialogueBlocks) dialogueBlocks = dialogueBlocks.concat(raw.dialogueBlocks);
     if (checks.camera && raw.cameraBlocks) cameraBlocks = cameraBlocks.concat(raw.cameraBlocks);
     if (raw.customRepeats && raw.customRepeats.length) customRepeats = customRepeats.concat(raw.customRepeats);
+    if (checks.sound && typeof window.normalizeAllDialogueBlockCells === 'function') window.normalizeAllDialogueBlockCells();
+    if (checks.camera && typeof window.normalizeAllCameraBlockCells === 'function') window.normalizeAllCameraBlockCells();
 }

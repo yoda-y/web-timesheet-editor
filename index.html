@@ -51,24 +51,118 @@
   </div>
 </div>
 
-<!-- プレビューツールバー -->
-<div id="preview-toolbar" style="display:none;">
-  <button onclick="updateTemplatePreview()" data-i18n="preview.refresh">Refresh</button>
-  <span style="margin-left:12px; border-left:1px solid var(--border-color); padding-left:12px;"></span>
-  <button onclick="exportTemplateImage('png')" data-i18n="preview.exportPng">PNG</button>
-  <button onclick="exportTemplateImage('jpg')" data-i18n="preview.exportJpg">JPG</button>
-  <span style="margin-left:12px; border-left:1px solid var(--border-color); padding-left:12px;"></span>
-  <button id="bbox-toggle" onclick="toggleBboxEditMode()" data-i18n="preview.bboxEdit">枠編集</button>
-  <button onclick="resetBboxes(); renderBboxOverlay();" data-i18n="preview.bboxReset">枠リセット</button>
-  <button onclick="saveBboxes()" data-i18n="preview.bboxSave">枠保存</button>
+<!-- プレビューサイドバー -->
+<div id="preview-sidebar" class="preview-sidebar" style="display:none;">
+  <div class="sidebar-section no-border">
+    <button onclick="updateTemplatePreview()" class="sidebar-btn full-width" data-i18n="preview.refresh">Refresh</button>
+  </div>
+
+  <div class="sidebar-section" data-section="template">
+    <div class="sidebar-header" onclick="toggleSidebarSection('template')">
+      <span class="sidebar-label" data-i18n="sidebar.template">テンプレート</span>
+      <span class="sidebar-toggle">▼</span>
+    </div>
+    <div class="sidebar-content">
+      <select id="template-select" class="sidebar-select">
+        <option value="default">A3 標準</option>
+      </select>
+      <div class="sidebar-row" style="margin-top:4px;">
+        <button class="sidebar-btn small disabled" data-i18n="sidebar.add">追加</button>
+        <button class="sidebar-btn small disabled" data-i18n="sidebar.settings">設定</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-section" data-section="tools">
+    <div class="sidebar-header" onclick="toggleSidebarSection('tools')">
+      <span class="sidebar-label" data-i18n="sidebar.tools">ツール</span>
+      <span class="sidebar-toggle">▼</span>
+    </div>
+    <div class="sidebar-content">
+      <div class="sidebar-tool-grid">
+        <button class="sidebar-tool" data-tool="pen" title="B" data-i18n="tool.pen">Pen</button>
+        <button class="sidebar-tool" data-tool="eraser" title="E" data-i18n="tool.eraser">Eraser</button>
+        <button class="sidebar-tool" data-tool="select-rect" title="M" data-i18n="tool.rect">Rect</button>
+        <button class="sidebar-tool" data-tool="select-lasso" title="L" data-i18n="tool.lasso">Lasso</button>
+        <button class="sidebar-tool" data-tool="transform" title="Ctrl+T" data-i18n="tool.transform">Trans</button>
+        <button class="sidebar-tool active" data-tool="hand" title="H" data-i18n="tool.hand">Hand</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-section" data-section="import">
+    <div class="sidebar-header" onclick="toggleSidebarSection('import')">
+      <span class="sidebar-label" data-i18n="sidebar.import">読み込み</span>
+      <span class="sidebar-toggle">▼</span>
+    </div>
+    <div class="sidebar-content">
+      <button onclick="importFileFromSidebar()" class="sidebar-btn full-width" style="margin-top:4px;" data-i18n="sidebar.importFile">ファイルから読み込み</button>
+      <button onclick="importFolderFromSidebar()" class="sidebar-btn full-width" style="margin-top:4px;" data-i18n="sidebar.importFolder">フォルダから読み込み</button>
+      <button onclick="importXdtsFromSidebar()" class="sidebar-btn full-width" style="margin-top:4px;" data-i18n="sidebar.importXdts">XDTS読み込み</button>
+    </div>
+  </div>
+
+  <div class="sidebar-section" data-section="export">
+    <div class="sidebar-header" onclick="toggleSidebarSection('export')">
+      <span class="sidebar-label" data-i18n="sidebar.export">書き出し</span>
+      <span class="sidebar-toggle">▼</span>
+    </div>
+    <div class="sidebar-content">
+      <div class="sidebar-row">
+        <select id="export-format" class="sidebar-select small">
+          <option value="png">PNG</option>
+          <option value="jpg">JPG</option>
+          <option value="psd">PSD</option>
+        </select>
+        <select id="export-dpi" class="sidebar-select small">
+          <option value="150">150dpi</option>
+          <option value="300" selected>300dpi</option>
+        </select>
+      </div>
+      <button onclick="exportFromSidebar()" class="sidebar-btn full-width" style="margin-top:4px;" data-i18n="sidebar.exportBtn">書き出し</button>
+      <button onclick="exportTDTSSidebar()" class="sidebar-btn full-width" style="margin-top:4px;" data-i18n="sidebar.saveTdts">TDTS保存</button>
+      <button onclick="exportHandwritingFromSidebar()" class="sidebar-btn full-width" style="margin-top:4px;" data-i18n="sidebar.exportHandwriting">手書きPNG保存</button>
+      <button onclick="importHandwritingFromSidebar()" class="sidebar-btn full-width" style="margin-top:4px;" data-i18n="sidebar.importHandwriting">手書きPNG読込</button>
+    </div>
+  </div>
+
+  <div class="sidebar-section" data-section="zoom">
+    <div class="sidebar-header" onclick="toggleSidebarSection('zoom')">
+      <span class="sidebar-label" data-i18n="sidebar.zoom">ズーム</span>
+      <span class="sidebar-toggle">▼</span>
+    </div>
+    <div class="sidebar-content">
+      <div class="sidebar-row zoom-row">
+        <button onclick="previewZoomOut()" class="sidebar-btn small">−</button>
+        <span id="preview-zoom-display" class="zoom-display">100%</span>
+        <button onclick="previewZoomIn()" class="sidebar-btn small">+</button>
+        <button onclick="resetPreviewZoom()" class="sidebar-btn small">1:1</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-spacer"></div>
+
+  <div class="sidebar-section no-border">
+    <button onclick="toggleSidebar()" class="sidebar-btn full-width collapse-btn" data-i18n="sidebar.collapse">≪</button>
+  </div>
 </div>
+
+<!-- サイドバー折りたたみ時の展開ボタン -->
+<div id="sidebar-expand-btn" class="sidebar-expand-btn" style="display:none;" onclick="toggleSidebar()">≫</div>
 
 <!-- モード切替タブ -->
 <div id="mode-tabs">
   <div class="mode-tab active" data-mode="edit">Edit</div>
   <div class="mode-tab" data-mode="preview">Preview</div>
-  <div class="mode-tab" data-mode="template">Template</div>
   <div class="mode-tabs-spacer"></div>
+  <div id="page-nav" class="page-nav">
+    <button id="page-prev" onclick="goToPrevPage()" title="前のページ">◀</button>
+    <span id="page-indicator">1 / 1</span>
+    <button id="page-next" onclick="goToNextPage()" title="次のページ">▶</button>
+    <select id="preview-cut-select" class="preview-cut-select" title="兼用カット切替" onchange="switchToSharedCut(this.value)" style="display:none;"></select>
+  </div>
+  <div id="current-file-label" class="current-file-label" title="現在のファイル">未保存</div>
   <div id="mode-status" class="mode-status">未保存変更なし</div>
 </div>
 
@@ -81,6 +175,20 @@
   <div class="menu-item" data-menu="settings" data-i18n="menu.settings">設定</div>
   <div class="menu-item" data-menu="help" data-i18n="menu.help">ヘルプ</div>
   <div class="menubar-spacer"></div>
+  <div class="menubar-inline menubar-tool-sizes" id="drawing-size-controls" title="プレビューモードの描画サイズ">
+    <span class="tool-size-label" data-i18n="label.penSize">ペン:</span>
+    <div class="tool-size-group" data-tool-size-group="pen">
+      <button class="tool-size-btn" data-drawing-size-tool="pen" data-drawing-size="large" data-i18n="size.large">大</button>
+      <button class="tool-size-btn active" data-drawing-size-tool="pen" data-drawing-size="medium" data-i18n="size.medium">中</button>
+      <button class="tool-size-btn" data-drawing-size-tool="pen" data-drawing-size="small" data-i18n="size.small">小</button>
+    </div>
+    <span class="tool-size-label" data-i18n="label.eraserSize">消しゴム:</span>
+    <div class="tool-size-group" data-tool-size-group="eraser">
+      <button class="tool-size-btn" data-drawing-size-tool="eraser" data-drawing-size="large" data-i18n="size.large">大</button>
+      <button class="tool-size-btn active" data-drawing-size-tool="eraser" data-drawing-size="medium" data-i18n="size.medium">中</button>
+      <button class="tool-size-btn" data-drawing-size-tool="eraser" data-drawing-size="small" data-i18n="size.small">小</button>
+    </div>
+  </div>
   <div class="menubar-inline" id="quick-palette" title="入力色を選択（次に入力するセルに自動適用）">
     <span style="font-size:10px; color:var(--grid-medium);" data-i18n="label.inputColor">入力色:</span>
     <button class="qp-swatch active" data-fc="0" title="ID 0"></button>
@@ -91,6 +199,8 @@
   <div class="menubar-inline">Zoom: <span id="zoomDisplay">100%</span></div>
 </div>
 
+<div id="document-tabs" class="document-tabs"></div>
+
 <!-- gapSetting は描画設定モーダルへ。drawAll が参照するため hidden で保持 -->
 <input type="hidden" id="gapSetting" value="3">
 
@@ -99,6 +209,7 @@
   <div class="settings-modal-inner" style="min-width:440px;">
     <h3 id="io-modal-title">インポート: ファイル名.tdts</h3>
     <div id="io-modal-warn" class="io-warn" style="display:none;"></div>
+    <div id="io-modal-note" class="io-note"></div>
     <div class="settings-row" style="flex-direction:column; align-items:flex-start;">
       <div style="display:flex; align-items:center; justify-content:space-between; width:100%; margin-bottom:6px;">
         <label style="font-weight:bold;" data-i18n="io.fields">取り込む / 出力する項目</label>
@@ -137,6 +248,7 @@
     <!-- インポート時のみ: 既存データの扱い -->
     <div id="io-merge-mode" class="settings-row" style="flex-direction:column; align-items:flex-start;">
       <label style="font-weight:bold; margin-bottom:6px;" data-i18n="io.merge.label">既存データの扱い</label>
+      <div id="io-merge-hint" class="io-hint"></div>
       <div class="io-radios">
         <label><input type="radio" name="ioMerge" value="new" checked><span data-i18n="io.merge.new"> 新規 (新しいタイムシートとして開く)</span></label>
         <label><input type="radio" name="ioMerge" value="overwrite"><span data-i18n="io.merge.overwrite"> 上書き (チェックした欄だけ既存を破棄して差替)</span></label>
@@ -204,6 +316,51 @@
   </div>
 </div>
 
+<!-- 設定一覧モーダル -->
+<div id="settings-hub-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner settings-hub-inner">
+    <h3 data-i18n="modal.settingsHub">設定一覧</h3>
+    <div class="settings-hub-grid">
+      <button type="button" class="settings-hub-card" data-settings-open="settings.editor">
+        <strong data-i18n="settings.editor.short">エディタ</strong>
+        <span data-i18n="settings.editor.desc">兼用カットの共有項目など</span>
+      </button>
+      <button type="button" class="settings-hub-card" data-settings-open="settings.draw">
+        <strong data-i18n="settings.draw.short">描画</strong>
+        <span data-i18n="settings.draw.desc">線発生ギャップ、頭/尻マージンなど</span>
+      </button>
+      <button type="button" class="settings-hub-card" data-settings-open="settings.color">
+        <strong data-i18n="settings.color.short">色</strong>
+        <span data-i18n="settings.color.desc">文字色、選択色、手書き点線色など</span>
+      </button>
+      <button type="button" class="settings-hub-card" data-settings-open="settings.shortcut">
+        <strong data-i18n="settings.shortcut.short">ショートカット</strong>
+        <span data-i18n="settings.shortcut.desc">Photoshopライクなキー割り当て</span>
+      </button>
+      <button type="button" class="settings-hub-card" data-settings-open="settings.sidebar">
+        <strong data-i18n="settings.sidebar.short">サイドバー</strong>
+        <span data-i18n="settings.sidebar.desc">配置、セクション順</span>
+      </button>
+      <button type="button" class="settings-hub-card" data-settings-open="settings.naming">
+        <strong data-i18n="settings.naming.short">命名規則</strong>
+        <span data-i18n="settings.naming.desc">画像書き出し、TDTS/XDTS保存名</span>
+      </button>
+      <button type="button" class="settings-hub-card disabled" disabled>
+        <strong data-i18n="settings.externalTemplate.short">外部テンプレート</strong>
+        <span data-i18n="settings.externalTemplate.desc">専用モーダルで流し込み項目とBBoxを管理予定</span>
+      </button>
+    </div>
+    <div class="settings-hub-backup">
+      <button type="button" data-settings-open="file.settings.export" data-i18n="file.settings.export">設定を書き出し (JSON)</button>
+      <button type="button" data-settings-open="file.settings.import" data-i18n="file.settings.import">設定を読み込み (JSON)</button>
+      <button type="button" data-settings-open="settings.reset" data-i18n="settings.reset">設定をリセット</button>
+    </div>
+    <div class="settings-actions">
+      <button id="settings-hub-close" class="primary" data-i18n="btn.close">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <!-- ショートカット設定モーダル -->
 <div id="settings-shortcut-modal" class="settings-modal" style="display:none;">
   <div class="settings-modal-inner" style="min-width:600px; max-height:85vh; overflow:hidden; display:flex; flex-direction:column;">
@@ -257,6 +414,16 @@
       <label data-i18n="color.selectBorder">選択枠の色:</label>
       <input type="color" id="colorSelectBorder" style="width:50px; height:28px; padding:0;">
       <button type="button" class="color-auto-btn" data-target="selectBorder" data-i18n="color.auto" style="font-size:11px; padding:2px 8px;">自動</button>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="color.handwritingSelect">手書き選択点線:</label>
+      <input type="color" id="colorHandwritingSelect" style="width:50px; height:28px; padding:0;">
+      <button type="button" class="color-auto-btn" data-target="handwritingSelect" data-i18n="color.auto" style="font-size:11px; padding:2px 8px;">自動</button>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="color.handwritingTransform">手書き変形点線:</label>
+      <input type="color" id="colorHandwritingTransform" style="width:50px; height:28px; padding:0;">
+      <button type="button" class="color-auto-btn" data-target="handwritingTransform" data-i18n="color.auto" style="font-size:11px; padding:2px 8px;">自動</button>
     </div>
     <div class="settings-actions">
       <button id="settings-color-reset" data-i18n="draw.resetThis">この画面をリセット</button>
@@ -332,10 +499,140 @@
   </div>
 </div>
 
+<!-- 画像書き出しモーダル -->
+<div id="image-export-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner image-export-modal-inner">
+    <h3 data-i18n="imageExport.title">画像書き出し</h3>
+    <div class="settings-row">
+      <label data-i18n="imageExport.format">形式:</label>
+      <select id="image-export-format" style="padding:4px 8px;">
+        <option value="png">PNG</option>
+        <option value="jpg">JPG</option>
+        <option value="psd">PSD</option>
+      </select>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="imageExport.dpi">サイズ/解像度:</label>
+      <select id="image-export-dpi" style="padding:4px 8px;">
+        <option value="150">150dpi</option>
+        <option value="300">300dpi</option>
+        <option value="600">600dpi</option>
+      </select>
+      <span id="image-export-size-hint" class="settings-hint" style="margin-left:0;"></span>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="imageExport.filename">ファイル名:</label>
+      <input type="text" id="image-export-filename" style="flex:1; min-width:260px; width:auto;">
+      <span class="settings-hint" data-i18n="imageExport.filenameHint">使用可: %title %episode %scene %cut %page %sheet</span>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="imageExport.options">オプション:</label>
+      <label class="image-export-check-label">
+        <input type="checkbox" id="image-export-include-handwriting" checked>
+        <span data-i18n="imageExport.includeHandwriting">手書きを含める</span>
+      </label>
+      <label id="image-export-page-zero-row" class="image-export-check-label" style="display:none;">
+        <input type="checkbox" id="image-export-include-page-zero">
+        <span data-i18n="imageExport.includePageZero">0ページを含める</span>
+      </label>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="imageExport.destination">保存場所:</label>
+      <span id="image-export-destination" class="image-export-destination">未選択</span>
+      <button type="button" id="image-export-choose-dir" data-i18n="imageExport.chooseDir">保存先を選択</button>
+    </div>
+    <div class="settings-row" style="flex-direction:column; align-items:flex-start;">
+      <div class="image-export-page-header">
+        <label style="font-weight:bold;" data-i18n="imageExport.pages">出力ページ</label>
+        <span id="image-export-page-count" class="image-export-page-count"></span>
+        <div>
+          <button type="button" id="image-export-select-all" data-i18n="imageExport.selectAll">全選択</button>
+          <button type="button" id="image-export-clear-all" data-i18n="imageExport.clearAll">全解除</button>
+        </div>
+      </div>
+      <div id="image-export-pages" class="image-export-pages"></div>
+    </div>
+    <div class="settings-row" style="flex-direction:column; align-items:flex-start;">
+      <label style="font-weight:bold;" data-i18n="imageExport.filenamePreview">ファイル名プレビュー</label>
+      <div id="image-export-filename-preview" class="image-export-filename-preview"></div>
+    </div>
+    <div id="image-export-progress-row" class="image-export-progress-row" style="display:none;">
+      <div id="image-export-progress-label" class="image-export-progress-label">書き出し準備中...</div>
+      <progress id="image-export-progress" max="100" value="0"></progress>
+    </div>
+    <div class="settings-actions">
+      <button id="image-export-cancel" data-i18n="btn.cancel">キャンセル</button>
+      <button id="image-export-ok" class="primary" data-i18n="sidebar.exportBtn">書き出し</button>
+    </div>
+  </div>
+</div>
+
+<!-- サイドバー設定モーダル -->
+<div id="settings-sidebar-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:380px;">
+    <h3 data-i18n="modal.sidebar">サイドバー設定</h3>
+    <div class="settings-row">
+      <label data-i18n="sidebar.position">配置:</label>
+      <select id="sidebarPosition" style="padding:4px 8px;">
+        <option value="right" data-i18n="sidebar.right">右</option>
+        <option value="left" data-i18n="sidebar.left">左</option>
+      </select>
+    </div>
+    <div class="settings-row" style="flex-direction:column; align-items:flex-start;">
+      <label style="font-weight:bold; margin-bottom:6px;" data-i18n="sidebar.sectionOrder">セクション順序</label>
+      <div id="sidebar-section-order" class="sidebar-order-list">
+        <div class="sidebar-order-item" data-section="template" draggable="true">
+          <span class="drag-handle">☰</span><span data-i18n="sidebar.template">テンプレート</span>
+        </div>
+        <div class="sidebar-order-item" data-section="tools" draggable="true">
+          <span class="drag-handle">☰</span><span data-i18n="sidebar.tools">ツール</span>
+        </div>
+        <div class="sidebar-order-item" data-section="import" draggable="true">
+          <span class="drag-handle">☰</span><span data-i18n="sidebar.import">読み込み</span>
+        </div>
+        <div class="sidebar-order-item" data-section="export" draggable="true">
+          <span class="drag-handle">☰</span><span data-i18n="sidebar.export">書き出し</span>
+        </div>
+        <div class="sidebar-order-item" data-section="zoom" draggable="true">
+          <span class="drag-handle">☰</span><span data-i18n="sidebar.zoom">ズーム</span>
+        </div>
+      </div>
+      <span class="settings-hint" style="margin-left:0;" data-i18n="sidebar.orderHint">ドラッグで順序を変更</span>
+    </div>
+    <div class="settings-actions">
+      <button id="settings-sidebar-cancel" data-i18n="btn.cancel">キャンセル</button>
+      <button id="settings-sidebar-ok" class="primary" data-i18n="btn.ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- 命名規則設定モーダル -->
+<div id="settings-naming-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:420px;">
+    <h3 data-i18n="modal.naming">命名規則設定</h3>
+    <div class="settings-row">
+      <label data-i18n="naming.imageExport">画像書き出し:</label>
+      <input type="text" id="namingImageExportFilename" value="%title_%scene_%cut" style="flex:1; max-width:220px;">
+    </div>
+    <div class="settings-row">
+      <label data-i18n="naming.timesheetSave">TDTS/XDTS保存:</label>
+      <input type="text" id="namingTimesheetSaveFilename" value="%title_%scene_%cut" style="flex:1; max-width:220px;">
+    </div>
+    <div class="settings-row">
+      <span class="settings-hint" style="margin-left:0;" data-i18n="naming.hint">%title, %episode, %scene, %cut, %sheet が使用可能。画像書き出しでは %page も使用可能</span>
+    </div>
+    <div class="settings-actions">
+      <button id="settings-naming-cancel" data-i18n="btn.cancel">キャンセル</button>
+      <button id="settings-naming-ok" class="primary" data-i18n="btn.ok">OK</button>
+    </div>
+  </div>
+</div>
+
 <!-- ドロップダウンメニュー定義 -->
 <div id="menu-file" class="menu-dropdown">
   <div class="menu-row" data-action="file.new" data-i18n="file.new">新規作成</div>
   <div class="menu-row" data-action="file.open" data-i18n-keep="file.open">開く...<span class="menu-key">Ctrl+O</span></div>
+  <div class="menu-row" data-action="file.openFolder" data-i18n="file.openFolder">フォルダから開く...</div>
   <div class="menu-row" data-action="file.save" data-i18n-keep="file.save">上書き保存<span class="menu-key">Ctrl+S</span></div>
   <div class="menu-row" data-action="file.saveAs" data-i18n-keep="file.saveAs">名前を付けて保存...<span class="menu-key">Ctrl+Shift+S</span></div>
   <div class="menu-sep"></div>
@@ -351,16 +648,13 @@
     <div class="menu-dropdown menu-sub">
       <div class="menu-row" data-action="file.export.tdts" data-i18n="file.export.tdts">TDTSへ...</div>
       <div class="menu-row" data-action="file.export.xdts" data-i18n="file.export.xdts">XDTSへ...</div>
-      <div class="menu-row menu-disabled" data-action="file.export.png" data-i18n="file.export.png">PNG画像</div>
-      <div class="menu-row menu-disabled" data-action="file.export.jpg" data-i18n="file.export.jpg">JPG画像</div>
-      <div class="menu-row menu-disabled" data-action="file.export.psd" data-i18n="file.export.psd">PSD（レイヤー保持）</div>
+      <div class="menu-row" data-action="file.export.png" data-i18n="file.export.png">PNG画像</div>
+      <div class="menu-row" data-action="file.export.jpg" data-i18n="file.export.jpg">JPG画像</div>
+      <div class="menu-row" data-action="file.export.psd" data-i18n="file.export.psd">PSD（レイヤー保持）</div>
     </div>
   </div>
   <div class="menu-sep"></div>
   <div class="menu-row menu-disabled" data-action="file.recent" data-i18n="file.recent">最近使ったファイル ▶</div>
-  <div class="menu-sep"></div>
-  <div class="menu-row" data-action="file.settings.export" data-i18n="file.settings.export">設定をエクスポート (JSON)</div>
-  <div class="menu-row" data-action="file.settings.import" data-i18n="file.settings.import">設定をインポート (JSON)</div>
 </div>
 
 <div id="menu-edit" class="menu-dropdown">
@@ -373,8 +667,12 @@
   <div class="menu-row" data-action="edit.delete" data-i18n-keep="edit.delete">削除<span class="menu-key">Del</span></div>
   <div class="menu-row menu-disabled" data-action="edit.selectAll" data-i18n-keep="edit.selectAll">すべて選択<span class="menu-key">Ctrl+A</span></div>
   <div class="menu-sep"></div>
+  <div class="menu-row" data-action="edit.assist.nextNumber" data-i18n-keep="edit.assist.nextNumber">次の連番を入力<span class="menu-key">F7</span></div>
   <div class="menu-row" data-action="edit.repeat" data-i18n="edit.repeat">リピート展開</div>
+  <div class="menu-row" data-action="edit.shake" data-i18n="edit.shake">ブレ展開</div>
+  <div class="menu-row" data-action="edit.randomShake" data-i18n="edit.randomShake">ランダムブレ展開</div>
   <div class="menu-row menu-disabled" data-action="edit.repeatDelete" data-i18n="edit.repeatDelete">リピート解除</div>
+  <div class="menu-row" data-action="edit.convertActionToCell" data-i18n="edit.convertActionToCell">すべての原画を動画に一括変換</div>
   <div class="menu-sep"></div>
   <div class="menu-row menu-submenu menu-disabled" data-submenu="color" data-i18n-keep="edit.color">
     文字色を変更<span class="submenu-arrow">▶</span>
@@ -412,18 +710,28 @@
   <div class="menu-row" data-action="view.toggleDirection" data-i18n="view.toggleDirection">DIRECTION欄を展開/折りたたみ</div>
   <div class="menu-row" data-action="view.togglePanel" data-i18n="view.togglePanel">セル構成パネル表示/非表示</div>
   <div class="menu-sep"></div>
-  <div class="menu-row menu-disabled" data-action="view.theme.light" data-i18n="view.theme.light">ライトモード</div>
-  <div class="menu-row menu-disabled" data-action="view.theme.dark" data-i18n="view.theme.dark">ダークモード</div>
-  <div class="menu-row menu-disabled" data-action="view.theme.system" data-i18n="view.theme.system">システム連動</div>
+  <div class="menu-row" data-action="view.theme.light" data-i18n="view.theme.light">ライトモード</div>
+  <div class="menu-row" data-action="view.theme.dark" data-i18n="view.theme.dark">ダークモード</div>
+  <div class="menu-row" data-action="view.theme.system" data-i18n="view.theme.system">システム連動</div>
 </div>
 
 <div id="menu-settings" class="menu-dropdown">
+  <div class="menu-row" data-action="settings.main" data-i18n="settings.main">設定一覧...</div>
+  <div class="menu-sep"></div>
+  <div class="menu-label" data-i18n="settings.group.editing">編集・表示</div>
+  <div class="menu-row" data-action="settings.editor" data-i18n="settings.editor">エディタ環境設定...</div>
   <div class="menu-row" data-action="settings.draw" data-i18n="settings.draw">描画設定...</div>
   <div class="menu-row" data-action="settings.color" data-i18n="settings.color">色設定...</div>
   <div class="menu-row" data-action="settings.shortcut" data-i18n="settings.shortcut">ショートカット設定...</div>
-  <div class="menu-row menu-disabled" data-action="settings.template" data-i18n="settings.template">テンプレート設定...</div>
-  <div class="menu-row" data-action="settings.editor" data-i18n="settings.editor">エディタ環境設定...</div>
   <div class="menu-sep"></div>
+  <div class="menu-label" data-i18n="settings.group.preview">Preview</div>
+  <div class="menu-row" data-action="settings.sidebar" data-i18n="settings.sidebar">サイドバー設定...</div>
+  <div class="menu-row" data-action="settings.naming" data-i18n="settings.naming">命名規則設定...</div>
+  <div class="menu-row menu-disabled" data-action="settings.template" data-i18n="settings.externalTemplate">外部テンプレート設定...（準備中）</div>
+  <div class="menu-sep"></div>
+  <div class="menu-label" data-i18n="settings.group.backup">設定データ</div>
+  <div class="menu-row" data-action="file.settings.export" data-i18n="file.settings.export">設定を書き出し (JSON)</div>
+  <div class="menu-row" data-action="file.settings.import" data-i18n="file.settings.import">設定を読み込み (JSON)</div>
   <div class="menu-row" data-action="settings.reset" data-i18n="settings.reset">設定をリセット</div>
 </div>
 
@@ -528,6 +836,8 @@
         <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="cam.kind">種別 (Kind):</label>
         <input type="text" id="cameraKindInput" list="camera-kind-list" oninput="handleCameraKindChange()" onkeydown="handleCameraKey(event)" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);" placeholder="検索または選択" data-i18n-placeholder="cam.kindPlaceholder">
         <datalist id="camera-kind-list"></datalist>
+        <div id="camera-kind-meta" class="camera-kind-meta"></div>
+        <div id="camera-recent-kinds" class="camera-recent-kinds"></div>
       </div>
     </div>
     <div id="cameraDynamicArea" style="min-height:30px; margin-bottom:10px; border-left: 2px solid var(--select-bg); padding-left: 8px;">
@@ -647,9 +957,12 @@
 <script src="js/input.js"></script>
 <script src="js/frame-ops.js"></script>
 <script src="js/autosave.js"></script>
+<script src="js/document-tabs.js"></script>
 <script src="js/template-bbox.js"></script>
 <script src="js/template.js"></script>
 <script src="js/preview.js"></script>
+<script src="js/handwriting.js"></script>
+<script src="js/psd-export.js"></script>
 <script src="js/menu.js"></script>
 <script src="js/main.js"></script>
 </body>

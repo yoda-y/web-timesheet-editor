@@ -1,0 +1,10 @@
+_pool/
+sample/
+docs/
+*.log
+*.xdts
+*.tdts
+.DS_Store
+Thumbs.db
+*.local
+settings.local.json

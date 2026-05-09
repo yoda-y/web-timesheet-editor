@@ -133,7 +133,7 @@ function parseXDTSToRaw(text, opts) {
                         let rawKind = v; if (rawKind.includes(',')) rawKind = rawKind.split(',')[0];
                         const vt = (typeof getCameraValueType === 'function') ? getCameraValueType(rawKind) : "freeText";
                         currentCamera = { id: Date.now() + Math.random(), colIndex: colIdx, startFrame: fr.frame, endFrame: fr.frame, kind: rawKind, valueType: vt, value: txt || "", colspan: 1, targetLayers: [], waypoints: [], isInlineEdit: false };
-                        if (rawKind === "Rolling") currentCamera.isInlineEdit = true;
+                        if (rawKind === "Rolling" || rawKind === "WipeIN") currentCamera.isInlineEdit = true;
                     } else if (v === "―" && currentCamera) currentCamera.endFrame = fr.frame;
                 }
             });
@@ -165,8 +165,7 @@ window.exportXDTS = async function(arg) {
     const opts = await openIOModal({
         title: 'エクスポート: XDTS',
         mode: 'export',
-        format: 'xdts',
-        warning: '[注意] XDTSは仕様上、以下の情報を保持できません:\n　・ACTION/CELL の区別\n　・BOOK\n　・文字色 (fontColorId)\n　・カメラ詳細 (ストロボ間隔・waypoints・フェアリング等)\n　これらは出力時に欠落します。'
+        format: 'xdts'
     });
     if (!opts) return;
 
@@ -297,7 +296,9 @@ window.exportXDTS = async function(arg) {
     };
 
     const fileContent = "exchangeDigitalTimeSheet Save Data\n" + JSON.stringify(xdts, null, 4);
-    const fileName = `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.xdts`;
+    const fileName = (typeof buildTimesheetSaveFilename === 'function')
+        ? buildTimesheetSaveFilename('xdts')
+        : `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.xdts`;
     try {
         await saveFileWithPicker('xdts', fileName, fileContent, {
             description: 'exchange Digital Time Sheet',

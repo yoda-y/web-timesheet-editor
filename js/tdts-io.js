@@ -103,7 +103,7 @@ function _parseTDTSSingleTable(header, table, opts) {
                         let rawKind = v; if (rawKind.includes(',')) rawKind = rawKind.split(',')[0];
                         const vt = getCameraValueType(rawKind);
                         currentCamera = { id: Date.now() + Math.random(), colIndex: colIdx, startFrame: fr.frame, endFrame: fr.frame, kind: rawKind, valueType: vt, value: txt || "", colspan: 1, targetLayers: [], waypoints: [], isInlineEdit: false };
-                        if (rawKind === "Rolling") currentCamera.isInlineEdit = true;
+                        if (rawKind === "Rolling" || rawKind === "WipeIN") currentCamera.isInlineEdit = true;
                     } else if (v === "―" && currentCamera) currentCamera.endFrame = fr.frame;
                 }
             });
@@ -168,7 +168,7 @@ function parseTDTSToRaw(text, opts) {
     if (!(imported.timeSheets && imported.timeSheets.length > 0)) return null;
 
     const allSheets = [];
-    imported.timeSheets.forEach(sheet => {
+    imported.timeSheets.forEach((sheet, timeSheetIndex) => {
         const header = sheet.header || {};
         if (sheet.timeTables) {
             sheet.timeTables.forEach(table => {
@@ -176,12 +176,25 @@ function parseTDTSToRaw(text, opts) {
                 if (parsed) {
                     parsed.name = (table.name || 'sheet');
                     parsed.color = table.color || 0;
+                    parsed.isSharedCut = imported.timeSheets.length > 1 && timeSheetIndex > 0;
                     allSheets.push(parsed);
                 }
             });
         }
     });
     if (allSheets.length === 0) return null;
+
+    const sharedCuts = [];
+    imported.timeSheets.forEach(sheet => {
+        const cut = String(sheet.header?.cut || '').trim();
+        if (cut && !sharedCuts.includes(cut)) sharedCuts.push(cut);
+    });
+    if (sharedCuts.length > 1) {
+        allSheets.forEach(sheet => {
+            sheet.meta = sheet.meta || {};
+            sheet.meta.sharedCuts = sharedCuts;
+        });
+    }
 
     // 互換: 最初のシートを top-level に展開
     const first = allSheets[0];
@@ -203,16 +216,27 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
                 title: `インポート: ${fileName}`,
                 mode: 'import',
                 format: fmt,
-                warning: fmt === 'xdts' ? '[注意] XDTSのカメラ位置(X/Y)・拡大率・回転情報は取り込みません（指示文字のみ）。' : null
+                source: 'file'
             });
             if (!opts) return; // キャンセル
             let raw;
             if (fmt === 'tdts') raw = parseTDTSToRaw(text, { stroboMerge: opts.checks.stroboMerge });
             else raw = parseXDTSToRaw(text, { cellTarget: opts.xdtsCellTarget });
             if (!raw) { alert("読み込みエラー: ファイル構造が無効です。"); return; }
-            // 取込前の状態をUndoスタックに積む（Ctrl+Zで戻れるように）
-            pushHistory();
+            if (opts.merge === 'new' && typeof createDocumentTabForIncomingDocument === 'function') {
+                createDocumentTabForIncomingDocument(fileName, fmt, null, null);
+            } else {
+                // 取込前の状態をUndoスタックに積む（Ctrl+Zで戻れるように）
+                pushHistory();
+            }
             applyImportData(raw, opts.checks, opts.merge);
+            currentFileHandle = null;
+            currentDirectoryHandle = null;
+            setCurrentFileName(fileName, fmt);
+            if (typeof syncActiveDocumentTabAfterLoad === 'function') {
+                syncActiveDocumentTabAfterLoad(fileName, fmt, null, null);
+            }
+            if (opts.merge === 'new' && typeof markClean === 'function') markClean();
             // UI 状態リセット（undoStack は維持）
             redoStack = [];
             selectionStart = null; selectionEnd = null; selectedMeta = null;
@@ -220,14 +244,144 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
             cellInput.style.display = 'none'; metaInput.style.display = 'none';
             metaTextArea.style.display = 'none'; bookInput.style.display = 'none';
             updateSectionPositions(); drawAll();
+            if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
         } catch (err) {
             console.error(err);
             alert("読み込みエラー: " + (err.message || "ファイルが破損している可能性があります。"));
         }
     };
     reader.readAsText(file);
+    e.target.accept = '.tdts,.xdts,.json';
     e.target.value = '';
 });
+
+async function openTimesheetFromFolder() {
+    if (!window.showDirectoryPicker) {
+        alert('このブラウザではフォルダから開く機能を使用できません。通常の「開く...」を使用してください。');
+        return;
+    }
+    try {
+        const directoryHandle = await window.showDirectoryPicker();
+        const candidates = [];
+        for await (const [name, handle] of directoryHandle.entries()) {
+            if (handle.kind === 'file' && /\.(tdts|xdts)$/i.test(name)) candidates.push({ name, handle });
+        }
+        if (candidates.length === 0) {
+            alert('選択したフォルダにTDTS/XDTSファイルがありません。');
+            return;
+        }
+        candidates.sort((a, b) => a.name.localeCompare(b.name));
+        let selected = candidates[0];
+        if (candidates.length > 1) {
+            selected = await chooseTimesheetFileFromFolder(candidates);
+            if (!selected) return;
+        }
+        const file = await selected.handle.getFile();
+        const text = await file.text();
+        const fmt = detectFileFormat(text);
+        if (!fmt) {
+            alert('対応していないファイル形式です。');
+            return;
+        }
+        const opts = await openIOModal({
+            title: `読み込み: ${selected.name}`,
+            mode: 'import',
+            format: fmt,
+            source: 'folder'
+        });
+        if (!opts) return;
+        const raw = fmt === 'tdts'
+            ? parseTDTSToRaw(text, { stroboMerge: opts.checks.stroboMerge })
+            : parseXDTSToRaw(text, { cellTarget: opts.xdtsCellTarget });
+        if (!raw) {
+            alert('ファイルを読み込めませんでした。');
+            return;
+        }
+        if (opts.merge === 'new' && typeof createDocumentTabForIncomingDocument === 'function') {
+            createDocumentTabForIncomingDocument(selected.name, fmt, selected.handle, directoryHandle);
+        } else {
+            pushHistory();
+        }
+        applyImportData(raw, opts.checks, opts.merge);
+        redoStack = [];
+        selectionStart = null; selectionEnd = null; selectedMeta = null;
+        selectedDialogueId = null; selectedCameraId = null;
+        cellInput.style.display = 'none'; metaInput.style.display = 'none';
+        metaTextArea.style.display = 'none'; bookInput.style.display = 'none';
+        if (fmt === 'tdts' && opts.merge === 'new' && typeof importHandwritingBundleFromDirectory === 'function') {
+            await importHandwritingBundleFromDirectory(directoryHandle, selected.name);
+        }
+        currentFileHandle = selected.handle;
+        currentFileFormat = fmt;
+        currentDirectoryHandle = directoryHandle;
+        setCurrentFileName(selected.name, fmt);
+        if (typeof syncActiveDocumentTabAfterLoad === 'function') {
+            syncActiveDocumentTabAfterLoad(selected.name, fmt, selected.handle, directoryHandle);
+        }
+        await saveLastFileHandle(fmt, selected.handle);
+        updateSectionPositions();
+        drawAll();
+        if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
+        if (typeof markClean === 'function') markClean();
+    } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        console.error(err);
+        alert('フォルダからの読み込みに失敗しました: ' + (err.message || '不明なエラー'));
+    }
+}
+
+function chooseTimesheetFileFromFolder(candidates) {
+    return new Promise(resolve => {
+        let modal = document.getElementById('folder-open-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'folder-open-modal';
+            modal.className = 'settings-modal';
+            modal.innerHTML = `
+                <div class="settings-modal-inner" style="min-width:360px;">
+                    <h3>フォルダから開く</h3>
+                    <div class="io-note">フォルダ内のTDTS/XDTSを選んで開きます。新規で開く場合は、TDTSと同名フォルダ内の手書きPNG/INIも自動で探します。</div>
+                    <div class="settings-row" style="align-items:flex-start;">
+                        <label>ファイル:</label>
+                        <select id="folder-open-select" style="flex:1; min-width:220px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick); padding:4px;"></select>
+                    </div>
+                    <div class="settings-actions">
+                        <button id="folder-open-ok" class="primary">開く</button>
+                        <button id="folder-open-cancel">キャンセル</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        const select = document.getElementById('folder-open-select');
+        select.innerHTML = '';
+        candidates.forEach((item, index) => {
+            const option = document.createElement('option');
+            option.value = String(index);
+            option.textContent = item.name;
+            select.appendChild(option);
+        });
+
+        const cleanup = result => {
+            modal.style.display = 'none';
+            document.getElementById('folder-open-ok').onclick = null;
+            document.getElementById('folder-open-cancel').onclick = null;
+            modal.onclick = null;
+            resolve(result);
+        };
+
+        document.getElementById('folder-open-ok').onclick = () => {
+            cleanup(candidates[parseInt(select.value, 10)] || null);
+        };
+        document.getElementById('folder-open-cancel').onclick = () => cleanup(null);
+        modal.onclick = e => {
+            if (e.target === modal) cleanup(null);
+        };
+        modal.style.display = 'flex';
+        select.focus();
+    });
+}
 
 /* === 旧 import コードは削除（parseTDTSToRaw + applyImportData に統合済） === */
 /* LEGACY_BEGIN_REMOVED
@@ -326,7 +480,7 @@ function _legacyDirectImportTDTS(e) { if (false) {
                                             id: Date.now() + Math.random(), colIndex: colIdx, startFrame: fr.frame, endFrame: fr.frame,
                                             kind: rawKind, valueType: vt, value: txt || "", colspan: 1, targetLayers: [], waypoints: [], isInlineEdit: false
                                         };
-                                        if (rawKind === "Rolling") currentCamera.isInlineEdit = true;
+                                        if (rawKind === "Rolling" || rawKind === "WipeIN") currentCamera.isInlineEdit = true;
                                     } else if (v === "―" && currentCamera) { currentCamera.endFrame = fr.frame; }
                                 }
                             }
@@ -519,8 +673,54 @@ function _buildTDTSTimeTable(sheetData, checks) {
     };
 }
 
+function _buildTDTSTimeSheetHeader(md, checks) {
+    let combinedEpisode = md.title || "";
+    if (md.subTitle) combinedEpisode += (combinedEpisode ? " / " : "") + md.subTitle;
+    return {
+        "cut": checks.meta ? (md.cut || "") : "",
+        "episode": checks.meta ? combinedEpisode : "",
+        "scene": checks.meta ? (md.scene || "") : "",
+        "showHeadDummy": false,
+        "timeTableFontColors": [[0,0,0],[224,0,0],[32,128,32],[32,32,192],[192,32,192],[255,128,32]]
+    };
+}
+
+function _buildTDTSTimeSheets(allSheetData, checks) {
+    const sharedCuts = [];
+    allSheetData.forEach(sheet => {
+        const cuts = sheet.metaData && Array.isArray(sheet.metaData.sharedCuts) ? sheet.metaData.sharedCuts : [];
+        cuts.forEach(cut => {
+            const key = String(cut || '').trim();
+            if (key && !sharedCuts.includes(key)) sharedCuts.push(key);
+        });
+    });
+
+    if (sharedCuts.length > 1) {
+        const grouped = [];
+        sharedCuts.forEach(cut => {
+            const sheetsForCut = allSheetData.filter(sheet => String(sheet.metaData?.cut || '').trim() === String(cut));
+            if (sheetsForCut.length === 0) return;
+            const md = sheetsForCut[0].metaData || {};
+            grouped.push({
+                "free": [],
+                "header": _buildTDTSTimeSheetHeader(md, checks),
+                "timeTables": sheetsForCut.map(sheet => _buildTDTSTimeTable(sheet, checks))
+            });
+        });
+        if (grouped.length > 0) return grouped;
+    }
+
+    const md = (allSheetData[0] && allSheetData[0].metaData) || {};
+    return [{
+        "free": [],
+        "header": _buildTDTSTimeSheetHeader(md, checks),
+        "timeTables": allSheetData.map(sheet => _buildTDTSTimeTable(sheet, checks))
+    }];
+}
+
 window.exportTDTS = async function(arg) {
     const saveAs = arg && arg.saveAs === true;
+    const directoryWorkflow = arg && arg.directoryWorkflow === true;
     saveInput(); saveBookInput();
 
     const opts = await openIOModal({
@@ -536,38 +736,52 @@ window.exportTDTS = async function(arg) {
         ? exportAllSheetsData()
         : [{ name: metaData.sheetName, color: 0, metaData, cellData, booksData, customRepeats, dialogueBlocks, cameraBlocks, sections }];
 
-    // 各シートを timeTable に変換
-    const timeTables = allSheetData.map(s => _buildTDTSTimeTable(s, checks));
-
-    // ヘッダはアクティブシートのメタから（共有メタの代表）
-    const md = allSheetData[0].metaData;
-    let combinedEpisode = md.title || "";
-    if (md.subTitle) combinedEpisode += (combinedEpisode ? " / " : "") + md.subTitle;
-    const exportEpisode = checks.meta ? combinedEpisode : "";
-    const exportCut = checks.meta ? (md.cut || "") : "";
-    const exportScene = checks.meta ? (md.scene || "") : "";
-
     const tdts = {
         "version": 11,
-        "timeSheets": [{
-            "free": [],
-            "header": {
-                "cut": exportCut,
-                "episode": exportEpisode,
-                "scene": exportScene,
-                "showHeadDummy": false,
-                "timeTableFontColors": [[0,0,0],[224,0,0],[32,128,32],[32,32,192],[192,32,192],[255,128,32]]
-            },
-            "timeTables": timeTables
-        }]
+        "timeSheets": _buildTDTSTimeSheets(allSheetData, checks)
     };
     const fileContent = "toeiDigitalTimeSheet Save Data\n" + JSON.stringify(tdts, null, 4);
-    const fileName = `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.tdts`;
+    const fileName = (typeof buildTimesheetSaveFilename === 'function')
+        ? buildTimesheetSaveFilename('tdts')
+        : `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.tdts`;
+    const hasHandwritingData = allSheetData.some(sheet => {
+        const pages = sheet.handwritingPages || {};
+        return Object.values(pages).some(page =>
+            (page.strokes && page.strokes.length) || (page.images && page.images.length)
+        );
+    });
     try {
+        if (directoryWorkflow && window.showDirectoryPicker) {
+            const directoryHandle = await window.showDirectoryPicker();
+            const handle = await directoryHandle.getFileHandle(fileName, { create: true });
+            const writable = await handle.createWritable();
+            await writable.write(fileContent);
+            await writable.close();
+            await saveLastFileHandle('tdts', handle);
+            currentFileHandle = handle;
+            currentFileFormat = 'tdts';
+            currentDirectoryHandle = directoryHandle;
+            setCurrentFileName(handle.name || fileName, 'tdts');
+            if (typeof exportHandwritingBundleToDirectory === 'function') {
+                try {
+                    await exportHandwritingBundleToDirectory(directoryHandle, fileName, allSheetData, 150);
+                } catch (handwritingErr) {
+                    console.warn('handwriting auto-save failed', handwritingErr);
+                    if (hasHandwritingData) {
+                        alert("TDTSは保存しましたが、手書きPNG/INIの自動保存に失敗しました。ブラウザ権限または保存先フォルダを確認してください。");
+                    }
+                }
+            }
+            if (typeof markClean === 'function') markClean();
+            return;
+        }
         await saveFileWithPicker('tdts', fileName, fileContent, {
             description: 'Toei Digital Time Sheet',
             types: { 'application/octet-stream': ['.tdts'] }
         }, { saveAs });
+        if (directoryWorkflow && hasHandwritingData && !window.showDirectoryPicker) {
+            alert("TDTSは保存しましたが、このブラウザでは手書きPNG/INIの自動保存を使用できません。必要に応じてサイドバーの手書きPNG保存を使用してください。");
+        }
         if (typeof markClean === 'function') markClean();
     } catch (err) { if (err.name !== 'AbortError') alert("保存に失敗しました。"); }
 };

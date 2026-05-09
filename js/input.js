@@ -52,9 +52,11 @@ function saveInput() {
     if (!selectionStart) return;
     const key = `${selectionStart.colType}-${selectionStart.colIndex}-${selectionStart.frame}`;
     let val = cellInput.value.trim();
+    const beforeSnapshot = (typeof snapshotState === 'function') ? snapshotState() : null;
     if (val === "-") val = "―";
     if (val.toLowerCase() === "x") val = "×";
     const oldVal = JSON.stringify(cellData[key] || {});
+    let rangeCleared = false;
     const SYMBOL_VALUES = ["●", "○", "×", "―"];
     if (val === "") {
         // 空値は option も含めて完全に削除
@@ -84,15 +86,36 @@ function saveInput() {
             cellData[key].fontColorId = activeFontColorId;
         }
     }
-    if (val !== "" || cellData[key]) {
-        customRepeats = customRepeats.map(rep => {
-            if (rep.colType === selectionStart.colType && rep.colIndex === selectionStart.colIndex && selectionStart.frame >= rep.startF && selectionStart.frame <= rep.endF) {
-                rep.endF = selectionStart.frame - 1;
+    const inputBounds = getSelectionBounds();
+    if (inputBounds) {
+        const startL = getLogicalColIndex(selectionStart.colType, selectionStart.colIndex);
+        const isMultiCell = inputBounds.minL !== inputBounds.maxL || inputBounds.minF !== inputBounds.maxF;
+        if (isMultiCell && cellInputDirty) {
+            for (let l = inputBounds.minL; l <= inputBounds.maxL; l++) {
+                for (let f = inputBounds.minF; f <= inputBounds.maxF; f++) {
+                    if (l === startL && f === selectionStart.frame) continue;
+                    const c = getCellByLogical(l, f);
+                    if (!c) continue;
+                    const clearKey = `${c.colType}-${c.colIndex}-${f}`;
+                    if (cellData[clearKey]) {
+                        delete cellData[clearKey];
+                        rangeCleared = true;
+                    }
+                }
             }
-            return rep;
-        }).filter(rep => rep.endF >= rep.startF);
+        }
+        trimCustomRepeatsForRange(inputBounds);
     }
-    if (oldVal !== JSON.stringify(cellData[key] || {})) drawAll();
+    if (oldVal !== JSON.stringify(cellData[key] || {}) || rangeCleared) {
+        if (beforeSnapshot && typeof undoStack !== 'undefined' && typeof redoStack !== 'undefined') {
+            undoStack.push(beforeSnapshot);
+            redoStack = [];
+            if (undoStack.length > 100) undoStack.shift();
+        }
+        if (typeof markDirty === 'function') markDirty();
+        drawAll();
+    }
+    cellInputDirty = false;
 }
 
 function focusCell() {
@@ -106,10 +129,14 @@ function focusCell() {
     let disp = "";
     if (cellData[key]) disp = cellData[key].text ? `${cellData[key].value}/${cellData[key].text}` : cellData[key].value;
     cellInput.value = disp;
+    cellInputDirty = false;
     cellInput.style.color = (disp === "●") ? "transparent" : getStyle('--text-color');
     drawGrid();
     updateCellInputOptionIndicator();
-    setTimeout(() => cellInput.focus(), 5);
+    setTimeout(() => {
+        cellInput.focus();
+        if (cellInput.value && !isGridPointerDown) cellInput.select();
+    }, 5);
 }
 
 // cellInput の枠装飾は使わない（cellInput の見た目は従来通り）
@@ -196,6 +223,198 @@ function deleteSelect() {
     }
 }
 
+function getSelectionBounds() {
+    if (!selectionStart || !selectionEnd) return null;
+    const sL = getLogicalColIndex(selectionStart.colType, selectionStart.colIndex);
+    const eL = getLogicalColIndex(selectionEnd.colType, selectionEnd.colIndex);
+    return {
+        minL: Math.min(sL, eL),
+        maxL: Math.max(sL, eL),
+        minF: Math.min(selectionStart.frame, selectionEnd.frame),
+        maxF: Math.max(selectionStart.frame, selectionEnd.frame)
+    };
+}
+
+function isCellInBounds(cell, bounds) {
+    if (!cell || !bounds) return false;
+    const l = getLogicalColIndex(cell.colType, cell.colIndex);
+    return l >= bounds.minL && l <= bounds.maxL && cell.frame >= bounds.minF && cell.frame <= bounds.maxF;
+}
+
+function getBoundsSize(bounds) {
+    return {
+        wL: bounds.maxL - bounds.minL + 1,
+        hF: bounds.maxF - bounds.minF + 1
+    };
+}
+
+function clampSelectionMoveTarget(startL, startF, size) {
+    const totalCols = sections.reduce((acc, s) => acc + s.cols, 0);
+    const headMargin = getHeadMargin();
+    return {
+        l: Math.max(0, Math.min(totalCols - size.wL, startL)),
+        f: Math.max(-headMargin, Math.min(numFrames - headMargin - size.hF, startF))
+    };
+}
+
+function canStartSelectionMove(cell) {
+    const bounds = getSelectionBounds();
+    if (!bounds) return false;
+    const size = getBoundsSize(bounds);
+    if (size.wL === 1 && size.hF === 1) return false;
+    return isCellInBounds(cell, bounds);
+}
+
+function startPendingSelectionMove(cell, mouseX, mouseY) {
+    cancelPendingSelectionMove(false);
+    pendingSelectionMove = {
+        cell,
+        mouseX,
+        mouseY,
+        active: false,
+        timer: setTimeout(() => {
+            if (!pendingSelectionMove) return;
+            pendingSelectionMove.active = true;
+            if (beginSelectionMove(pendingSelectionMove.cell, pendingSelectionMove.mouseX, pendingSelectionMove.mouseY)) {
+                drawAll();
+            }
+        }, 550)
+    };
+}
+
+function cancelPendingSelectionMove(focusClickedCell = false) {
+    if (!pendingSelectionMove) return null;
+    const pending = pendingSelectionMove;
+    if (pending.timer) clearTimeout(pending.timer);
+    pendingSelectionMove = null;
+    if (focusClickedCell && pending.cell) {
+        selectionStart = pending.cell;
+        selectionEnd = pending.cell;
+        focusCell();
+    }
+    return pending;
+}
+
+function beginSelectionMove(cell, mouseX, mouseY) {
+    const bounds = getSelectionBounds();
+    if (!bounds) return false;
+    const size = getBoundsSize(bounds);
+    const clickedL = getLogicalColIndex(cell.colType, cell.colIndex);
+    const items = [];
+    for (let l = bounds.minL; l <= bounds.maxL; l++) {
+        for (let f = bounds.minF; f <= bounds.maxF; f++) {
+            const c = getCellByLogical(l, f);
+            if (!c) continue;
+            const data = cellData[`${c.colType}-${c.colIndex}-${f}`];
+            items.push({
+                rL: l - bounds.minL,
+                rF: f - bounds.minF,
+                data: data ? JSON.parse(JSON.stringify(data)) : null
+            });
+        }
+    }
+    selectionMoveInfo = {
+        bounds,
+        size,
+        items,
+        grabOffsetL: clickedL - bounds.minL,
+        grabOffsetF: cell.frame - bounds.minF,
+        moved: false,
+        mouseX,
+        mouseY
+    };
+    cellInput.style.display = 'none';
+    return true;
+}
+
+function updateSelectionMove(cell, mouseX, mouseY) {
+    if (!selectionMoveInfo || !cell) return;
+    if (Math.abs(mouseX - selectionMoveInfo.mouseX) > 8 || Math.abs(mouseY - selectionMoveInfo.mouseY) > 8) {
+        selectionMoveInfo.moved = true;
+    }
+    if (!selectionMoveInfo.moved) return;
+    const targetL = getLogicalColIndex(cell.colType, cell.colIndex) - selectionMoveInfo.grabOffsetL;
+    const targetF = cell.frame - selectionMoveInfo.grabOffsetF;
+    const clamped = clampSelectionMoveTarget(targetL, targetF, selectionMoveInfo.size);
+    const start = getCellByLogical(clamped.l, clamped.f);
+    const end = getCellByLogical(clamped.l + selectionMoveInfo.size.wL - 1, clamped.f + selectionMoveInfo.size.hF - 1);
+    if (start && end) {
+        selectionStart = start;
+        selectionEnd = end;
+        drawAll();
+    }
+}
+
+function commitSelectionMove() {
+    if (!selectionMoveInfo) return;
+    const info = selectionMoveInfo;
+    selectionMoveInfo = null;
+    if (!info.moved) {
+        focusCell();
+        return;
+    }
+    const targetBounds = getSelectionBounds();
+    if (!targetBounds) return;
+    if (targetBounds.minL === info.bounds.minL && targetBounds.minF === info.bounds.minF) {
+        focusCell();
+        return;
+    }
+    pushHistory();
+    for (let l = info.bounds.minL; l <= info.bounds.maxL; l++) {
+        for (let f = info.bounds.minF; f <= info.bounds.maxF; f++) {
+            const c = getCellByLogical(l, f);
+            if (c) delete cellData[`${c.colType}-${c.colIndex}-${f}`];
+        }
+    }
+    for (let l = targetBounds.minL; l <= targetBounds.maxL; l++) {
+        for (let f = targetBounds.minF; f <= targetBounds.maxF; f++) {
+            const c = getCellByLogical(l, f);
+            if (c) delete cellData[`${c.colType}-${c.colIndex}-${f}`];
+        }
+    }
+    info.items.forEach(item => {
+        if (!item.data) return;
+        const c = getCellByLogical(targetBounds.minL + item.rL, targetBounds.minF + item.rF);
+        if (c) cellData[`${c.colType}-${c.colIndex}-${c.frame}`] = JSON.parse(JSON.stringify(item.data));
+    });
+    trimCustomRepeatsForRange(info.bounds);
+    trimCustomRepeatsForRange(targetBounds);
+    if (typeof markDirty === 'function') markDirty();
+    drawAll();
+    focusCell();
+}
+
+function trimCustomRepeatsForRange(bounds) {
+    for (let l = bounds.minL; l <= bounds.maxL; l++) {
+        const c = getCellByLogical(l, bounds.minF);
+        if (!c) continue;
+        customRepeats = customRepeats.filter(rep => {
+            if (rep.colType !== c.colType || rep.colIndex !== c.colIndex) return true;
+            return bounds.maxF < rep.startF || bounds.minF > rep.endF;
+        });
+    }
+}
+
+function inputNextSequentialValue() {
+    if (!selectionStart) return;
+    const currentCell = selectionStart;
+    let previousNumber = null;
+    for (let f = currentCell.frame - 1; f >= -getHeadMargin(); f--) {
+        const data = cellData[`${currentCell.colType}-${currentCell.colIndex}-${f}`];
+        if (data && /^-?\d+$/.test(String(data.value || ''))) {
+            previousNumber = parseInt(data.value, 10);
+            break;
+        }
+    }
+    if (previousNumber === null) previousNumber = 0;
+    cellInput.value = String(previousNumber + 1);
+    cellInputDirty = true;
+    saveInput();
+    move(0, 1, false);
+}
+
+window.inputNextSequentialValue = inputNextSequentialValue;
+
 // === イベントハンドラ登録 ===
 
 window.addEventListener('resize', () => { updateSectionPositions(); drawAll(); });
@@ -238,8 +457,20 @@ document.getElementById('meta-wrapper').addEventListener('mousedown', (e) => {
         return;
     }
     const field = metaFields.find(f => cx >= f.x && cx < f.x + f.w && cy >= f.y && cy < f.y + f.h);
+    const sharedCutField = metaFields.find(f => f.id === 'cut');
+    const canUseSharedCutUi = typeof getSharedCutList === 'function' && String(metaData.cut || '').trim() && getSharedCutList().length > 0;
+    if (!field && sharedCutField && canUseSharedCutUi
+        && cy >= sharedCutField.y && cy < sharedCutField.y + sharedCutField.h
+        && cx >= sharedCutField.x + sharedCutField.w - 6 && cx < sharedCutField.x + sharedCutField.w + 34) {
+        handleSharedCutMetaClick(sharedCutField, cx, cy, e);
+        return;
+    }
     if (field) {
         if (field.id === 'page') { saveInput(); return; }
+        if (field.id === 'cut' && canUseSharedCutUi) {
+            handleSharedCutMetaClick(field, cx, cy, e);
+            return;
+        }
         if (field.id === 'sheetName') {
             // VERSION フィールド: ドロップダウンを開く
             saveInput();
@@ -259,20 +490,69 @@ document.getElementById('meta-wrapper').addEventListener('mousedown', (e) => {
     else saveInput();
 });
 
+function handleSharedCutMetaClick(field, cx, cy, e) {
+    saveInput();
+    selectedMeta = null;
+    metaInput.style.display = 'none';
+    metaTextArea.style.display = 'none';
+    const cuts = getSharedCutList();
+    const currentCut = String(metaData.cut || '');
+    const otherCuts = cuts.filter(cut => String(cut) !== currentCut);
+    const listX = field.x + field.w - 16;
+    if (cx >= listX - 20 && cx <= listX + 20 && otherCuts.length) {
+        const lineH = 14;
+        let lineY = field.y + 18 + lineH * 0.75;
+        for (const cut of otherCuts) {
+            if (cy >= lineY - lineH * 0.75 && cy <= lineY + lineH * 0.35) {
+                switchToSharedCut(cut);
+                return;
+            }
+            lineY += lineH;
+        }
+    }
+    if (typeof showSharedCutSwitcher === 'function') {
+        showSharedCutSwitcher(e.clientX, e.clientY);
+    }
+    e.stopPropagation();
+}
+
+function getVersionSheetIndexesForCurrentCut() {
+    if (typeof sheets === 'undefined' || !Array.isArray(sheets) || sheets.length === 0) return [];
+    const cuts = (typeof getSharedCutList === 'function') ? getSharedCutList() : [];
+    const currentCut = String(metaData?.cut || '').trim();
+    if (cuts.length > 1 && currentCut) {
+        const indexes = [];
+        sheets.forEach((sheet, idx) => {
+            if (String(sheet.metaData?.cut || '').trim() === currentCut) indexes.push(idx);
+        });
+        if (indexes.length > 0) return indexes;
+    }
+    return sheets.map((_, idx) => idx);
+}
+
 // VERSION ドロップダウンに現在のシート一覧をビルド
 function buildVersionSheetList() {
     const list = document.getElementById('version-sheet-list');
     if (!list) return;
     list.innerHTML = '';
     if (typeof sheets === 'undefined' || sheets.length === 0) return;
-    sheets.forEach((s, idx) => {
+    const versionIndexes = getVersionSheetIndexesForCurrentCut();
+    if ((typeof getSharedCutList === 'function' ? getSharedCutList() : []).length > 1) {
+        const titleRow = document.createElement('div');
+        titleRow.className = 'menu-row menu-disabled';
+        titleRow.style.cssText = 'font-size:10px; color:var(--grid-medium);';
+        titleRow.textContent = `CUT ${metaData.cut || '-'} VERSION`;
+        list.appendChild(titleRow);
+    }
+    versionIndexes.forEach((idx, versionIndex) => {
+        const s = sheets[idx];
         const row = document.createElement('div');
         row.className = 'menu-row';
         row.style.cssText = 'display:flex; align-items:center; gap:6px;';
         const isCurrent = (idx === currentSheetIndex);
         row.innerHTML = `
             <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${s.color && s.color !== 0 ? s.color : 'transparent'}; border:1px solid var(--border-color);"></span>
-            <span style="flex:1; font-weight:${isCurrent ? 'bold' : 'normal'}; color:${isCurrent ? 'var(--select-border)' : 'var(--text-color)'};">${s.name}</span>
+            <span style="flex:1; font-weight:${isCurrent ? 'bold' : 'normal'}; color:${isCurrent ? 'var(--select-border)' : 'var(--text-color)'};">${versionIndex + 1}. ${s.name}</span>
             ${isCurrent ? '<span style="font-size:10px; color:var(--select-border); font-weight:bold;">[現在]</span>' : ''}
         `;
         row.addEventListener('click', (e) => {
@@ -331,7 +611,11 @@ function openSheetAddModal() {
     // 引継ぎシート選択肢
     const sel = document.getElementById('sheet-add-source');
     sel.innerHTML = '';
-    sheets.forEach((s, idx) => {
+    const sourceIndexes = (typeof getVersionSheetIndexesForCurrentCut === 'function')
+        ? getVersionSheetIndexesForCurrentCut()
+        : sheets.map((_, idx) => idx);
+    sourceIndexes.forEach(idx => {
+        const s = sheets[idx];
         const opt = document.createElement('option');
         opt.value = idx;
         opt.innerText = s.name;
@@ -419,6 +703,7 @@ document.getElementById('columnHeaderCanvas').addEventListener('mousedown', (e) 
 
 document.getElementById('gridCanvas').addEventListener('mousedown', (e) => {
     if (e.button === 2) return;
+    isGridPointerDown = true;
     saveInput(); saveBookInput();
     const rect = e.target.getBoundingClientRect();
     const zX = (e.clientX - rect.left) / currentZoom;
@@ -450,6 +735,10 @@ document.getElementById('gridCanvas').addEventListener('mousedown', (e) => {
     if (sec && fi >= -_hm && fi < numFrames - _hm) {
         const ci = Math.floor((zX - sec.x) / sec.cw);
         const cell = { frame: fi, colType: sec.type, colIndex: ci, x: sec.x + ci * sec.cw, w: sec.cw };
+        if (!e.shiftKey && canStartSelectionMove(cell)) {
+            startPendingSelectionMove(cell, e.clientX, e.clientY);
+            return;
+        }
         isDragging = true;
         if (e.shiftKey && selectionStart) selectionEnd = cell;
         else { selectionStart = cell; selectionEnd = cell; }
@@ -474,7 +763,17 @@ window.addEventListener('mousemove', (e) => {
     const rect = document.getElementById('gridCanvas').getBoundingClientRect();
     const zX = (e.clientX - rect.left) / currentZoom;
     const zY = (e.clientY - rect.top) / currentZoom;
-    if (!isDragging && !dragDialogueInfo && !dragCameraInfo && !isDraggingPanel && !isDraggingBook) {
+    if (pendingSelectionMove && !pendingSelectionMove.active) {
+        if (Math.abs(e.clientX - pendingSelectionMove.mouseX) > 2 || Math.abs(e.clientY - pendingSelectionMove.mouseY) > 2) {
+            const pending = cancelPendingSelectionMove(false);
+            isDragging = true;
+            selectionStart = pending.cell;
+            selectionEnd = pending.cell;
+        } else {
+            return;
+        }
+    }
+    if (!isDragging && !selectionMoveInfo && !dragDialogueInfo && !dragCameraInfo && !isDraggingPanel && !isDraggingBook) {
         let hit = getDialogueHit(zX, zY);
         let cHit = getCameraHit(zX, zY);
         if (hit) document.getElementById('gridCanvas').style.cursor = ((hit.type === 'head' || hit.type === 'tail') ? 'ns-resize' : 'move');
@@ -492,11 +791,21 @@ window.addEventListener('mousemove', (e) => {
         else if (dragDialogueInfo.type === 'tail') { nE += dF; if (nE < nS) nE = nS; }
         else if (dragDialogueInfo.type === 'move') { nS += dF; nE += dF; nC += dC; }
         if (nS < 0) { let off = 0 - nS; nS += off; if (dragDialogueInfo.type === 'move') nE += off; }
-        if (nE >= targetFrames) { let off = nE - (targetFrames - 1); nE -= off; if (dragDialogueInfo.type === 'move') nS -= off; }
+        if (nE >= numFrames) { let off = nE - (numFrames - 1); nE -= off; if (dragDialogueInfo.type === 'move') nS -= off; }
         if (nC < 0) nC = 0; if (nC >= sndSec.cols) nC = sndSec.cols - 1;
         dragDialogueInfo.isColliding = dialogueBlocks.some(b => b.id !== dragDialogueInfo.id && b.colIndex === nC && !(nE < b.startFrame || nS > b.endFrame));
         dragDialogueInfo.currentStart = nS; dragDialogueInfo.currentEnd = nE; dragDialogueInfo.currentCol = nC;
         drawAll(); return;
+    }
+    if (selectionMoveInfo) {
+        const fi = yToFrame(zY);
+        const sec = sections.find(s => zX >= s.x && zX < s.x + (s.cols * s.cw));
+        const _hmMove = getHeadMargin();
+        if (sec && fi >= -_hmMove && fi < numFrames - _hmMove) {
+            const ci = Math.floor((zX - sec.x) / sec.cw);
+            updateSelectionMove({ frame: fi, colType: sec.type, colIndex: ci, x: sec.x + ci * sec.cw, w: sec.cw }, e.clientX, e.clientY);
+        }
+        return;
     }
     if (dragCameraInfo) {
         if (dragCameraInfo.type === 'waypoint') {
@@ -514,7 +823,7 @@ window.addEventListener('mousemove', (e) => {
         else if (dragCameraInfo.type === 'tail') { nE += dF; if (nE < nS) nE = nS; }
         else if (dragCameraInfo.type === 'move') { nS += dF; nE += dF; nC += dC; }
         if (nS < 0) { let off = 0 - nS; nS += off; if (dragCameraInfo.type === 'move') nE += off; }
-        if (nE >= targetFrames) { let off = nE - (targetFrames - 1); nE -= off; if (dragCameraInfo.type === 'move') nS -= off; }
+        if (nE >= numFrames) { let off = nE - (numFrames - 1); nE -= off; if (dragCameraInfo.type === 'move') nS -= off; }
         if (nC < 0) nC = 0;
         if (nC + dragCameraInfo.colspan - 1 >= camSec.cols) nC = camSec.cols - dragCameraInfo.colspan;
         dragCameraInfo.isColliding = cameraBlocks.some(b => b.id !== dragCameraInfo.id && !(nE < b.startFrame || nS > b.endFrame) && ((nC >= b.colIndex && nC < b.colIndex + (b.colspan || 1)) || (nC + dragCameraInfo.colspan - 1 >= b.colIndex && nC + dragCameraInfo.colspan - 1 < b.colIndex + (b.colspan || 1))));
@@ -533,7 +842,18 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mouseup', (e) => {
+    isGridPointerDown = false;
     if (isDraggingPanel) { isDraggingPanel = false; if (!panelHasMoved) togglePanel(); return; }
+    if (pendingSelectionMove && !pendingSelectionMove.active) {
+        cancelPendingSelectionMove(true);
+        isDragging = false;
+        return;
+    }
+    if (selectionMoveInfo) {
+        commitSelectionMove();
+        isDragging = false;
+        return;
+    }
     if (isDraggingBook) {
         if (draggingBook && draggingBook.isMoved) {
             const rect = document.getElementById('columnHeaderCanvas').getBoundingClientRect();
@@ -559,9 +879,28 @@ window.addEventListener('mouseup', (e) => {
     if (dragDialogueInfo) {
         let block = dialogueBlocks.find(b => b.id === dragDialogueInfo.id);
         if (block && !dragDialogueInfo.isColliding) {
+            pushHistory();
+            const previousBlock = JSON.parse(JSON.stringify(block));
+            let shiftF = dragDialogueInfo.currentStart - block.startFrame;
+            let shiftC = dragDialogueInfo.currentCol - block.colIndex;
+            // cellDataも移動
+            if (dragDialogueInfo.type === 'move' && (shiftF !== 0 || shiftC !== 0)) {
+                // 古いcellDataを削除
+                for (let f = block.startFrame; f <= block.endFrame; f++) {
+                    delete cellData[`SOUND-${block.colIndex}-${f}`];
+                }
+            } else if (dragDialogueInfo.type === 'head' || dragDialogueInfo.type === 'tail') {
+                // リサイズ時は範囲外のcellDataを削除
+                for (let f = block.startFrame; f <= block.endFrame; f++) {
+                    if (f < dragDialogueInfo.currentStart || f > dragDialogueInfo.currentEnd) {
+                        delete cellData[`SOUND-${block.colIndex}-${f}`];
+                    }
+                }
+            }
             block.startFrame = dragDialogueInfo.currentStart;
             block.endFrame = dragDialogueInfo.currentEnd;
             block.colIndex = dragDialogueInfo.currentCol;
+            if (typeof window.normalizeDialogueBlockCells === 'function') window.normalizeDialogueBlockCells(block, previousBlock);
         }
         dragDialogueInfo = null; drawAll(); return;
     }
@@ -569,21 +908,32 @@ window.addEventListener('mouseup', (e) => {
         let block = cameraBlocks.find(b => b.id === dragCameraInfo.id);
         if (block) {
             pushHistory();
+            const previousBlock = JSON.parse(JSON.stringify(block));
             if (dragCameraInfo.type === 'waypoint') {
                 block.waypoints[dragCameraInfo.wpIndex].frame = dragCameraInfo.currentWpFrame;
             } else if (!dragCameraInfo.isColliding) {
                 let shiftF = dragCameraInfo.currentStart - block.startFrame;
                 let shiftC = dragCameraInfo.currentCol - block.colIndex;
-                if (block.isInlineEdit && dragCameraInfo.type === 'move' && (shiftF !== 0 || shiftC !== 0)) {
+                // cellDataも移動（inlineEditかどうかに関わらず）
+                if (dragCameraInfo.type === 'move' && (shiftF !== 0 || shiftC !== 0)) {
                     let cellsToMove = [];
                     for (let f = block.startFrame; f <= block.endFrame; f++) {
                         let key = `CAMERA-${block.colIndex}-${f}`;
                         if (cellData[key]) { cellsToMove.push({ f: f, data: JSON.parse(JSON.stringify(cellData[key])) }); delete cellData[key]; }
                     }
-                    cellsToMove.forEach(cell => {
-                        let newF = cell.f + shiftF; let newC = dragCameraInfo.currentCol;
-                        if (newF >= 0 && newF < numFrames) { cellData[`CAMERA-${newC}-${newF}`] = cell.data; }
-                    });
+                    if (block.isInlineEdit) {
+                        cellsToMove.forEach(cell => {
+                            let newF = cell.f + shiftF; let newC = dragCameraInfo.currentCol;
+                            if (newF >= 0 && newF < numFrames) { cellData[`CAMERA-${newC}-${newF}`] = cell.data; }
+                        });
+                    }
+                } else if (dragCameraInfo.type === 'head' || dragCameraInfo.type === 'tail') {
+                    // リサイズ時は範囲外のcellDataを削除
+                    for (let f = block.startFrame; f <= block.endFrame; f++) {
+                        if (f < dragCameraInfo.currentStart || f > dragCameraInfo.currentEnd) {
+                            delete cellData[`CAMERA-${block.colIndex}-${f}`];
+                        }
+                    }
                 }
                 block.startFrame = dragCameraInfo.currentStart;
                 block.endFrame = dragCameraInfo.currentEnd;
@@ -591,6 +941,7 @@ window.addEventListener('mouseup', (e) => {
                 if (shiftF !== 0 && block.waypoints && block.waypoints.length > 0) {
                     block.waypoints.forEach(wp => { wp.frame += shiftF; });
                 }
+                if (typeof window.normalizeCameraBlockCells === 'function') window.normalizeCameraBlockCells(block, previousBlock);
             }
         }
         dragCameraInfo = null; drawAll(); return;
@@ -607,6 +958,11 @@ cellInput.addEventListener('keydown', (e) => {
         if (e.key === 'x') { e.preventDefault(); copy(); deleteSelect(); return; }
     }
     if (e.key === 'Delete' || (e.key === 'Backspace' && cellInput.value === "")) { e.preventDefault(); deleteSelect(); return; }
+    if (typeof matchShortcut === 'function' && matchShortcut(e, 'edit.assist.nextNumber')) {
+        e.preventDefault();
+        inputNextSequentialValue();
+        return;
+    }
     if (["F2", "F3", "F4", "Enter"].includes(e.key)) {
         if (e.key === "Enter" && selectionStart && selectionStart.colType === "SOUND") {
             e.preventDefault(); e.stopPropagation();
@@ -627,6 +983,7 @@ cellInput.addEventListener('keydown', (e) => {
         if (e.key === "F2") cellInput.value = "●";
         if (e.key === "F3") cellInput.value = "○";
         if (e.key === "F4") cellInput.value = "×";
+        cellInputDirty = true;
         saveInput();
         move(0, 1, false);
         return;
@@ -648,6 +1005,7 @@ cellInput.addEventListener('keydown', (e) => {
     }
     if (e.key.startsWith("Arrow") && !selectedMeta) {
         e.preventDefault();
+        saveInput();
         if (e.key === "ArrowDown") move(0, 1, e.shiftKey);
         if (e.key === "ArrowUp") move(0, -1, e.shiftKey);
         if (e.key === "ArrowLeft") move(-1, 0, e.shiftKey);
@@ -655,8 +1013,27 @@ cellInput.addEventListener('keydown', (e) => {
     }
 });
 
+cellInput.addEventListener('dragstart', (e) => {
+    e.preventDefault();
+});
+
+cellInput.draggable = false;
+
 cellInput.addEventListener('input', () => {
-    cellInput.value = cellInput.value.replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/[^ -~\/]/g, '');
+    cellInputDirty = true;
+    cellInput.value = cellInput.value
+        .replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+        .replace(/[\r\n\t]/g, '')
+        .slice(0, 24);
+    if (typeof markDirty === 'function') markDirty();
+});
+
+metaInput.addEventListener('input', () => {
+    if (typeof markDirty === 'function') markDirty();
+});
+
+metaTextArea.addEventListener('input', () => {
+    if (typeof markDirty === 'function') markDirty();
 });
 
 window.addEventListener('keydown', (e) => {
@@ -736,6 +1113,7 @@ window.addEventListener('keydown', (e) => {
             return;
         }
         if (matchShortcut(e, 'file.saveAs')) { e.preventDefault(); window.exportTDTS({ saveAs: true }); return; }
+        if (matchShortcut(e, 'file.new')) { e.preventDefault(); window.runMenuAction && window.runMenuAction('file.new'); return; }
         if (matchShortcut(e, 'file.open')) { e.preventDefault(); document.getElementById('fileInput').click(); return; }
         // ズーム
         if (matchShortcut(e, 'view.zoomIn')) { e.preventDefault(); zoomIn(); return; }
@@ -865,6 +1243,8 @@ document.getElementById('canvas-wrapper').addEventListener('contextmenu', (e) =>
                 if (curL >= Math.min(sL, eL) && curL <= Math.max(sL, eL) && fi >= minF && fi <= maxF) {
                     if (minF !== maxF && (sec.type === "ACTION" || sec.type === "CELL")) {
                         menuItems.push({ label: t('ctx.applyRepeat'), action: () => { window.applyRepeat(); } });
+                        menuItems.push({ label: t('ctx.applyShake'), action: () => { window.applyShakeRepeat(); } });
+                        menuItems.push({ label: t('ctx.applyRandomShake'), action: () => { window.applyRandomShakeRepeat(); } });
                     }
                 }
                 // コマ挿入/削除（4種）

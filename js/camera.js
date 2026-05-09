@@ -1,10 +1,12 @@
 // === カメラワーク（CAMERA列）モーダル & ヒットテスト & 描画 ===
 
 window.updateCameraKindList = function() {
-    let cat = document.getElementById('cameraCategorySelect').value;
+    const categorySelect = document.getElementById('cameraCategorySelect');
+    let cat = categorySelect ? categorySelect.value : '全て';
     let dl = document.getElementById('camera-kind-list'); dl.innerHTML = '';
     let list = CAMERA_CATEGORIES[cat] || CAMERA_CATEGORIES["全て"];
     list.forEach(kind => { let opt = document.createElement('option'); opt.value = kind; dl.appendChild(opt); });
+    renderCameraRecentKinds();
     handleCameraKindChange();
 };
 
@@ -16,10 +18,171 @@ window.handleCameraKindChange = function() {
     if (vt !== "none") { let tgtEl = document.getElementById(`vt-${vt}`); if (tgtEl) tgtEl.style.display = 'block'; }
     let targetArea = document.getElementById('cam-target-area');
     if (targetArea) targetArea.style.display = (vt === "fromToLayers" || vt === "multiLayerDirection") ? 'none' : 'block';
-    if (kind === 'Rolling') document.getElementById('camInlineEditCheck').checked = true;
+    updateCameraKindMeta(kind, vt);
+    if (kind === 'Rolling' || kind === 'WipeIN') document.getElementById('camInlineEditCheck').checked = true;
 };
 
 window.handleCameraKey = function(e) { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); saveCameraBlock(); } };
+
+const CAMERA_RECENT_KEY = 'webTSEditor.cameraRecentKinds';
+
+function getCameraKindBase(kind) {
+    return (kind || '').split(' (')[0].trim();
+}
+
+function findCameraCategoryForKind(kind) {
+    const base = getCameraKindBase(kind);
+    if (!base) return '';
+    for (let cat in CAMERA_CATEGORIES) {
+        if (cat === '全て') continue;
+        if ((CAMERA_CATEGORIES[cat] || []).some(k => getCameraKindBase(k) === base)) return cat;
+    }
+    return '';
+}
+
+function findCameraKindDisplay(kind) {
+    const base = getCameraKindBase(kind);
+    for (let cat in CAMERA_CATEGORIES) {
+        const found = (CAMERA_CATEGORIES[cat] || []).find(k => getCameraKindBase(k) === base);
+        if (found) return found;
+    }
+    return '';
+}
+
+function getCameraValueTypeLabel(vt) {
+    const labels = {
+        fromTo: 'cam.vt.fromTo',
+        fromToLayers: 'cam.vt.transition',
+        multiLayerDirection: 'cam.vt.multiLayer',
+        numericFr: 'cam.vt.numeric',
+        iris: 'cam.vt.iris',
+        fairing: 'cam.vt.fairing',
+        freeText: 'cam.vt.inline',
+        instructionText: 'cam.vt.instruction'
+    };
+    const key = labels[vt] || 'cam.vt.none';
+    return (typeof t === 'function') ? t(key) : vt;
+}
+
+function updateCameraKindMeta(kind, vt) {
+    const el = document.getElementById('camera-kind-meta');
+    if (!el) return;
+    const cat = findCameraCategoryForKind(kind);
+    if (!kind || !cat) {
+        el.textContent = (typeof t === 'function') ? t('cam.kindHint') : '';
+        return;
+    }
+    el.textContent = `${cat} / ${getCameraValueTypeLabel(vt)}`;
+}
+
+function getCameraRecentKinds() {
+    try {
+        const raw = localStorage.getItem(CAMERA_RECENT_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list.filter(Boolean) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveCameraRecentKind(kind) {
+    const base = getCameraKindBase(kind);
+    if (!base) return;
+    const display = findCameraKindDisplay(base) || kind;
+    const list = [display, ...getCameraRecentKinds().filter(k => getCameraKindBase(k) !== base)].slice(0, 6);
+    try { localStorage.setItem(CAMERA_RECENT_KEY, JSON.stringify(list)); } catch (e) {}
+}
+
+function removeCameraRecentKind(kind) {
+    const base = getCameraKindBase(kind);
+    const list = getCameraRecentKinds().filter(k => getCameraKindBase(k) !== base);
+    try { localStorage.setItem(CAMERA_RECENT_KEY, JSON.stringify(list)); } catch (e) {}
+}
+
+function renderCameraRecentKinds() {
+    const el = document.getElementById('camera-recent-kinds');
+    if (!el) return;
+    const recent = getCameraRecentKinds();
+    el.innerHTML = '';
+    recent.slice(0, 4).forEach(kind => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'camera-recent-kind';
+        btn.textContent = getCameraKindBase(kind);
+        btn.title = `${kind} / 右クリックで履歴から削除`;
+        btn.onclick = () => {
+            const input = document.getElementById('cameraKindInput');
+            input.value = kind;
+            window.handleCameraKindChange();
+            input.focus();
+        };
+        btn.oncontextmenu = (e) => {
+            e.preventDefault();
+            removeCameraRecentKind(kind);
+            renderCameraRecentKinds();
+        };
+        el.appendChild(btn);
+    });
+}
+
+function getCameraBlockCols(block) {
+    const cols = [];
+    const span = block ? (block.colspan || 1) : 0;
+    for (let c = 0; c < span; c++) cols.push(block.colIndex + c);
+    return cols;
+}
+
+function clearCameraBlockCells(block) {
+    if (!block) return;
+    getCameraBlockCols(block).forEach(colI => {
+        for (let f = block.startFrame; f <= block.endFrame; f++) {
+            delete cellData[`CAMERA-${colI}-${f}`];
+        }
+    });
+}
+
+function isInsideCameraBlock(block, colI, frame) {
+    if (!block) return false;
+    const span = block.colspan || 1;
+    return colI >= block.colIndex && colI < block.colIndex + span && frame >= block.startFrame && frame <= block.endFrame;
+}
+
+function clearCameraCellsOutsideBlock(previousBlock, block) {
+    if (!previousBlock) return;
+    getCameraBlockCols(previousBlock).forEach(colI => {
+        for (let f = previousBlock.startFrame; f <= previousBlock.endFrame; f++) {
+            if (!isInsideCameraBlock(block, colI, f)) delete cellData[`CAMERA-${colI}-${f}`];
+        }
+    });
+}
+
+window.normalizeCameraBlockCells = function(block, previousBlock = null) {
+    if (!block) return;
+    if (block.isInlineEdit) {
+        clearCameraCellsOutsideBlock(previousBlock, block);
+        return;
+    }
+    if (previousBlock) clearCameraBlockCells(previousBlock);
+    clearCameraBlockCells(block);
+    const pKind = (block.kind || '').split(' (')[0].trim();
+    for (let f = block.startFrame; f <= block.endFrame; f++) {
+        const key = `CAMERA-${block.colIndex}-${f}`;
+        if (f === block.startFrame) {
+            cellData[key] = {
+                value: pKind,
+                text: block.value || '',
+                option: null,
+                fontColorId: 0
+            };
+        } else {
+            cellData[key] = { value: '―', option: null, text: null, fontColorId: 0 };
+        }
+    }
+};
+
+window.normalizeAllCameraBlockCells = function() {
+    cameraBlocks.forEach(block => window.normalizeCameraBlockCells(block));
+};
 
 window.addCamWaypointRow = function(frame = '', label = '') {
     let container = document.getElementById('camWaypointsContainer');
@@ -91,6 +254,8 @@ window.openCameraModal = function() {
     let existingBlock = null; let minF, maxF;
     if (selectedCameraId) { existingBlock = cameraBlocks.find(b => b.id === selectedCameraId); }
     editingCameraId = null;
+    const categorySelect = document.getElementById('cameraCategorySelect');
+    if (categorySelect) categorySelect.value = '全て';
     let tgtContainer = document.getElementById('camera-target-suggestions'); tgtContainer.innerHTML = '';
     let addTgt = (val, inputId) => {
         let btn = document.createElement('span'); btn.innerText = val;
@@ -172,6 +337,7 @@ window.saveCameraBlock = function() {
     if (isNaN(startF) || isNaN(endF)) { alert("開始Frameと終了Frameを正しく入力してください。"); return; }
 
     let blockToEdit = cameraBlocks.find(b => b.id === editingCameraId);
+    let previousBlock = blockToEdit ? JSON.parse(JSON.stringify(blockToEdit)) : null;
     let colIndex = blockToEdit ? blockToEdit.colIndex : (selectionStart ? selectionStart.colIndex : 0);
 
     let newBlock = {
@@ -236,6 +402,8 @@ window.saveCameraBlock = function() {
 
     newBlock.value = finalValue;
     if (startF > endF) { let temp = startF; startF = endF; endF = temp; }
+    newBlock.startFrame = startF;
+    newBlock.endFrame = endF;
     let collision = cameraBlocks.some(b => b.id !== editingCameraId && !(endF < b.startFrame || startF > b.endFrame) && ((colIndex >= b.colIndex && colIndex < b.colIndex + (b.colspan || 1)) || (colIndex + newBlock.colspan - 1 >= b.colIndex && colIndex + newBlock.colspan - 1 < b.colIndex + (b.colspan || 1))));
     if (collision) { alert("エラー: 他のカメラブロックと範囲が重なっています。"); return; }
 
@@ -266,6 +434,8 @@ window.saveCameraBlock = function() {
     }
     if (editingCameraId) { cameraBlocks = cameraBlocks.map(b => b.id === editingCameraId ? newBlock : b); }
     else { cameraBlocks.push(newBlock); }
+    window.normalizeCameraBlockCells(newBlock, previousBlock);
+    saveCameraRecentKind(rawKind);
     window.closeCameraModal(); selectedCameraId = null; drawAll();
 };
 
@@ -294,12 +464,13 @@ function drawCameraBlocks(ctx) {
     if (!camSec) return;
     cameraBlocks.forEach(block => {
         let sF = block.startFrame; let eF = block.endFrame; let colI = block.colIndex;
-        if (sF >= targetFrames) return;
+        // ダミー部分（マージン）も含めて描画（numFramesを使用）
+        if (sF >= numFrames) return;
         let drawCols = block.colspan || 1;
         let drawWidth = camSec.cw * drawCols;
         let tx = camSec.x + colI * camSec.cw;
         let startY = frameY(sF);
-        let endY = frameY(Math.min(eF, targetFrames - 1) + 1);
+        let endY = frameY(Math.min(eF, numFrames - 1) + 1);
         let vt = block.valueType;
         let pKind = block.kind.split(' (')[0].trim();
         let isRed = false;
@@ -311,6 +482,7 @@ function drawCameraBlocks(ctx) {
 
         let isShake = pKind.includes("CAM SHAKE") || pKind.includes("Handy") || pKind.includes("カメラぶれ") || pKind.includes("ハンディ");
         let isFill = pKind === "BL K" || pKind === "黒コマ" || pKind === "W K" || pKind === "白コマ";
+        let isIris = pKind === "IrisIN" || pKind === "IrisOut";
 
         if (block.isInlineEdit) {
             let lineX = tx + 2; ctx.lineWidth = 3;
@@ -355,6 +527,33 @@ function drawCameraBlocks(ctx) {
             let dispText = tgts ? `[${tgts}] ${pKind}` : pKind;
             ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center";
             ctx.fillText(dispText, tx + drawWidth / 2, midY + 4);
+        } else if (isIris) {
+            if (selectedCameraId === block.id) { ctx.strokeStyle = getStyle('--select-border'); ctx.lineWidth = 2; ctx.strokeRect(tx, startY, drawWidth, endY - startY); ctx.strokeStyle = isRed ? 'red' : getStyle('--text-color'); ctx.lineWidth = 1.5; }
+            let inset = Math.max(3, drawWidth * 0.18);
+            ctx.beginPath();
+            if (pKind === "IrisIN") {
+                ctx.moveTo(tx + inset, startY);
+                ctx.lineTo(tx + drawWidth - inset, startY);
+                ctx.lineTo(tx + drawWidth, endY);
+                ctx.lineTo(tx, endY);
+            } else {
+                ctx.moveTo(tx, startY);
+                ctx.lineTo(tx + drawWidth, startY);
+                ctx.lineTo(tx + drawWidth - inset, endY);
+                ctx.lineTo(tx + inset, endY);
+            }
+            ctx.closePath();
+            ctx.fillStyle = isRed ? 'rgba(255, 0, 0, 0.4)' : 'rgba(100, 100, 100, 0.25)';
+            ctx.fill();
+            ctx.strokeStyle = isRed ? 'red' : getStyle('--text-color');
+            ctx.stroke();
+            let midY = startY + (endY - startY) / 2;
+            let dispText = tgts ? `[${tgts}] ${pKind}` : pKind;
+            ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center";
+            let tWidth = ctx.measureText(dispText).width + 8;
+            ctx.fillStyle = getStyle('--bg-color'); ctx.fillRect(tx + drawWidth / 2 - tWidth / 2, midY - 10, tWidth, 20);
+            ctx.fillStyle = isRed ? 'red' : getStyle('--text-color');
+            ctx.fillText(dispText, tx + drawWidth / 2, midY + 4);
         } else if (isShake) {
             if (selectedCameraId === block.id) { ctx.strokeStyle = getStyle('--select-border'); ctx.lineWidth = 2; ctx.strokeRect(tx, startY, drawWidth, endY - startY); ctx.strokeStyle = isRed ? 'red' : getStyle('--text-color'); ctx.lineWidth = 1.5; }
             let lineX = tx + drawWidth / 2;
@@ -380,9 +579,15 @@ function drawCameraBlocks(ctx) {
             let cw = camSec.cw;
             ctx.fillStyle = isRed ? 'rgba(255, 0, 0, 0.4)' : 'rgba(100, 100, 100, 0.3)';
             ctx.strokeStyle = isRed ? 'red' : getStyle('--text-color');
+            // クリップ領域を設定
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(tx, startY, cw, endY - startY);
+            ctx.clip();
+            // 間隔を常に維持して描画
             for (let curY = startY; curY < endY; curY += stepY) {
-                let cEndY = Math.min(curY + stepY, endY);
-                let midY = curY + (cEndY - curY) / 2;
+                let cEndY = curY + stepY; // 常に間隔を維持
+                let midY = curY + stepY / 2;
                 let drawLeft = (type) => {
                     ctx.beginPath();
                     let lx = tx, rx = tx + cw / 2, cx = tx + cw / 4;
@@ -400,6 +605,7 @@ function drawCameraBlocks(ctx) {
                 if (pKind === "Strobo2" || pKind === "ストロボ2") { drawLeft("diamond"); drawRight("hourglass"); }
                 else { drawLeft("hourglass"); drawRight("diamond"); }
             }
+            ctx.restore();
             let dispText = tgts ? `[${tgts}] ${pKind}` : pKind;
             ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center";
             let tWidth = ctx.measureText(dispText).width + 8;
@@ -489,7 +695,21 @@ function drawCameraBlocks(ctx) {
             ctx.fillStyle = getStyle('--bg-color');
             ctx.fillRect(tx + drawWidth / 2 - 12, startY + (endY - startY) / 2 - 8, 24, 16);
             ctx.fillStyle = isRed ? 'red' : getStyle('--text-color');
-            ctx.fillText("O.L", tx + drawWidth / 2, startY + (endY - startY) / 2 + 4);
+            ctx.fillText(pKind === "Wipe" ? "Wipe" : "O.L", tx + drawWidth / 2, startY + (endY - startY) / 2 + 4);
+        } else if (vt === 'instructionText') {
+            if (selectedCameraId === block.id) { ctx.strokeStyle = getStyle('--select-border'); ctx.lineWidth = 2; ctx.strokeRect(tx, startY, drawWidth, endY - startY); ctx.strokeStyle = isRed ? 'red' : getStyle('--text-color'); ctx.lineWidth = 1.5; }
+            let lineX = tx + drawWidth / 2;
+            ctx.beginPath(); ctx.moveTo(lineX - 10, startY); ctx.lineTo(lineX + 10, startY); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(lineX - 10, endY); ctx.lineTo(lineX + 10, endY); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(lineX, startY); ctx.lineTo(lineX, endY); ctx.stroke();
+            let midY = startY + (endY - startY) / 2;
+            let dispText = tgts ? `[${tgts}]${pKind}` : pKind;
+            let chars = dispText.split('');
+            ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center";
+            ctx.fillStyle = getStyle('--bg-color');
+            ctx.fillRect(lineX - 10, midY - chars.length * 6 - 6, 20, chars.length * 12 + 12);
+            ctx.fillStyle = isRed ? 'red' : getStyle('--text-color');
+            chars.forEach((c, i) => { if (c === "ー") c = "丨"; ctx.fillText(c, lineX, midY - chars.length * 6 + i * 12 + 10); });
         } else {
             if (selectedCameraId === block.id) { ctx.strokeStyle = getStyle('--select-border'); ctx.lineWidth = 2; ctx.strokeRect(tx, startY, drawWidth, endY - startY); ctx.strokeStyle = isRed ? 'red' : getStyle('--text-color'); ctx.lineWidth = 1.5; }
             let lineX = tx + drawWidth / 2;
@@ -508,7 +728,7 @@ function drawCameraBlocks(ctx) {
         if (dragCameraInfo && dragCameraInfo.id === block.id && dragCameraInfo.type !== 'waypoint') {
             let gTx = camSec.x + dragCameraInfo.currentCol * camSec.cw;
             let gStartY = frameY(dragCameraInfo.currentStart);
-            let gEndY = frameY(Math.min(dragCameraInfo.currentEnd, targetFrames - 1) + 1);
+            let gEndY = frameY(Math.min(dragCameraInfo.currentEnd, numFrames - 1) + 1);
             let isR = dragCameraInfo.isColliding;
             if (block.isInlineEdit) {
                 let gLineX = gTx + 2;

@@ -1,8 +1,46 @@
 // === メニューバー / モード切替 / ドロップダウンメニュー ===
 
-let currentMode = 'edit'; // 'edit' | 'preview' | 'template'
+let currentMode = 'edit'; // 'edit' | 'preview'
 let openMenuName = null;
 let activeFontColorId = 0; // クイックパレットで選択中の入力色
+const DRAWING_SIZE_KEYS = ['large', 'medium', 'small'];
+
+function getDrawingSize(tool) {
+    const key = tool === 'eraser' ? 'eraserSize' : 'penSize';
+    const size = settings.preview?.[key] || 'medium';
+    return DRAWING_SIZE_KEYS.includes(size) ? size : 'medium';
+}
+
+function setDrawingSize(tool, size) {
+    if (currentMode === 'edit' || !DRAWING_SIZE_KEYS.includes(size)) return;
+    if (!settings.preview) settings.preview = {};
+    const key = tool === 'eraser' ? 'eraserSize' : 'penSize';
+    settings.preview[key] = size;
+    saveSettings();
+    refreshDrawingSizeControls();
+}
+
+function refreshDrawingSizeControls() {
+    const controls = document.getElementById('drawing-size-controls');
+    const disabled = currentMode === 'edit';
+    if (controls) controls.classList.toggle('is-disabled', disabled);
+    document.querySelectorAll('.tool-size-btn').forEach(btn => {
+        const tool = btn.dataset.drawingSizeTool;
+        const size = btn.dataset.drawingSize;
+        btn.classList.toggle('active', size === getDrawingSize(tool));
+        btn.disabled = disabled;
+    });
+}
+
+document.querySelectorAll('.tool-size-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        setDrawingSize(btn.dataset.drawingSizeTool, btn.dataset.drawingSize);
+    });
+});
+
+document.querySelectorAll('[data-action^="view.theme."]').forEach(row => {
+    row.classList.remove('menu-disabled');
+});
 
 // クイックパレットの色を settings から取得して反映
 function refreshQuickPalette() {
@@ -23,6 +61,10 @@ document.querySelectorAll('.qp-swatch').forEach(s => {
 const menuActions = {
     // ファイル
     'file.new': () => {
+        if (typeof createNewBlankDocumentTab === 'function') {
+            createNewBlankDocumentTab();
+            return;
+        }
         if (isDirty && !confirm('未保存の変更があります。破棄して新規作成しますか？')) return;
         else if (!isDirty && !confirm('現在のシートを破棄して新規作成しますか？')) return;
         // 状態を初期化
@@ -31,10 +73,15 @@ const menuActions = {
         customRepeats = [];
         dialogueBlocks = [];
         cameraBlocks = [];
-        metaData = { title:"", subTitle:"", scene:"", cut:"", lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"" };
+        metaData = { title:"", subTitle:"", scene:"", cut:"", sharedCuts: [], lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"" };
         undoStack = []; redoStack = [];
         selectionStart = null; selectionEnd = null; selectedMeta = null;
         selectedDialogueId = null; selectedCameraId = null;
+        if (typeof resetHandwritingData === 'function') resetHandwritingData();
+        currentFileHandle = null;
+        currentFileFormat = null;
+        currentDirectoryHandle = null;
+        if (typeof setCurrentFileName === 'function') setCurrentFileName('', null);
         // セクション初期化
         sections = [
             { type:"ACTION", x:25, cols:7, cw:32, chars:["A","B","C","D","E","F","G"] },
@@ -42,12 +89,17 @@ const menuActions = {
             { type:"CELL",   x:0, cols:7, cw:58, chars:["a","b","c","d","e","f","g"] },
             { type:"CAMERA", x:0, cols:3, cw:58, chars:["CAM1","CAM2","CAM3"] }
         ];
+        if (typeof closeSharedCutSwitcher === 'function') closeSharedCutSwitcher();
+        if (typeof initSheets === 'function') initSheets();
         updateSectionPositions();
         drawAll();
         if (typeof clearLastSession === 'function') clearLastSession();
         if (typeof markClean === 'function') markClean();
     },
     'file.open': () => document.getElementById('fileInput').click(),
+    'file.openFolder': () => {
+        if (typeof openTimesheetFromFolder === 'function') openTimesheetFromFolder();
+    },
     'file.save': () => {
         // 上書き保存: 現在のフォーマットに応じて分岐。未保存なら TDTS で保存
         if (currentFileFormat === 'xdts') window.exportXDTS({ saveAs: false });
@@ -58,6 +110,9 @@ const menuActions = {
     'file.import.xdts': () => document.getElementById('fileInput').click(),
     'file.export.tdts': () => window.exportTDTS({ saveAs: true }),
     'file.export.xdts': () => window.exportXDTS({ saveAs: true }),
+    'file.export.png': () => exportTemplateImage('png'),
+    'file.export.jpg': () => exportTemplateImage('jpg'),
+    'file.export.psd': () => exportTemplateImage('psd'),
     'file.settings.export': () => exportSettingsJSON(),
     'file.settings.import': () => importSettingsJSON(),
 
@@ -68,7 +123,11 @@ const menuActions = {
     'edit.copy': () => { if (typeof copy === 'function') copy(); },
     'edit.paste': () => { if (typeof paste === 'function') paste(); },
     'edit.delete': () => { if (typeof deleteSelect === 'function') deleteSelect(); },
+    'edit.assist.nextNumber': () => window.inputNextSequentialValue && window.inputNextSequentialValue(),
     'edit.repeat': () => window.applyRepeat && window.applyRepeat(),
+    'edit.shake': () => window.applyShakeRepeat && window.applyShakeRepeat(),
+    'edit.randomShake': () => window.applyRandomShakeRepeat && window.applyRandomShakeRepeat(),
+    'edit.convertActionToCell': () => window.convertAllActionToCell && window.convertAllActionToCell(),
     'edit.color.0': () => applyFontColor(0),
     'edit.color.1': () => applyFontColor(1),
     'edit.color.2': () => applyFontColor(2),
@@ -110,12 +169,18 @@ const menuActions = {
     'view.fit': () => zoomFit(),
     'view.toggleDirection': () => { isMemoExpanded = !isMemoExpanded; drawAll(); },
     'view.togglePanel': () => window.togglePanel(),
+    'view.theme.light': () => setThemeMode('light'),
+    'view.theme.dark': () => setThemeMode('dark'),
+    'view.theme.system': () => setThemeMode('system'),
 
     // 設定
+    'settings.main': () => openSettingsHub(),
     'settings.draw': () => openDrawSettings(),
     'settings.color': () => openColorSettings(),
     'settings.shortcut': () => openShortcutSettings(),
     'settings.editor': () => openEditorSettings(),
+    'settings.sidebar': () => openSidebarSettings(),
+    'settings.naming': () => openNamingSettings(),
     'help.shortcuts': () => openHelpShortcuts(),
     'help.manual': () => openHelpManual(),
     'help.about': () => { document.getElementById('help-about-modal').style.display = 'flex'; },
@@ -129,6 +194,14 @@ const menuActions = {
     // 言語切替
     'help.lang.ja': () => setLang('ja'),
     'help.lang.en': () => setLang('en'),
+};
+
+window.runMenuAction = function(actionId) {
+    if (actionId && menuActions[actionId]) {
+        menuActions[actionId]();
+        return true;
+    }
+    return false;
 };
 
 // 文字色適用（fontColorId）
@@ -149,6 +222,95 @@ function applyFontColor(colorId) {
     }
     drawAll();
 }
+
+window.convertAllActionToCell = function() {
+    if (typeof saveInput === 'function') saveInput();
+    const actionSec = sections.find(s => s.type === "ACTION");
+    const cellSec = sections.find(s => s.type === "CELL");
+    if (!actionSec || !cellSec) {
+        alert("ACTION/CELL欄が見つかりません。");
+        return;
+    }
+
+    const colCount = Math.min(actionSec.cols || 0, cellSec.cols || 0);
+    if (colCount <= 0) {
+        alert("変換対象の列がありません。");
+        return;
+    }
+
+    const totalFrames = ((parseInt(metaData.lengthSec, 10) || 0) * 24 + (parseInt(metaData.lengthFrame, 10) || 0)) || numFrames || 144;
+    const hasCellData = Object.keys(cellData).some(key => {
+        const parts = key.split('-');
+        return parts[0] === "CELL" && parseInt(parts[1], 10) < colCount;
+    });
+    if (hasCellData && !confirm("CELL欄の既存入力を上書きして、ACTION欄から動画番号を作成します。よろしいですか？")) {
+        return;
+    }
+
+    pushHistory();
+    for (const key of Object.keys(cellData)) {
+        const parts = key.split('-');
+        if (parts[0] === "CELL" && parseInt(parts[1], 10) < colCount) delete cellData[key];
+    }
+
+    const inbetweenMarks = new Set(["●", "○"]);
+    const skipValues = new Set(["", "―", "×", "rep", "REP"]);
+    const isSkippableConversionValue = (data) => {
+        if (!data || !data.value) return true;
+        return skipValues.has(String(data.value).trim());
+    };
+    const getManualRepeatData = (ci, f) => {
+        if (!Array.isArray(customRepeats)) return null;
+        const rep = customRepeats.find(r => r.colType === "ACTION" && r.colIndex === ci && f >= r.startF && f <= r.endF);
+        if (!rep || !Array.isArray(rep.pattern) || rep.pattern.length === 0) return null;
+        return (typeof getRepeatPatternData === 'function') ? getRepeatPatternData(rep, f) : (rep.pattern[(f - rep.startF) % rep.pattern.length] || null);
+    };
+    const getAutoRepeatData = (ci, f, colData, repeats) => {
+        const rep = repeats.find(r => !r.isHold && r.colIndex === ci && f >= r.startF + r.chunkLen && f < r.endF);
+        if (!rep || !rep.chunkLen) return null;
+        const sourceFrame = rep.startF + ((f - rep.startF) % rep.chunkLen);
+        return colData[sourceFrame] || null;
+    };
+    for (let ci = 0; ci < colCount; ci++) {
+        const originalToDouga = {};
+        let nextNumber = 1;
+        const colData = [];
+        for (let f = 0; f < totalFrames; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
+        const autoRepeats = (typeof checkRepeatColumns === 'function') ? checkRepeatColumns(colData, totalFrames).map(r => ({ ...r, colIndex: ci })) : [];
+        for (let f = 0; f < totalFrames; f++) {
+            const direct = cellData[`ACTION-${ci}-${f}`] || null;
+            const manualRepeat = getManualRepeatData(ci, f);
+            const autoRepeat = getAutoRepeatData(ci, f, colData, autoRepeats);
+            const src = isSkippableConversionValue(direct) ? (manualRepeat || autoRepeat || direct) : direct;
+            if (!src || !src.value) continue;
+            const value = String(src.value).trim();
+            if (skipValues.has(value)) continue;
+
+            let outValue = null;
+            if (/^\d+$/.test(value)) {
+                const originalKey = `${value}|${src.option || ''}`;
+                if (!originalToDouga[originalKey]) originalToDouga[originalKey] = String(nextNumber++);
+                outValue = originalToDouga[originalKey];
+            } else if (inbetweenMarks.has(value)) {
+                outValue = String(nextNumber++);
+            }
+
+            if (!outValue) continue;
+            cellData[`CELL-${ci}-${f}`] = {
+                value: outValue,
+                option: src.option || null,
+                text: null,
+                fontColorId: src.fontColorId || 0
+            };
+        }
+    }
+
+    selectionStart = null;
+    selectionEnd = null;
+    if (typeof cellInput !== 'undefined') cellInput.style.display = 'none';
+    drawAll();
+    if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
+};
 
 // === メニュー開閉 ===
 function closeAllMenus() {
@@ -229,12 +391,9 @@ function setMode(mode) {
     } else {
         if (typeof disablePreviewMode === 'function') disablePreviewMode();
     }
-    // Template モードはまだ準備中
-    if (mode === 'template') {
-        alert('Template 設定モードは Phase K で実装予定です。');
-        setMode('edit');
-        return;
-    }
+    refreshDrawingSizeControls();
+    // ページインジケーター更新
+    if (typeof updatePageIndicator === 'function') updatePageIndicator();
 }
 
 document.querySelectorAll('.mode-tab').forEach(tab => {
@@ -306,6 +465,24 @@ document.getElementById('settings-draw-modal').addEventListener('click', (e) => 
     if (e.target.id === 'settings-draw-modal') closeDrawSettings();
 });
 
+function openSettingsHub() {
+    document.getElementById('settings-hub-modal').style.display = 'flex';
+}
+function closeSettingsHub() {
+    document.getElementById('settings-hub-modal').style.display = 'none';
+}
+document.querySelectorAll('#settings-hub-modal [data-settings-open]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const actionId = btn.dataset.settingsOpen;
+        closeSettingsHub();
+        if (actionId && menuActions[actionId]) menuActions[actionId]();
+    });
+});
+document.getElementById('settings-hub-close').addEventListener('click', closeSettingsHub);
+document.getElementById('settings-hub-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'settings-hub-modal') closeSettingsHub();
+});
+
 // === 色設定モーダル ===
 function buildFontColorPalette() {
     const wrap = document.getElementById('font-color-palette');
@@ -336,9 +513,13 @@ function openColorSettings() {
     document.getElementById('colorBookLine').dataset.autoDefault = getStyle('--book-line') || '#4dd0e1';
     document.getElementById('colorCellIcon').dataset.autoDefault = getStyle('--cell-icon-color') || '#fff59d';
     document.getElementById('colorSelectBorder').dataset.autoDefault = getStyle('--select-border') || '#4285f4';
+    document.getElementById('colorHandwritingSelect').dataset.autoDefault = DEFAULT_SETTINGS.colors.handwritingSelect;
+    document.getElementById('colorHandwritingTransform').dataset.autoDefault = DEFAULT_SETTINGS.colors.handwritingTransform;
     setColorIfHex('colorBookLine', settings.colors.bookLine);
     setColorIfHex('colorCellIcon', settings.colors.cellIcon);
     setColorIfHex('colorSelectBorder', settings.colors.selectBorder);
+    setColorIfHex('colorHandwritingSelect', settings.colors.handwritingSelect);
+    setColorIfHex('colorHandwritingTransform', settings.colors.handwritingTransform);
     document.getElementById('settings-color-modal').style.display = 'flex';
 }
 function closeColorSettings() {
@@ -352,7 +533,13 @@ document.getElementById('settings-color-ok').addEventListener('click', () => {
     });
     refreshQuickPalette();
     // 単色項目（auto判定: 値が dataset.autoDefault と一致したら auto に戻す）
-    const map = { colorBookLine: 'bookLine', colorCellIcon: 'cellIcon', colorSelectBorder: 'selectBorder' };
+    const map = {
+        colorBookLine: 'bookLine',
+        colorCellIcon: 'cellIcon',
+        colorSelectBorder: 'selectBorder',
+        colorHandwritingSelect: 'handwritingSelect',
+        colorHandwritingTransform: 'handwritingTransform'
+    };
     for (const id in map) {
         const el = document.getElementById(id);
         const v = el.value;
@@ -363,6 +550,7 @@ document.getElementById('settings-color-ok').addEventListener('click', () => {
     saveSettings();
     closeColorSettings();
     drawAll();
+    if (typeof drawHandwritingUi === 'function') drawHandwritingUi();
 });
 document.querySelectorAll('#settings-color-modal input[type=color]').forEach(el => {
     el.addEventListener('input', () => { el.dataset.userChanged = '1'; });
@@ -370,7 +558,13 @@ document.querySelectorAll('#settings-color-modal input[type=color]').forEach(el 
 document.querySelectorAll('.color-auto-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const target = btn.dataset.target;
-        const idMap = { bookLine: 'colorBookLine', cellIcon: 'colorCellIcon', selectBorder: 'colorSelectBorder' };
+        const idMap = {
+            bookLine: 'colorBookLine',
+            cellIcon: 'colorCellIcon',
+            selectBorder: 'colorSelectBorder',
+            handwritingSelect: 'colorHandwritingSelect',
+            handwritingTransform: 'colorHandwritingTransform'
+        };
         const el = document.getElementById(idMap[target]);
         if (el) {
             settings.colors[target] = 'auto';
@@ -435,11 +629,52 @@ function isReservedKey(combo) {
     return RESERVED_BROWSER_KEYS.includes(combo);
 }
 
+const SHORTCUT_SETTING_GROUPS = [
+    { title: 'ファイル', titleKey: 'file', ids: ['file.new', 'file.open', 'file.save', 'file.saveAs'] },
+    { title: '編集', titleKey: 'edit', ids: ['edit.undo', 'edit.redo', 'edit.cut', 'edit.copy', 'edit.paste', 'edit.delete', 'edit.assist.nextNumber', 'edit.repeat'] },
+    { title: '挿入', titleKey: 'insert', ids: ['insert.frame', 'insert.frameDelete', 'insert.frameAll', 'insert.frameAllDelete'] },
+    { title: '記号入力', titleKey: 'symbol', ids: ['symbol.tick1', 'symbol.tick2', 'symbol.null', 'symbol.keyframe', 'symbol.refframe'] },
+    { title: '文字色', titleKey: 'color', ids: ['edit.color.0', 'edit.color.1', 'edit.color.2', 'edit.color.3', 'edit.color.4', 'edit.color.5'] },
+    { title: '表示', titleKey: 'view', ids: ['view.zoomIn', 'view.zoomOut', 'view.zoom100', 'view.fit'] },
+    { title: '手書きツール', titleKey: 'previewTools', ids: ['preview.tool.pen', 'preview.tool.eraser', 'preview.tool.rect', 'preview.tool.lasso', 'preview.tool.transform', 'preview.tool.hand', 'preview.temporaryHand'] },
+    { title: '手書き履歴', titleKey: 'previewHistory', ids: ['preview.undo', 'preview.redo'] },
+    { title: '手書き選択/変形', titleKey: 'previewSelection', ids: ['preview.confirm', 'preview.cancel', 'preview.clearSelection', 'preview.deleteSelection'] },
+    { title: 'ヘルプ', titleKey: 'help', ids: ['help.shortcuts'] }
+];
+let collapsedShortcutGroups = {};
+
 function buildShortcutTable() {
     const tbody = document.getElementById('shortcut-tbody');
     tbody.innerHTML = '';
-    for (const aid in settings.shortcuts) {
+    const grouped = new Set();
+    SHORTCUT_SETTING_GROUPS.forEach(group => {
+        const ids = group.ids.filter(aid => settings.shortcuts[aid]);
+        if (ids.length === 0) return;
+        ids.forEach(aid => grouped.add(aid));
+        appendShortcutGroup(tbody, group, ids);
+    });
+    const others = Object.keys(settings.shortcuts).filter(aid => !grouped.has(aid));
+    if (others.length) appendShortcutGroup(tbody, { title: 'その他', titleKey: 'other' }, others);
+    bindShortcutKeyInputs(tbody);
+    refreshConflictWarning();
+}
+
+function appendShortcutGroup(tbody, group, ids) {
+    const groupKey = group.titleKey || group.title;
+    const collapsed = !!collapsedShortcutGroups[groupKey];
+    const groupTitle = (typeof t === 'function') ? t('group.' + groupKey) : group.title;
+    const header = document.createElement('tr');
+    header.style.cssText = 'cursor:pointer; background:var(--highlight); border-bottom:1px solid var(--border-color);';
+    header.innerHTML = `<td colspan="3" style="padding:8px 6px; font-weight:bold; color:var(--select-border);">${collapsed ? '▶' : '▼'} ${groupTitle}</td>`;
+    header.addEventListener('click', () => {
+        collapsedShortcutGroups[groupKey] = !collapsedShortcutGroups[groupKey];
+        buildShortcutTable();
+    });
+    tbody.appendChild(header);
+    ids.forEach(aid => {
+        if (collapsed) return;
         const row = document.createElement('tr');
+        row.dataset.groupKey = groupKey;
         row.style.cssText = 'border-bottom:1px solid rgba(128,128,128,0.2);';
         const label = (typeof tAction === 'function') ? tAction(aid) : (ACTION_LABELS[aid] || aid);
         const sc = settings.shortcuts[aid];
@@ -449,8 +684,10 @@ function buildShortcutTable() {
             <td style="padding:4px 4px;"><input type="text" class="sc-key" data-aid="${aid}" data-slot="sub" value="${sc.sub || ''}" placeholder="押下で記録" readonly style="width:120px; padding:4px 6px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick); border-radius:3px; font-size:11px; cursor:pointer; font-family:monospace;"></td>
         `;
         tbody.appendChild(row);
-    }
-    // キー入力UI: クリックで記録モード、次の押下で代入
+    });
+}
+
+function bindShortcutKeyInputs(tbody) {
     tbody.querySelectorAll('.sc-key').forEach(input => {
         input.addEventListener('click', () => {
             input.value = '...キー押下';
@@ -498,7 +735,6 @@ function buildShortcutTable() {
             }
         });
     });
-    refreshConflictWarning();
 }
 
 function readShortcutTableInto(target) {
@@ -507,6 +743,12 @@ function readShortcutTableInto(target) {
         if (!target[aid]) target[aid] = { main: '', sub: '' };
         target[aid][slot] = input.value || '';
     });
+}
+
+function hasRealShortcutConflict(actionIds) {
+    const previewCount = actionIds.filter(aid => aid.startsWith('preview.')).length;
+    const nonPreviewCount = actionIds.length - previewCount;
+    return previewCount > 1 || nonPreviewCount > 1;
 }
 
 function refreshConflictWarning() {
@@ -521,7 +763,7 @@ function refreshConflictWarning() {
             (map[c] = map[c] || []).push(aid);
         }
     }
-    const conflicts = Object.entries(map).filter(([k, v]) => v.length > 1);
+    const conflicts = Object.entries(map).filter(([k, v]) => v.length > 1 && hasRealShortcutConflict(v));
     const warn = document.getElementById('shortcut-conflicts');
     if (conflicts.length > 0) {
         warn.style.display = 'block';
@@ -619,10 +861,13 @@ document.getElementById('settings-shortcut-modal').addEventListener('click', (e)
 // アクションをカテゴリ別に並べる（titleKey は i18n キー）
 const HELP_SHORTCUT_GROUPS = [
     { title: 'ファイル', titleKey: 'file', ids: ['file.new', 'file.open', 'file.save', 'file.saveAs'] },
-    { title: '編集', titleKey: 'edit', ids: ['edit.undo', 'edit.redo', 'edit.cut', 'edit.copy', 'edit.paste', 'edit.delete', 'edit.repeat'] },
+    { title: '編集', titleKey: 'edit', ids: ['edit.undo', 'edit.redo', 'edit.cut', 'edit.copy', 'edit.paste', 'edit.delete', 'edit.assist.nextNumber', 'edit.repeat'] },
     { title: '挿入', titleKey: 'insert', ids: ['insert.frame', 'insert.frameDelete', 'insert.frameAll', 'insert.frameAllDelete'] },
     { title: '記号入力', titleKey: 'symbol', ids: ['symbol.tick1', 'symbol.tick2', 'symbol.null', 'symbol.keyframe', 'symbol.refframe'] },
     { title: '文字色', titleKey: 'color', ids: ['edit.color.0', 'edit.color.1', 'edit.color.2', 'edit.color.3', 'edit.color.4', 'edit.color.5'] },
+    { title: '手書きツール', titleKey: 'previewTools', ids: ['preview.tool.pen', 'preview.tool.eraser', 'preview.tool.rect', 'preview.tool.lasso', 'preview.tool.transform', 'preview.tool.hand', 'preview.temporaryHand'] },
+    { title: '手書き履歴', titleKey: 'previewHistory', ids: ['preview.undo', 'preview.redo'] },
+    { title: '手書き選択/変形', titleKey: 'previewSelection', ids: ['preview.confirm', 'preview.cancel', 'preview.clearSelection', 'preview.deleteSelection'] },
     { title: 'ヘルプ', titleKey: 'help', ids: ['help.shortcuts'] }
 ];
 
@@ -704,8 +949,18 @@ const HELP_MANUAL_HTML_JA = `
 <h4 style="margin:14px 0 8px; color:var(--select-border);">モード</h4>
 <ul>
   <li><b>Edit</b>: タイムシート入力（現在のメイン画面）</li>
-  <li><b>Preview</b>: テンプレート画像へのデータ流し込み・手書き（Phase J で実装予定）</li>
-  <li><b>Template</b>: プレビュー用ベース画像と座標定義（Phase K で実装予定）</li>
+  <li><b>Preview</b>: 用紙テンプレートへの流し込み、手書き、画像/PSD書き出し</li>
+  <li><b>Template</b>: 外部テンプレートと座標定義（今後実装予定）</li>
+</ul>
+
+<h4 style="margin:14px 0 8px; color:var(--select-border);">Previewモード</h4>
+<ul>
+  <li>右サイドバーから用紙テンプレート、描画ツール、読み込み、書き出し、表示倍率を操作できます</li>
+  <li>手書きツールは <b>B</b>=ペン、<b>E</b>=消しゴム、<b>M</b>=矩形選択、<b>L</b>=投げ縄、<b>Ctrl+T</b>=変形、<b>H</b>=ハンド</li>
+  <li>ペン入力中は <b>Shift</b> で直線、選択中は <b>Enter</b> で確定、<b>Ctrl+D</b> で選択解除、<b>Delete/Backspace</b> で削除</li>
+  <li><b>Space</b> 押下中は一時ハンド、<b>Ctrl+Space+ドラッグ</b> でズームできます</li>
+  <li>TDTS保存時、対応ブラウザではTDTSと同じ場所に手書きPNG/INIを自動保存します</li>
+  <li>画像書き出しではページ、形式、DPI、ファイル名、保存場所をダイアログで調整できます。PSDはページごとのグループで出力します</li>
 </ul>
 
 <h4 style="margin:14px 0 8px; color:var(--select-border);">ファイル形式</h4>
@@ -742,7 +997,7 @@ const HELP_MANUAL_HTML_JA = `
 <ul>
   <li><b>Ctrl+R</b> や <b>Ctrl+Shift+R</b> はブラウザの予約キーで、JSで阻止できない場合があります</li>
   <li>XDTS はBOOK・文字色・カメラ詳細(ストロボ間隔・waypoints等)を保持できません</li>
-  <li>Firefox等は File System Access API 非対応で、上書き保存もダイアログが出ます</li>
+  <li>FirefoxやiPad Safariなどは File System Access API 非対応/制限ありのため、上書き保存や手書き自動保存がダウンロード保存になる場合があります</li>
 </ul>
 `;
 
@@ -759,8 +1014,18 @@ const HELP_MANUAL_HTML_EN = `
 <h4 style="margin:14px 0 8px; color:var(--select-border);">Modes</h4>
 <ul>
   <li><b>Edit</b>: Timesheet input (current main view)</li>
-  <li><b>Preview</b>: Imprint data on template image and draw freehand (planned in Phase J)</li>
-  <li><b>Template</b>: Define base image and coords for preview (planned in Phase K)</li>
+  <li><b>Preview</b>: Imprint data on paper templates, draw freehand, and export images/PSD</li>
+  <li><b>Template</b>: External templates and coordinate definition (planned)</li>
+</ul>
+
+<h4 style="margin:14px 0 8px; color:var(--select-border);">Preview Mode</h4>
+<ul>
+  <li>Use the sidebar for paper templates, drawing tools, imports, exports, and zoom controls</li>
+  <li>Tools: <b>B</b>=pen, <b>E</b>=eraser, <b>M</b>=rect select, <b>L</b>=lasso, <b>Ctrl+T</b>=transform, <b>H</b>=hand</li>
+  <li>Hold <b>Shift</b> while drawing with the pen for a straight line. Selection: <b>Enter</b>=confirm, <b>Ctrl+D</b>=clear, <b>Delete/Backspace</b>=delete</li>
+  <li>Hold <b>Space</b> for temporary hand, and <b>Ctrl+Space+drag</b> to zoom</li>
+  <li>When saving TDTS, supported browsers also save handwriting PNG/INI next to the TDTS file</li>
+  <li>Image export lets you choose pages, format, DPI, filename, and destination. PSD exports pages as groups</li>
 </ul>
 
 <h4 style="margin:14px 0 8px; color:var(--select-border);">File Formats</h4>
@@ -797,12 +1062,196 @@ const HELP_MANUAL_HTML_EN = `
 <ul>
   <li><b>Ctrl+R</b> and <b>Ctrl+Shift+R</b> are reserved by browsers and may not be intercepted</li>
   <li>XDTS cannot retain BOOK / font color / camera details (strobo intervals, waypoints, etc.)</li>
-  <li>Firefox lacks File System Access API; Save will always show the dialog</li>
+  <li>Firefox and iPad Safari lack or restrict File System Access API; overwrite save and handwriting auto-save may fall back to downloads</li>
 </ul>
 `;
 
+function getHelpManualHtmlJA() {
+    return `
+<style>
+  .manual-section { padding:10px 0 12px; border-bottom:1px solid var(--border-color); }
+  .manual-section:first-child { padding-top:0; }
+  .manual-section h4 { margin:0 0 8px; color:var(--select-border); font-size:14px; }
+  .manual-section ul { margin:0; padding-left:18px; line-height:1.7; }
+  .manual-section li { margin:2px 0; }
+</style>
+
+<div class="manual-section">
+  <h4>まず見るところ</h4>
+  <ul>
+    <li><b>Edit</b> はタイムシート入力、<b>Preview</b> は用紙プレビュー・手書き・書き出しです。</li>
+    <li>メニューバー下のドキュメントタブで、複数のTDTS/XDTSを切り替えます。ドラッグで並び替え、中クリックまたは × で閉じます。</li>
+    <li>画面右上には現在のファイル名、未保存状態、ページ送り、兼用CUT切替が表示されます。</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>Edit 基本操作</h4>
+  <ul>
+    <li>セルをクリックして編集します。<b>Tab</b> や <b>矢印キー</b> で移動、<b>Shift+矢印</b> で範囲選択できます。</li>
+    <li>入力済みセルを開くと文字列が選択されるため、そのまま打ち直せます。</li>
+    <li>範囲選択を長押ししてからドラッグすると、選択範囲を移動できます。移動先は空セルも含めて上書きします。</li>
+    <li><b>F7</b> は同じ列の直前入力から次の番号を入れる連番入力です。キーはショートカット設定で変更できます。</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>記号・入力補助</h4>
+  <ul>
+    <li><b>F2</b>=○、<b>F3</b>=●、<b>F4</b>=×、<b>F5</b>=原画囲い、<b>F6</b>=参考囲いです。</li>
+    <li>右クリック、または編集メニューから <b>Rep</b>、<b>ブレ</b>、<b>ランダムブレ</b> を適用できます。</li>
+    <li>Repや囲いはPreviewにも反映されます。CELLのRepは次入力またはENDまでの範囲として扱います。</li>
+    <li><b>すべての原画を動画に一括変換</b> はACTIONをCELLへ補助的に転記します。完璧な変換ではなく、作業補助用です。</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>兼用CUT / VERSION</h4>
+  <ul>
+    <li>兼用CUTはCUT欄またはPreview上部のCUTセレクトから切り替えます。</li>
+    <li>CUTごとにVERSIONを持てます。SHEET/VERSION欄からシート名変更、追加、コピー、削除を行います。</li>
+    <li>兼用CUTの追加・編集・削除はCUT切替UIの右クリックメニューから行います。削除時は確認が入ります。</li>
+    <li>新規兼用CUTはヘッダー情報とBOOKを維持し、Directionとタイムラインは空で作成されます。</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>カメラ / セリフ</h4>
+  <ul>
+    <li>SOUND列をドラッグしてセリフブロック、CAMERA列をドラッグしてカメラ/撮影指示ブロックを作成します。</li>
+    <li>カメラkindはカテゴリで絞り込みできます。開いた直後は「すべて」が選択されます。</li>
+    <li>最近使ったkindは履歴に出ます。不要な履歴は右クリックで削除できます。</li>
+    <li>CAMERA/SOUNDブロックの範囲とセル上の線は、保存・編集時に内部で正規化されます。</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>Preview / 手書き</h4>
+  <ul>
+    <li>サイドバーから用紙テンプレート、描画ツール、読み込み、書き出し、表示倍率を操作します。</li>
+    <li><b>B</b>=ペン、<b>E</b>=消しゴム、<b>M</b>=矩形選択、<b>L</b>=投げ縄、<b>Ctrl+T</b>=変形、<b>H</b>=ハンドです。</li>
+    <li>ペン入力中は <b>Shift</b> で直線、選択中は <b>Enter</b> で確定、<b>Ctrl+D</b> で選択解除、<b>Delete/Backspace</b> で削除します。</li>
+    <li><b>Space</b> 押下中は一時ハンド、<b>Ctrl+Space+ドラッグ</b> でズームできます。</li>
+    <li>手書きデータはTDTS/XDTSには含めず、PNG/INI互換保存を正とします。TDTS保存時、対応ブラウザでは同じ場所へ自動保存します。</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>保存 / 読み込み / 書き出し</h4>
+  <ul>
+    <li><b>Ctrl+S</b> は上書き保存です。保存済みファイルがある場合は元ファイル名のまま保存します。</li>
+    <li><b>Ctrl+Shift+S</b> や新規保存では、命名規則設定のTDTS/XDTS保存名が候補になります。</li>
+    <li>フォルダからTDTSを開くと、同名フォルダ内の手書きPNG/INIも自動読み込みできます。</li>
+    <li>画像書き出しはページ、形式、DPI、ファイル名、保存場所をダイアログで調整できます。PSDはページごとのグループで出力します。</li>
+    <li>画像書き出し名とTDTS/XDTS保存名は <b>設定 → 命名規則設定</b> から変更できます。</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>設定</h4>
+  <ul>
+    <li><b>エディタ</b>: 兼用CUTの共有項目などを設定します。</li>
+    <li><b>描画</b>: 線発生ギャップ、頭/尻マージン、Rep表示などを設定します。</li>
+    <li><b>色</b>: 入力色、選択色、手書き選択/変形ガイド色を設定します。</li>
+    <li><b>ショートカット</b>: Photoshop寄せのキー割り当てを編集できます。グループごとに折りたためます。</li>
+    <li><b>サイドバー</b>: Previewサイドバーの左右配置とセクション順を設定します。</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>既知の制限</h4>
+  <ul>
+    <li><b>Ctrl+R</b> や <b>Ctrl+Shift+R</b> はブラウザの予約キーで、JSで阻止できない場合があります。</li>
+    <li>XDTSはBOOK、文字色、ACTION/CELLの完全な区別、カメラ詳細情報の一部を保持できません。</li>
+    <li>FirefoxやiPad SafariなどはFile System Access API非対応/制限ありのため、上書き保存や手書き自動保存がダウンロード保存になる場合があります。</li>
+  </ul>
+</div>
+`;
+}
+
+function getHelpManualHtmlEN() {
+    return `
+<style>
+  .manual-section { padding:10px 0 12px; border-bottom:1px solid var(--border-color); }
+  .manual-section:first-child { padding-top:0; }
+  .manual-section h4 { margin:0 0 8px; color:var(--select-border); font-size:14px; }
+  .manual-section ul { margin:0; padding-left:18px; line-height:1.7; }
+  .manual-section li { margin:2px 0; }
+</style>
+
+<div class="manual-section">
+  <h4>Start Here</h4>
+  <ul>
+    <li><b>Edit</b> is for timesheet input. <b>Preview</b> is for paper preview, handwriting, and export.</li>
+    <li>Use document tabs under the menu bar to switch between multiple TDTS/XDTS files. Drag to reorder, middle-click or × to close.</li>
+    <li>The top-right area shows current filename, dirty state, page navigation, and shared-cut switching.</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>Edit Basics</h4>
+  <ul>
+    <li>Click a cell to edit. Use <b>Tab</b> or <b>arrow keys</b> to move, and <b>Shift+arrows</b> to extend selection.</li>
+    <li>Opening an existing cell selects its text, so you can type over it immediately.</li>
+    <li>Long-press a selected range, then drag to move it. The destination is overwritten, including blank cells.</li>
+    <li><b>F7</b> inserts the next sequential number based on the previous input in the same column.</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>Marks And Assist</h4>
+  <ul>
+    <li><b>F2</b>=in-between mark, <b>F3</b>=reverse-sheet mark, <b>F4</b>=null cell, <b>F5</b>=keyframe circle, <b>F6</b>=reference circle.</li>
+    <li>Use right-click or the Edit menu to apply <b>Rep</b>, <b>Shake</b>, or <b>Random Shake</b>.</li>
+    <li>Rep and option circles are reflected in Preview. CELL Rep repeats to the next input or END.</li>
+    <li><b>Convert all ACTION to CELL</b> is a helper feature, not a perfect conversion for every exception.</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>Shared Cuts / VERSION</h4>
+  <ul>
+    <li>Switch shared cuts from the CUT field or the Preview cut selector.</li>
+    <li>Each cut can have its own VERSION sheets. Use the SHEET/VERSION field to rename, add, copy, or delete versions.</li>
+    <li>Add, rename, or delete shared cuts from the shared-cut UI context menu. Delete asks for confirmation.</li>
+    <li>New shared cuts keep header info and BOOK, while Direction and timeline data start empty.</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>Preview / Handwriting</h4>
+  <ul>
+    <li>Use the sidebar for paper template, drawing tools, imports, exports, and zoom controls.</li>
+    <li><b>B</b>=pen, <b>E</b>=eraser, <b>M</b>=rect select, <b>L</b>=lasso, <b>Ctrl+T</b>=transform, <b>H</b>=hand.</li>
+    <li>Hold <b>Shift</b> with the pen for straight lines. Selection: <b>Enter</b>=confirm, <b>Ctrl+D</b>=clear, <b>Delete/Backspace</b>=delete.</li>
+    <li>Handwriting is stored outside TDTS/XDTS as compatible PNG/INI. Supported browsers auto-save it next to TDTS.</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>Save / Load / Export</h4>
+  <ul>
+    <li><b>Ctrl+S</b> overwrites the current file. If a source file exists, its original filename is kept.</li>
+    <li><b>Ctrl+Shift+S</b> and new saves use the TDTS/XDTS filename rule as the suggested name.</li>
+    <li>Opening TDTS from a folder can also load handwriting PNG/INI from the same-name folder.</li>
+    <li>Image export lets you choose pages, format, DPI, filename, and destination. PSD exports pages as groups.</li>
+    <li>Image-export and TDTS/XDTS filename rules are configured in <b>Settings → Naming Rules</b>.</li>
+  </ul>
+</div>
+
+<div class="manual-section">
+  <h4>Known Limitations</h4>
+  <ul>
+    <li><b>Ctrl+R</b> and <b>Ctrl+Shift+R</b> are reserved by browsers and may not be intercepted.</li>
+    <li>XDTS cannot retain BOOK, font colors, perfect ACTION/CELL separation, or some camera details.</li>
+    <li>Firefox and iPad Safari lack or restrict File System Access API; overwrite save and handwriting auto-save may fall back to downloads.</li>
+  </ul>
+</div>
+`;
+}
+
 function openHelpManual() {
-    const html = (currentLang === 'en') ? HELP_MANUAL_HTML_EN : HELP_MANUAL_HTML_JA;
+    const html = (currentLang === 'en') ? getHelpManualHtmlEN() : getHelpManualHtmlJA();
     document.getElementById('help-manual-content').innerHTML = html;
     document.getElementById('help-manual-modal').style.display = 'flex';
 }
@@ -819,4 +1268,120 @@ document.getElementById('help-about-close').addEventListener('click', () => {
 });
 document.getElementById('help-about-modal').addEventListener('click', (e) => {
     if (e.target.id === 'help-about-modal') document.getElementById('help-about-modal').style.display = 'none';
+});
+
+// === サイドバー設定モーダル ===
+let draggedOrderItem = null;
+
+function openSidebarSettings() {
+    const modal = document.getElementById('settings-sidebar-modal');
+    document.getElementById('sidebarPosition').value = settings.preview?.sidebarPosition || 'right';
+
+    // セクション順序を復元
+    const defaultOrder = ['template', 'tools', 'import', 'export', 'zoom'];
+    const order = [...new Set([...(settings.preview?.sectionOrder || []), ...defaultOrder])];
+    const list = document.getElementById('sidebar-section-order');
+    const items = Array.from(list.querySelectorAll('.sidebar-order-item'));
+    order.forEach(sec => {
+        const item = items.find(i => i.dataset.section === sec);
+        if (item) list.appendChild(item);
+    });
+
+    // ドラッグイベント設定
+    initSidebarOrderDrag();
+    modal.style.display = 'flex';
+}
+
+function closeSidebarSettings() {
+    document.getElementById('settings-sidebar-modal').style.display = 'none';
+}
+
+function initSidebarOrderDrag() {
+    const list = document.getElementById('sidebar-section-order');
+    const items = list.querySelectorAll('.sidebar-order-item');
+
+    items.forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+            draggedOrderItem = item;
+            item.classList.add('dragging');
+        });
+        item.addEventListener('dragend', () => {
+            item.classList.remove('dragging');
+            draggedOrderItem = null;
+        });
+        item.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (!draggedOrderItem || draggedOrderItem === item) return;
+            const rect = item.getBoundingClientRect();
+            const midY = rect.top + rect.height / 2;
+            if (e.clientY < midY) {
+                list.insertBefore(draggedOrderItem, item);
+            } else {
+                list.insertBefore(draggedOrderItem, item.nextSibling);
+            }
+        });
+    });
+}
+
+function applySidebarOrder() {
+    const order = Array.from(document.querySelectorAll('#sidebar-section-order .sidebar-order-item'))
+        .map(item => item.dataset.section);
+
+    // サイドバー内のセクションを並び替え
+    const sidebar = document.getElementById('preview-sidebar');
+    if (!sidebar) return;
+
+    const spacer = sidebar.querySelector('.sidebar-spacer');
+    order.forEach(sec => {
+        const section = sidebar.querySelector(`.sidebar-section[data-section="${sec}"]`);
+        if (section && spacer) {
+            sidebar.insertBefore(section, spacer);
+        }
+    });
+}
+
+document.getElementById('settings-sidebar-ok').addEventListener('click', () => {
+    if (!settings.preview) settings.preview = {};
+    settings.preview.sidebarPosition = document.getElementById('sidebarPosition').value;
+    settings.preview.sectionOrder = Array.from(document.querySelectorAll('#sidebar-section-order .sidebar-order-item'))
+        .map(item => item.dataset.section);
+
+    saveSettings();
+    applySidebarOrder();
+
+    // サイドバー位置更新
+    if (typeof showSidebar === 'function' && currentMode === 'preview') {
+        showSidebar();
+    }
+
+    closeSidebarSettings();
+});
+
+document.getElementById('settings-sidebar-cancel').addEventListener('click', closeSidebarSettings);
+document.getElementById('settings-sidebar-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'settings-sidebar-modal') closeSidebarSettings();
+});
+
+function openNamingSettings() {
+    if (!settings.preview) settings.preview = {};
+    document.getElementById('namingImageExportFilename').value = settings.preview.exportFilenameTemplate || '%title_%scene_%cut';
+    document.getElementById('namingTimesheetSaveFilename').value = settings.preview.saveFilenameTemplate || '%title_%scene_%cut';
+    document.getElementById('settings-naming-modal').style.display = 'flex';
+}
+
+function closeNamingSettings() {
+    document.getElementById('settings-naming-modal').style.display = 'none';
+}
+
+document.getElementById('settings-naming-ok').addEventListener('click', () => {
+    if (!settings.preview) settings.preview = {};
+    settings.preview.exportFilenameTemplate = document.getElementById('namingImageExportFilename').value.trim() || '%title_%scene_%cut';
+    settings.preview.saveFilenameTemplate = document.getElementById('namingTimesheetSaveFilename').value.trim() || '%title_%scene_%cut';
+    saveSettings();
+    closeNamingSettings();
+});
+
+document.getElementById('settings-naming-cancel').addEventListener('click', closeNamingSettings);
+document.getElementById('settings-naming-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'settings-naming-modal') closeNamingSettings();
 });
