@@ -273,9 +273,11 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
             metaTextArea.style.display = 'none'; bookInput.style.display = 'none';
             updateSectionPositions(); drawAll();
             if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
-            // 手書きデータ有無の通知（ファイル単体では自動読み込み不可）
+            // 手書きデータ有無の通知（クリックで手書き読み込みダイアログを開く）
             if (raw._hasHandwriting) {
-                showToast && showToast('このファイルには手書きデータがあります。「フォルダから開く」で自動読み込みできます。', 5000);
+                showToast && showToast('手書きデータあり - クリックしてPNG読み込み', 8000, () => {
+                    if (typeof importHandwritingPngFiles === 'function') importHandwritingPngFiles();
+                });
             }
         } catch (err) {
             console.error(err);

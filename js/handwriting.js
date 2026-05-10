@@ -707,30 +707,100 @@ function sanitizeFilePart(value) {
     return String(value || '').replace(/[\\/:*?"<>|]/g, '_').trim();
 }
 
+// ファイル名からシート/ページ情報を抽出
+// 例: "cut001_sheet2_p3.png" → { sheet: 1, page: 2 } (0-indexed)
+// 例: "timesheet_s1_cut001_handwriting_p2.png" → { sheet: 0, page: 1 }
+function parseHandwritingFilename(filename) {
+    const result = { sheet: null, page: null };
+    const name = filename.toLowerCase();
+
+    // シート番号: sheet1, sheet2, s1, s2 など
+    const sheetMatch = name.match(/sheet(\d+)|_s(\d+)_/i);
+    if (sheetMatch) {
+        const num = parseInt(sheetMatch[1] || sheetMatch[2], 10);
+        if (!isNaN(num) && num > 0) result.sheet = num - 1; // 0-indexed
+    }
+
+    // ページ番号: p1, p2, page1, page2 など
+    const pageMatch = name.match(/[_\-]p(\d+)|page(\d+)/i);
+    if (pageMatch) {
+        const num = parseInt(pageMatch[1] || pageMatch[2], 10);
+        if (!isNaN(num) && num > 0) result.page = num - 1; // 0-indexed
+    }
+
+    return result;
+}
+
 async function importHandwritingPngFiles() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/png';
+    input.accept = 'image/png,image/jpeg';
     input.multiple = true;
     input.onchange = async () => {
         const files = Array.from(input.files || []);
         if (!files.length) return;
-        pushHandwritingHistory();
-        for (let i = 0; i < files.length; i++) {
-            const dataUrl = await readFileAsDataUrl(files[i]);
-            const page = getHandwritingPage(currentPage + i);
-            page.images.push({
-                id: `${Date.now()}-${i}`,
-                dataUrl,
-                x: 0,
-                y: 0,
-                w: handwritingCanvas?.width || Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4),
-                h: handwritingCanvas?.height || Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
-            });
+
+        let importedCount = 0;
+        const importResults = [];
+
+        for (const file of files) {
+            const parsed = parseHandwritingFilename(file.name);
+            const targetSheet = parsed.sheet ?? (typeof currentSheetIndex !== 'undefined' ? currentSheetIndex : 0);
+            const targetPage = parsed.page ?? currentPage;
+
+            const dataUrl = await readFileAsDataUrl(file);
+
+            // シートデータに直接追加
+            if (typeof sheets !== 'undefined' && sheets[targetSheet]) {
+                if (!sheets[targetSheet].handwritingPages) sheets[targetSheet].handwritingPages = {};
+                const key = getHandwritingPageKey(targetPage);
+                if (!sheets[targetSheet].handwritingPages[key]) {
+                    sheets[targetSheet].handwritingPages[key] = { strokes: [], images: [] };
+                }
+                sheets[targetSheet].handwritingPages[key].images.push({
+                    id: `import-${Date.now()}-${importedCount}`,
+                    dataUrl,
+                    x: 0,
+                    y: 0,
+                    w: Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4),
+                    h: Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
+                });
+                importResults.push({ file: file.name, sheet: targetSheet + 1, page: targetPage + 1 });
+                importedCount++;
+            } else {
+                // sheetsがない場合は現在のページに追加
+                pushHandwritingHistory();
+                const page = getHandwritingPage(targetPage);
+                page.images.push({
+                    id: `import-${Date.now()}-${importedCount}`,
+                    dataUrl,
+                    x: 0,
+                    y: 0,
+                    w: handwritingCanvas?.width || Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4),
+                    h: handwritingCanvas?.height || Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
+                });
+                importResults.push({ file: file.name, sheet: 1, page: targetPage + 1 });
+                importedCount++;
+            }
         }
-        renderHandwritingLayer();
-        drawHandwritingUi();
+
+        // 現在のシートの手書きデータを再読み込み
+        if (typeof sheets !== 'undefined' && typeof currentSheetIndex !== 'undefined' && sheets[currentSheetIndex]) {
+            importHandwritingData(sheets[currentSheetIndex].handwritingPages || {});
+        } else {
+            renderHandwritingLayer();
+            drawHandwritingUi();
+        }
+
         markHandwritingDirty();
+
+        // 結果を通知
+        if (importedCount > 0) {
+            const autoAssigned = importResults.filter(r => r.sheet > 1 || r.page > 1).length;
+            let msg = `${importedCount}件の画像を読み込みました`;
+            if (autoAssigned > 0) msg += `（${autoAssigned}件を自動振り分け）`;
+            showToast && showToast(msg);
+        }
     };
     input.click();
 }

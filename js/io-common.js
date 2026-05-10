@@ -1,15 +1,27 @@
 // === Import / Export 共通ユーティリティ ===
 
 // ----- トースト通知 -----
-function showToast(message, duration = 3000) {
+// onClick が指定された場合、クリック可能なトーストになる
+function showToast(message, duration = 3000, onClick = null) {
     let toast = document.getElementById('app-toast');
     if (!toast) {
         toast = document.createElement('div');
         toast.id = 'app-toast';
-        toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--accent,#2196f3);color:#fff;padding:10px 20px;border-radius:6px;z-index:10000;opacity:0;transition:opacity 0.3s;pointer-events:none;font-size:14px;';
         document.body.appendChild(toast);
     }
     toast.textContent = message;
+    toast.style.cssText = `
+        position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+        background:var(--accent,#2196f3);color:#fff;padding:10px 20px;
+        border-radius:6px;z-index:10000;opacity:0;transition:opacity 0.3s;
+        font-size:14px;
+        ${onClick ? 'pointer-events:auto;cursor:pointer;' : 'pointer-events:none;'}
+    `;
+    toast.onclick = onClick ? () => {
+        toast.style.opacity = '0';
+        clearTimeout(toast._hideTimer);
+        onClick();
+    } : null;
     toast.style.opacity = '1';
     clearTimeout(toast._hideTimer);
     toast._hideTimer = setTimeout(() => { toast.style.opacity = '0'; }, duration);

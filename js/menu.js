@@ -113,6 +113,8 @@ const menuActions = {
     'file.export.png': () => exportTemplateImage('png'),
     'file.export.jpg': () => exportTemplateImage('jpg'),
     'file.export.psd': () => exportTemplateImage('psd'),
+    'file.handwriting.import': () => { if (typeof importHandwritingPngFiles === 'function') importHandwritingPngFiles(); },
+    'file.handwriting.export': () => { if (typeof exportHandwritingPngPages === 'function') exportHandwritingPngPages(); },
     'file.settings.export': () => exportSettingsJSON(),
     'file.settings.import': () => importSettingsJSON(),
 
