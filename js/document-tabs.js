@@ -183,13 +183,16 @@ function resetWorkspaceToBlankDocument() {
 }
 
 function createNewBlankDocumentTab() {
-    initDocumentTabs();
-    saveActiveDocumentTabState();
+    // 既存のアクティブタブがあれば保存
+    if (activeDocumentTabId) saveActiveDocumentTabState();
     const id = `doc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const tab = { id, title: '未保存', fileName: '', fileFormat: null, fileHandle: null, directoryHandle: null, dirty: false, snapshot: null };
     documentTabs.push(tab);
     activeDocumentTabId = id;
     resetWorkspaceToBlankDocument();
+    // 新規タブは必ずclean状態
+    tab.dirty = false;
+    if (typeof markClean === 'function') markClean();
     captureDocumentTabState(tab);
     renderDocumentTabs();
 }
@@ -198,8 +201,10 @@ function closeDocumentTab(id) {
     const tab = documentTabs.find(item => item.id === id);
     if (!tab) return;
     // アクティブタブの場合、グローバルのisDirtyを直接チェック
-    const isCurrentlyDirty = (id === activeDocumentTabId) ? isDirty : tab.dirty;
-    if (isCurrentlyDirty && !confirm(`「${tab.title || tab.fileName || '未保存'}」には未保存の変更があります。閉じますか？`)) return;
+    if (id === activeDocumentTabId && typeof isDirty !== 'undefined') {
+        tab.dirty = isDirty;
+    }
+    if (tab.dirty && !confirm(`「${tab.title || tab.fileName || '未保存'}」には未保存の変更があります。閉じますか？`)) return;
     const index = documentTabs.indexOf(tab);
     documentTabs.splice(index, 1);
     if (documentTabs.length === 0) {
@@ -249,12 +254,11 @@ function renderDocumentTabs() {
         close.className = 'document-tab-close';
         close.textContent = '×';
         close.title = '閉じる';
-        close.addEventListener('click', ev => {
+        close.onclick = function(ev) {
             ev.preventDefault();
             ev.stopPropagation();
-            ev.stopImmediatePropagation();
             closeDocumentTab(tab.id);
-        });
+        };
         item.appendChild(close);
         item.addEventListener('dragstart', ev => {
             draggedDocumentTabId = tab.id;
