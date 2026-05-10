@@ -198,7 +198,12 @@ function parseTDTSToRaw(text, opts) {
 
     // 互換: 最初のシートを top-level に展開
     const first = allSheets[0];
-    return Object.assign({}, first, { sheets: allSheets });
+    const result = Object.assign({}, first, { sheets: allSheets });
+    // 手書きデータ有無フラグを伝搬（_webEditor.hasHandwriting）
+    if (imported._webEditor && imported._webEditor.hasHandwriting) {
+        result._hasHandwriting = true;
+    }
+    return result;
 }
 
 // fileInput change: 自動判定 → ダイアログ → 適用
@@ -268,6 +273,10 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
             metaTextArea.style.display = 'none'; bookInput.style.display = 'none';
             updateSectionPositions(); drawAll();
             if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
+            // 手書きデータ有無の通知（ファイル単体では自動読み込み不可）
+            if (raw._hasHandwriting) {
+                showToast && showToast('このファイルには手書きデータがあります。「フォルダから開く」で自動読み込みできます。', 5000);
+            }
         } catch (err) {
             console.error(err);
             alert("読み込みエラー: " + (err.message || "ファイルが破損している可能性があります。"));
@@ -775,10 +784,22 @@ window.exportTDTS = async function(arg) {
         ? exportAllSheetsData()
         : [{ name: metaData.sheetName, color: 0, metaData, cellData, booksData, customRepeats, dialogueBlocks, cameraBlocks, sections }];
 
+    // 手書きデータの有無を事前チェック
+    const hasHandwritingData = allSheetData.some(sheet => {
+        const pages = sheet.handwritingPages || {};
+        return Object.values(pages).some(page =>
+            (page.strokes && page.strokes.length) || (page.images && page.images.length)
+        );
+    });
+
     const tdts = {
         "version": 11,
         "timeSheets": _buildTDTSTimeSheets(allSheetData, checks)
     };
+    // 手書きデータがある場合、カスタムフィールドに記録（本家は無視する）
+    if (hasHandwritingData) {
+        tdts._webEditor = { hasHandwriting: true };
+    }
     const fileContent = "toeiDigitalTimeSheet Save Data\n" + JSON.stringify(tdts, null, 4);
     // 別名保存時は現在のファイル名を優先
     const fileName = (saveAs && currentFileName)
@@ -786,12 +807,6 @@ window.exportTDTS = async function(arg) {
         : (typeof buildTimesheetSaveFilename === 'function')
             ? buildTimesheetSaveFilename('tdts')
             : `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.tdts`;
-    const hasHandwritingData = allSheetData.some(sheet => {
-        const pages = sheet.handwritingPages || {};
-        return Object.values(pages).some(page =>
-            (page.strokes && page.strokes.length) || (page.images && page.images.length)
-        );
-    });
     try {
         if (directoryWorkflow && window.showDirectoryPicker) {
             const directoryHandle = await window.showDirectoryPicker();
