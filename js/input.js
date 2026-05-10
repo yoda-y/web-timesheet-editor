@@ -260,8 +260,7 @@ function clampSelectionMoveTarget(startL, startF, size) {
 function canStartSelectionMove(cell) {
     const bounds = getSelectionBounds();
     if (!bounds) return false;
-    const size = getBoundsSize(bounds);
-    if (size.wL === 1 && size.hF === 1) return false;
+    // 単一セルでも移動可能
     return isCellInBounds(cell, bounds);
 }
 

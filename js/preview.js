@@ -321,8 +321,9 @@ function handlePreviewSharedCutHit(e) {
     return false;
 }
 
-// マウス移動（パン中）
+// マウス移動（パン中 & マウス位置追跡）
 function handlePreviewMouseMove(e) {
+    updatePreviewMousePosition(e);
     if (!previewIsDragging) return;
     const dx = e.clientX - previewDragStartX;
     const dy = e.clientY - previewDragStartY;
@@ -365,9 +366,37 @@ function resetPreviewZoom() {
     updateTemplatePreview();
 }
 
-// プレビューズームイン/アウト
-function previewZoomIn() { previewZoom = Math.min(5, previewZoom * 1.2); applyPreviewTransform(); schedulePreviewViewSave(); }
-function previewZoomOut() { previewZoom = Math.max(0.25, previewZoom / 1.2); applyPreviewTransform(); schedulePreviewViewSave(); }
+// マウス位置追跡（ショートカットズーム用）
+let lastPreviewMouseX = 0;
+let lastPreviewMouseY = 0;
+
+// プレビューズームイン/アウト（マウス位置を起点）
+function previewZoomIn() {
+    const newZoom = Math.min(5, previewZoom * 1.2);
+    adjustZoomAroundMouse(newZoom);
+}
+function previewZoomOut() {
+    const newZoom = Math.max(0.25, previewZoom / 1.2);
+    adjustZoomAroundMouse(newZoom);
+}
+function adjustZoomAroundMouse(newZoom) {
+    if (!previewContainer) return;
+    const rect = previewContainer.getBoundingClientRect();
+    // マウス位置が有効ならマウス起点、なければ画面中央
+    let pivotX = lastPreviewMouseX || rect.width / 2;
+    let pivotY = lastPreviewMouseY || rect.height / 2;
+    previewPanX = pivotX - (pivotX - previewPanX) * (newZoom / previewZoom);
+    previewPanY = pivotY - (pivotY - previewPanY) * (newZoom / previewZoom);
+    previewZoom = newZoom;
+    applyPreviewTransform();
+    schedulePreviewViewSave();
+}
+function updatePreviewMousePosition(e) {
+    if (!previewContainer) return;
+    const rect = previewContainer.getBoundingClientRect();
+    lastPreviewMouseX = e.clientX - rect.left;
+    lastPreviewMouseY = e.clientY - rect.top;
+}
 
 // テンプレートプレビュー更新（固定高解像度）
 function updateTemplatePreview() {

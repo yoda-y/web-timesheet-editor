@@ -296,9 +296,12 @@ window.exportXDTS = async function(arg) {
     };
 
     const fileContent = "exchangeDigitalTimeSheet Save Data\n" + JSON.stringify(xdts, null, 4);
-    const fileName = (typeof buildTimesheetSaveFilename === 'function')
-        ? buildTimesheetSaveFilename('xdts')
-        : `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.xdts`;
+    // 別名保存時は現在のファイル名を優先
+    const fileName = (saveAs && currentFileName)
+        ? currentFileName.replace(/\.(tdts|xdts)$/i, '') + '.xdts'
+        : (typeof buildTimesheetSaveFilename === 'function')
+            ? buildTimesheetSaveFilename('xdts')
+            : `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.xdts`;
     try {
         await saveFileWithPicker('xdts', fileName, fileContent, {
             description: 'exchange Digital Time Sheet',

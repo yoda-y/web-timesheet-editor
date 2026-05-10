@@ -202,6 +202,19 @@ function parseTDTSToRaw(text, opts) {
 }
 
 // fileInput change: 自動判定 → ダイアログ → 適用
+// XDTSからカット番号を簡易取得
+function extractXdtsCut(text) {
+    try {
+        const prefix1 = "exchangeDigitalTimeSheet Save Data\n";
+        const prefix2 = "exchangeDigitalTimeSheet Save Data\r\n";
+        let jsonText = text;
+        if (text.startsWith(prefix1)) jsonText = text.substring(prefix1.length);
+        else if (text.startsWith(prefix2)) jsonText = text.substring(prefix2.length);
+        const data = JSON.parse(jsonText);
+        return data.header?.cut || data.timeTables?.[0]?.name || '';
+    } catch (e) { return ''; }
+}
+
 document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -212,16 +225,26 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
             const fmt = detectFileFormat(text);
             if (!fmt) { alert("読み込みエラー: 対応していないファイル形式です。"); return; }
             const fileName = file.name;
+            // XDTSの場合: カット番号を事前取得
+            const defaultCut = (fmt === 'xdts') ? extractXdtsCut(text) : '';
             const opts = await openIOModal({
                 title: `インポート: ${fileName}`,
                 mode: 'import',
                 format: fmt,
-                source: 'file'
+                source: 'file',
+                defaultCut
             });
             if (!opts) return; // キャンセル
             let raw;
             if (fmt === 'tdts') raw = parseTDTSToRaw(text, { stroboMerge: opts.checks.stroboMerge });
-            else raw = parseXDTSToRaw(text, { cellTarget: opts.xdtsCellTarget });
+            else {
+                raw = parseXDTSToRaw(text, { cellTarget: opts.xdtsCellTarget });
+                // XDTSの場合: xdtsCellTargetに基づいてACTION/CELLチェックを設定
+                opts.checks.action = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'action');
+                opts.checks.cell = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'cell');
+                // ユーザーが入力したカット番号を反映
+                if (opts.xdtsCut && raw.meta) raw.meta.cut = opts.xdtsCut;
+            }
             if (!raw) { alert("読み込みエラー: ファイル構造が無効です。"); return; }
             if (opts.merge === 'new' && typeof createDocumentTabForIncomingDocument === 'function') {
                 createDocumentTabForIncomingDocument(fileName, fmt, null, null);
@@ -283,16 +306,27 @@ async function openTimesheetFromFolder() {
             alert('対応していないファイル形式です。');
             return;
         }
+        // XDTSの場合: カット番号を事前取得
+        const defaultCut = (fmt === 'xdts') ? extractXdtsCut(text) : '';
         const opts = await openIOModal({
             title: `読み込み: ${selected.name}`,
             mode: 'import',
             format: fmt,
-            source: 'folder'
+            source: 'folder',
+            defaultCut
         });
         if (!opts) return;
-        const raw = fmt === 'tdts'
-            ? parseTDTSToRaw(text, { stroboMerge: opts.checks.stroboMerge })
-            : parseXDTSToRaw(text, { cellTarget: opts.xdtsCellTarget });
+        let raw;
+        if (fmt === 'tdts') {
+            raw = parseTDTSToRaw(text, { stroboMerge: opts.checks.stroboMerge });
+        } else {
+            raw = parseXDTSToRaw(text, { cellTarget: opts.xdtsCellTarget });
+            // XDTSの場合: xdtsCellTargetに基づいてACTION/CELLチェックを設定
+            opts.checks.action = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'action');
+            opts.checks.cell = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'cell');
+            // ユーザーが入力したカット番号を反映
+            if (opts.xdtsCut && raw.meta) raw.meta.cut = opts.xdtsCut;
+        }
         if (!raw) {
             alert('ファイルを読み込めませんでした。');
             return;
@@ -308,8 +342,13 @@ async function openTimesheetFromFolder() {
         selectedDialogueId = null; selectedCameraId = null;
         cellInput.style.display = 'none'; metaInput.style.display = 'none';
         metaTextArea.style.display = 'none'; bookInput.style.display = 'none';
-        if (fmt === 'tdts' && opts.merge === 'new' && typeof importHandwritingBundleFromDirectory === 'function') {
-            await importHandwritingBundleFromDirectory(directoryHandle, selected.name);
+        // 手書きデータ自動読み込み（フォルダ内に同名フォルダ+handwriting.iniがあれば）
+        if (typeof importHandwritingBundleFromDirectory === 'function') {
+            const hwCount = await importHandwritingBundleFromDirectory(directoryHandle, selected.name);
+            if (hwCount > 0) {
+                console.log(`手書きデータを自動読み込み: ${hwCount}件`);
+                showToast && showToast(`手書きデータを自動読み込みしました (${hwCount}件)`);
+            }
         }
         currentFileHandle = selected.handle;
         currentFileFormat = fmt;
@@ -741,9 +780,12 @@ window.exportTDTS = async function(arg) {
         "timeSheets": _buildTDTSTimeSheets(allSheetData, checks)
     };
     const fileContent = "toeiDigitalTimeSheet Save Data\n" + JSON.stringify(tdts, null, 4);
-    const fileName = (typeof buildTimesheetSaveFilename === 'function')
-        ? buildTimesheetSaveFilename('tdts')
-        : `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.tdts`;
+    // 別名保存時は現在のファイル名を優先
+    const fileName = (saveAs && currentFileName)
+        ? currentFileName.replace(/\.(tdts|xdts)$/i, '') + '.tdts'
+        : (typeof buildTimesheetSaveFilename === 'function')
+            ? buildTimesheetSaveFilename('tdts')
+            : `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.tdts`;
     const hasHandwritingData = allSheetData.some(sheet => {
         const pages = sheet.handwritingPages || {};
         return Object.values(pages).some(page =>
@@ -775,12 +817,33 @@ window.exportTDTS = async function(arg) {
             if (typeof markClean === 'function') markClean();
             return;
         }
-        await saveFileWithPicker('tdts', fileName, fileContent, {
+        const savedHandle = await saveFileWithPicker('tdts', fileName, fileContent, {
             description: 'Toei Digital Time Sheet',
             types: { 'application/octet-stream': ['.tdts'] }
         }, { saveAs });
-        if (directoryWorkflow && hasHandwritingData && !window.showDirectoryPicker) {
-            alert("TDTSは保存しましたが、このブラウザでは手書きPNG/INIの自動保存を使用できません。必要に応じてサイドバーの手書きPNG保存を使用してください。");
+        // 手書きも保存（対応ブラウザのみ）
+        if (savedHandle && hasHandwritingData && typeof exportHandwritingBundleToDirectory === 'function') {
+            if (currentDirectoryHandle) {
+                // 上書き保存 or 既にディレクトリがある場合: 自動保存
+                try {
+                    await exportHandwritingBundleToDirectory(currentDirectoryHandle, savedHandle.name || fileName, allSheetData, 150);
+                } catch (handwritingErr) {
+                    console.warn('handwriting auto-save failed', handwritingErr);
+                }
+            } else if (saveAs && window.showDirectoryPicker) {
+                // 別名保存でディレクトリ未設定: フォルダ選択を促す
+                try {
+                    const parentDir = await window.showDirectoryPicker({ mode: 'readwrite', startIn: savedHandle });
+                    if (parentDir) {
+                        await exportHandwritingBundleToDirectory(parentDir, savedHandle.name || fileName, allSheetData, 150);
+                        currentDirectoryHandle = parentDir;
+                    }
+                } catch (handwritingErr) {
+                    if (handwritingErr.name !== 'AbortError') {
+                        console.warn('handwriting save failed', handwritingErr);
+                    }
+                }
+            }
         }
         if (typeof markClean === 'function') markClean();
     } catch (err) { if (err.name !== 'AbortError') alert("保存に失敗しました。"); }
