@@ -70,7 +70,7 @@ const DEFAULT_SETTINGS = {
         'preview.tool.eraser':  { main: 'E',            sub: '' },
         'preview.tool.rect':    { main: 'M',            sub: '' },
         'preview.tool.lasso':   { main: 'L',            sub: '' },
-        'preview.tool.transform': { main: 'Ctrl+T',     sub: '' },
+        'preview.tool.transform': { main: 'T',          sub: '' },
         'preview.tool.hand':    { main: 'H',            sub: '' },
         'preview.temporaryHand': { main: 'Space',        sub: '' },
         'preview.undo':          { main: 'Ctrl+Z',       sub: '' },

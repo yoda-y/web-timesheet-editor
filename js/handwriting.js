@@ -270,19 +270,32 @@ function handleHandwritingPointerDown(e) {
         return;
     }
 
-    if (tool === 'pen' || tool === 'eraser') {
+    if (tool === 'pen') {
         handwritingDrag = {
-            type: tool,
+            type: 'pen',
             stroke: {
                 id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-                tool,
+                tool: 'pen',
                 color: getHandwritingColor(),
-                width: getDrawingSizePx(tool),
+                width: getDrawingSizePx('pen'),
                 points: [pt]
             },
             start: pt,
-            straight: tool === 'pen' && e.shiftKey
+            straight: e.shiftKey
         };
+        e.preventDefault();
+        return;
+    }
+
+    if (tool === 'eraser') {
+        pushHandwritingHistory();
+        handwritingDrag = {
+            type: 'eraser',
+            stroke: { width: getDrawingSizePx('eraser'), points: [pt] },
+            start: pt
+        };
+        eraseStrokesAtPoint(pt, handwritingDrag.stroke.width);
+        renderHandwritingLayer();
         e.preventDefault();
         return;
     }
@@ -349,8 +362,8 @@ function handleHandwritingPointerMove(e) {
     if (!handwritingDrag) return;
     const pt = previewClientToCanvasPoint(e);
 
-    if (handwritingDrag.type === 'pen' || handwritingDrag.type === 'eraser') {
-        if (handwritingDrag.type === 'pen' && e.shiftKey) {
+    if (handwritingDrag.type === 'pen') {
+        if (e.shiftKey) {
             handwritingDrag.straight = true;
             handwritingDrag.stroke.points = [handwritingDrag.start, pt];
         } else {
@@ -358,6 +371,13 @@ function handleHandwritingPointerMove(e) {
         }
         renderHandwritingLayer();
         drawStroke(handwritingCtx, handwritingDrag.stroke);
+        return;
+    }
+
+    if (handwritingDrag.type === 'eraser') {
+        handwritingDrag.stroke.points.push(pt);
+        eraseStrokesAtPoint(pt, handwritingDrag.stroke.width);
+        renderHandwritingLayer();
         return;
     }
 
@@ -397,12 +417,18 @@ function handleHandwritingPointerUp(e) {
     if (!handwritingDrag) return;
 
     const page = getHandwritingPage();
-    if (handwritingDrag.type === 'pen' || handwritingDrag.type === 'eraser') {
+    if (handwritingDrag.type === 'pen') {
         if (handwritingDrag.stroke.points.length > 1) {
             pushHandwritingHistory();
             page.strokes.push(handwritingDrag.stroke);
             markHandwritingDirty();
         }
+        handwritingDrag = null;
+        renderHandwritingLayer();
+        return;
+    }
+    if (handwritingDrag.type === 'eraser') {
+        // 消しゴムは保存せず、触れたストロークを削除済み
         handwritingDrag = null;
         renderHandwritingLayer();
         return;
@@ -448,19 +474,47 @@ function drawHandwritingImageElement(ctx, img, imageData) {
     ctx.restore();
 }
 
+function eraseStrokesAtPoint(pt, eraserWidth) {
+    const page = getHandwritingPage();
+    const radius = eraserWidth / 2;
+    let changed = false;
+    const newStrokes = [];
+    for (const stroke of page.strokes) {
+        if (stroke.tool === 'eraser') { changed = true; continue; }
+        const threshold = (radius + stroke.width / 2) ** 2;
+        let segment = [];
+        for (const p of stroke.points) {
+            const dx = p.x - pt.x, dy = p.y - pt.y;
+            if (dx * dx + dy * dy <= threshold) {
+                if (segment.length >= 2) {
+                    newStrokes.push({ ...stroke, id: `${stroke.id}-${newStrokes.length}`, points: segment });
+                }
+                segment = [];
+                changed = true;
+            } else {
+                segment.push(p);
+            }
+        }
+        if (segment.length >= 2) {
+            newStrokes.push(segment === stroke.points ? stroke : { ...stroke, id: `${stroke.id}-${newStrokes.length}`, points: segment });
+        } else if (segment.length > 0) {
+            changed = true;
+        }
+    }
+    if (changed) {
+        page.strokes = newStrokes;
+        markHandwritingDirty();
+    }
+}
+
 function drawStroke(ctx, stroke) {
-    if (!stroke.points || stroke.points.length < 2) return;
+    if (!stroke.points || stroke.points.length < 2 || stroke.tool === 'eraser') return;
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = stroke.width;
-    if (stroke.tool === 'eraser') {
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.strokeStyle = 'rgba(0,0,0,1)';
-    } else {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.strokeStyle = stroke.color || '#000000';
-    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = stroke.color || '#000000';
     ctx.beginPath();
     ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
     for (let i = 1; i < stroke.points.length; i++) {
