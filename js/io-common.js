@@ -512,3 +512,175 @@ function applyImportData(raw, checks, mode) {
     if (checks.sound && typeof window.normalizeAllDialogueBlockCells === 'function') window.normalizeAllDialogueBlockCells();
     if (checks.camera && typeof window.normalizeAllCameraBlockCells === 'function') window.normalizeAllCameraBlockCells();
 }
+
+// === ドラッグ&ドロップ対応 ===
+(function initDragAndDrop() {
+    let dragOverlay = null;
+
+    function createDragOverlay() {
+        if (dragOverlay) return dragOverlay;
+        dragOverlay = document.createElement('div');
+        dragOverlay.id = 'drag-overlay';
+        dragOverlay.style.cssText = `
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(33, 150, 243, 0.15);
+            border: 4px dashed #2196f3;
+            z-index: 99999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #2196f3;
+            pointer-events: none;
+        `;
+        dragOverlay.innerHTML = '<div style="background:#fff;padding:20px 40px;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">ファイルをドロップして読み込み</div>';
+        document.body.appendChild(dragOverlay);
+        return dragOverlay;
+    }
+
+    function showDragOverlay() {
+        createDragOverlay();
+        dragOverlay.style.display = 'flex';
+    }
+
+    function hideDragOverlay() {
+        if (dragOverlay) dragOverlay.style.display = 'none';
+    }
+
+    function isValidFile(file) {
+        const name = file.name.toLowerCase();
+        return name.endsWith('.tdts') || name.endsWith('.xdts') || name.endsWith('.json');
+    }
+
+    function isImageFile(file) {
+        return file.type.startsWith('image/');
+    }
+
+    async function handleDroppedFile(file) {
+        const text = await file.text();
+        const fmt = typeof detectFileFormat === 'function' ? detectFileFormat(text) : null;
+        if (!fmt) {
+            alert('対応していないファイル形式です。');
+            return;
+        }
+
+        const defaultCut = (fmt === 'xdts' && typeof extractXdtsCut === 'function') ? extractXdtsCut(text) : '';
+        const opts = await openIOModal({
+            title: `インポート: ${file.name}`,
+            mode: 'import',
+            format: fmt,
+            source: 'file',
+            defaultCut
+        });
+        if (!opts) return;
+
+        let raw;
+        if (fmt === 'tdts') {
+            raw = typeof parseTDTSToRaw === 'function' ? parseTDTSToRaw(text, { stroboMerge: opts.checks.stroboMerge }) : null;
+        } else {
+            raw = typeof parseXDTSToRaw === 'function' ? parseXDTSToRaw(text, { cellTarget: opts.xdtsCellTarget }) : null;
+            if (raw) {
+                opts.checks.action = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'action');
+                opts.checks.cell = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'cell');
+                if (opts.xdtsCut && raw.meta) raw.meta.cut = opts.xdtsCut;
+            }
+        }
+
+        if (!raw) {
+            alert('ファイルを読み込めませんでした。');
+            return;
+        }
+
+        if (opts.merge === 'new' && typeof createDocumentTabForIncomingDocument === 'function') {
+            createDocumentTabForIncomingDocument(file.name, fmt, null, null);
+        } else if (typeof pushHistory === 'function') {
+            pushHistory();
+        }
+
+        applyImportData(raw, opts.checks, opts.merge);
+        currentFileHandle = null;
+        currentDirectoryHandle = null;
+        if (typeof setCurrentFileName === 'function') setCurrentFileName(file.name, fmt);
+        if (typeof syncActiveDocumentTabAfterLoad === 'function') syncActiveDocumentTabAfterLoad(file.name, fmt, null, null);
+        if (opts.merge === 'new' && typeof markClean === 'function') markClean();
+
+        redoStack = [];
+        selectionStart = null; selectionEnd = null; selectedMeta = null;
+        if (typeof updateSectionPositions === 'function') updateSectionPositions();
+        if (typeof drawAll === 'function') drawAll();
+        if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
+
+        if (raw._hasHandwriting) {
+            showToast('このファイルには手書きデータがあります。「フォルダから開く」で自動読み込みできます。', 5000);
+        } else {
+            showToast(`${file.name} を読み込みました`);
+        }
+    }
+
+    async function handleDroppedImage(file) {
+        if (typeof currentMode === 'undefined' || currentMode !== 'preview') {
+            showToast('画像は プレビューモード でドロップしてください');
+            return;
+        }
+        if (typeof getHandwritingPage !== 'function' || typeof renderHandwritingLayer !== 'function') {
+            showToast('手書きレイヤーが利用できません');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const page = getHandwritingPage();
+            if (!page.images) page.images = [];
+            page.images.push({
+                id: `drop-${Date.now()}`,
+                dataUrl: reader.result,
+                x: 0,
+                y: 0,
+                w: null,
+                h: null
+            });
+            renderHandwritingLayer();
+            if (typeof drawHandwritingUi === 'function') drawHandwritingUi();
+            if (typeof markDirty === 'function') markDirty();
+            showToast(`画像を手書きレイヤーに追加しました`);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    let dragCounter = 0;
+
+    document.addEventListener('dragenter', e => {
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) showDragOverlay();
+    });
+
+    document.addEventListener('dragleave', e => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter === 0) hideDragOverlay();
+    });
+
+    document.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    });
+
+    document.addEventListener('drop', async e => {
+        e.preventDefault();
+        dragCounter = 0;
+        hideDragOverlay();
+
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length === 0) return;
+
+        for (const file of files) {
+            if (isValidFile(file)) {
+                await handleDroppedFile(file);
+                break; // 1ファイルのみ処理
+            } else if (isImageFile(file)) {
+                await handleDroppedImage(file);
+            }
+        }
+    });
+})();

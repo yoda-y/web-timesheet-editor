@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Icon Generator</title>
+</head>
+<body>
+  <h1>PWA Icon Generator</h1>
+  <p>Click buttons to download icons:</p>
+  <button onclick="generateIcon(192)">Download 192x192</button>
+  <button onclick="generateIcon(512)">Download 512x512</button>
+  <canvas id="canvas" style="display:none;"></canvas>
+  <script>
+    async function generateIcon(size) {
+      const canvas = document.getElementById('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      // Background
+      ctx.fillStyle = '#2196f3';
+      roundRect(ctx, 0, 0, size, size, size * 0.125);
+      ctx.fill();
+
+      // White paper
+      ctx.fillStyle = '#fff';
+      roundRect(ctx, size*0.125, size*0.156, size*0.75, size*0.688, size*0.03);
+      ctx.fill();
+
+      // Header line
+      ctx.strokeStyle = '#2196f3';
+      ctx.lineWidth = size * 0.008;
+      ctx.beginPath();
+      ctx.moveTo(size*0.125, size*0.273);
+      ctx.lineTo(size*0.875, size*0.273);
+      ctx.stroke();
+
+      // Grid lines
+      ctx.strokeStyle = '#e0e0e0';
+      ctx.lineWidth = size * 0.004;
+      for (let y of [0.39, 0.508, 0.625, 0.742]) {
+        ctx.beginPath();
+        ctx.moveTo(size*0.125, size*y);
+        ctx.lineTo(size*0.875, size*y);
+        ctx.stroke();
+      }
+      for (let x of [0.313, 0.5, 0.688]) {
+        ctx.beginPath();
+        ctx.moveTo(size*x, size*0.156);
+        ctx.lineTo(size*x, size*0.844);
+        ctx.stroke();
+      }
+
+      // Text
+      ctx.fillStyle = '#2196f3';
+      ctx.font = `bold ${size*0.07}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText('TS', size*0.5, size*0.234);
+
+      // Download
+      const link = document.createElement('a');
+      link.download = `icon-${size}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+  </script>
+</body>
+</html>
