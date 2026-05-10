@@ -774,6 +774,8 @@
     </div>
   </div>
   <div class="menu-sep"></div>
+  <div class="menu-row" data-action="settings.tabletMode" id="menu-tablet-mode">タブレットモード</div>
+  <div class="menu-sep"></div>
   <div class="menu-row" data-action="help.about" data-i18n="help.about">バージョン情報</div>
 </div>
 
@@ -992,5 +994,28 @@
 <script src="js/psd-export.js"></script>
 <script src="js/menu.js"></script>
 <script src="js/main.js"></script>
+
+<!-- Undo/Redoボタン（タブレット用・プレビューモード） -->
+<div id="undo-redo-float" class="undo-redo-float tablet-draggable" style="display:none;">
+  <div class="drag-handle">☰</div>
+  <button id="float-undo" title="Undo">⟲</button>
+  <button id="float-redo" title="Redo">⟳</button>
+</div>
+
+<!-- 数字パッド（タブレット用） -->
+<div id="numpad-panel" class="numpad-panel tablet-draggable" style="display:none;">
+  <div class="numpad-header drag-handle" id="numpad-header">
+    <span>☰ 入力パッド</span>
+    <button id="numpad-close" title="閉じる">×</button>
+  </div>
+  <div class="numpad-grid">
+    <button data-val="●" class="symbol">●</button><button data-val="○" class="symbol">○</button><button data-val="×" class="symbol">×</button>
+    <button data-val="7">7</button><button data-val="8">8</button><button data-val="9">9</button>
+    <button data-val="4">4</button><button data-val="5">5</button><button data-val="6">6</button>
+    <button data-val="1">1</button><button data-val="2">2</button><button data-val="3">3</button>
+    <button data-val="0" class="wide">0</button><button data-action="backspace">⌫</button>
+    <button data-action="enter" class="enter-btn">Enter</button>
+  </div>
+</div>
 </body>
 </html>

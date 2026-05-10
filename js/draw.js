@@ -501,6 +501,25 @@ function drawGrid() {
         ctx.fillStyle = getStyle('--select-bg');
         ctx.fillRect(selectionStart.x, frameY(selectionStart.frame), selectionStart.w, rowHeight);
         if (selectionMoveInfo) drawSelectionMoveGhost(ctx, minX, minF);
+
+        // タブレットモード: 選択ハンドル描画
+        if (typeof isTabletMode === 'function' && isTabletMode() && !selectionMoveInfo) {
+            const handleSize = 14;
+            const handleX = maxX;
+            const handleY = frameY(maxF + 1);
+            ctx.fillStyle = getStyle('--select-border');
+            ctx.beginPath();
+            ctx.arc(handleX, handleY, handleSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(handleX, handleY, handleSize / 2 - 3, 0, Math.PI * 2);
+            ctx.fill();
+            // ハンドル位置を保存（タッチ判定用）
+            window._selectionHandle = { x: handleX, y: handleY, size: handleSize };
+        }
+    } else {
+        window._selectionHandle = null;
     }
 }
 

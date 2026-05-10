@@ -196,6 +196,9 @@ const menuActions = {
     // 言語切替
     'help.lang.ja': () => setLang('ja'),
     'help.lang.en': () => setLang('en'),
+
+    // タブレットモード
+    'settings.tabletMode': () => toggleTabletMode(),
 };
 
 window.runMenuAction = function(actionId) {
@@ -396,6 +399,13 @@ function setMode(mode) {
     refreshDrawingSizeControls();
     // ページインジケーター更新
     if (typeof updatePageIndicator === 'function') updatePageIndicator();
+    // タブレットモードのパネル表示切替
+    if (typeof isTabletMode === 'function' && isTabletMode()) {
+        const numpad = document.getElementById('numpad-panel');
+        const undoRedo = document.getElementById('undo-redo-float');
+        if (numpad) numpad.style.display = (mode === 'edit') ? 'block' : 'none';
+        if (undoRedo) undoRedo.style.display = (mode === 'preview') ? 'flex' : 'none';
+    }
 }
 
 document.querySelectorAll('.mode-tab').forEach(tab => {

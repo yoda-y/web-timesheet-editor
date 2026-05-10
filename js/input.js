@@ -418,7 +418,7 @@ window.inputNextSequentialValue = inputNextSequentialValue;
 
 window.addEventListener('resize', () => { updateSectionPositions(); drawAll(); });
 
-document.getElementById('panel-header').addEventListener('mousedown', (e) => {
+document.getElementById('panel-header').addEventListener('pointerdown', (e) => {
     if (e.target.tagName === 'BUTTON' || e.target.id === 'panel-toggle-icon') return;
     isDraggingPanel = true; panelHasMoved = false;
     mouseStartX = e.clientX; mouseStartY = e.clientY;
@@ -429,6 +429,7 @@ document.getElementById('panel-header').addEventListener('mousedown', (e) => {
     panel.style.right = 'auto';
     panel.style.left = (panel.getBoundingClientRect().left - wrapper.getBoundingClientRect().left) + 'px';
     panel.style.top = (panel.getBoundingClientRect().top - wrapper.getBoundingClientRect().top) + 'px';
+    e.target.setPointerCapture(e.pointerId);
     e.preventDefault();
 });
 
@@ -700,6 +701,23 @@ document.getElementById('columnHeaderCanvas').addEventListener('mousedown', (e) 
     }
 });
 
+let isHandleDragging = false;
+
+// タブレットモード: ハンドルタッチ時のスクロール防止
+document.getElementById('gridCanvas').addEventListener('touchstart', (e) => {
+    if (typeof isTabletMode !== 'function' || !isTabletMode()) return;
+    if (!window._selectionHandle || !selectionStart) return;
+    const touch = e.touches[0];
+    const rect = e.target.getBoundingClientRect();
+    const zX = (touch.clientX - rect.left) / currentZoom;
+    const zY = (touch.clientY - rect.top) / currentZoom;
+    const h = window._selectionHandle;
+    const dist = Math.hypot(zX - h.x, zY - h.y);
+    if (dist <= h.size * 1.5) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
 document.getElementById('gridCanvas').addEventListener('mousedown', (e) => {
     if (e.button === 2) return;
     isGridPointerDown = true;
@@ -707,6 +725,18 @@ document.getElementById('gridCanvas').addEventListener('mousedown', (e) => {
     const rect = e.target.getBoundingClientRect();
     const zX = (e.clientX - rect.left) / currentZoom;
     const zY = (e.clientY - rect.top) / currentZoom;
+
+    // タブレットモード: 選択ハンドルの判定
+    if (typeof isTabletMode === 'function' && isTabletMode() && window._selectionHandle && selectionStart) {
+        const h = window._selectionHandle;
+        const dist = Math.hypot(zX - h.x, zY - h.y);
+        if (dist <= h.size) {
+            isHandleDragging = true;
+            isDragging = false;
+            e.preventDefault();
+            return;
+        }
+    }
     const fi = yToFrame(zY);
     const sec = sections.find(s => zX >= s.x && zX < s.x + (s.cols * s.cw));
     let hit = getDialogueHit(zX, zY);
@@ -745,7 +775,22 @@ document.getElementById('gridCanvas').addEventListener('mousedown', (e) => {
     }
 });
 
-window.addEventListener('mousemove', (e) => {
+window.addEventListener('pointermove', (e) => {
+    // タブレットモード: 選択ハンドルドラッグ
+    if (isHandleDragging && selectionStart) {
+        e.preventDefault();
+        const rect = document.getElementById('gridCanvas').getBoundingClientRect();
+        const zX = (e.clientX - rect.left) / currentZoom;
+        const zY = (e.clientY - rect.top) / currentZoom;
+        const fi = yToFrame(zY);
+        const sec = sections.find(s => zX >= s.x && zX < s.x + (s.cols * s.cw));
+        if (sec && fi >= 0 && fi < numFrames) {
+            const ci = Math.floor((zX - sec.x) / sec.cw);
+            selectionEnd = { frame: fi, colType: sec.type, colIndex: ci, x: sec.x + ci * sec.cw, w: sec.cw };
+            drawAll();
+        }
+        return;
+    }
     if (isDraggingPanel) {
         const dx = e.clientX - mouseStartX, dy = e.clientY - mouseStartY;
         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panelHasMoved = true;
@@ -840,8 +885,14 @@ window.addEventListener('mousemove', (e) => {
     }
 });
 
-window.addEventListener('mouseup', (e) => {
+window.addEventListener('pointerup', (e) => {
     isGridPointerDown = false;
+    // タブレットモード: 選択ハンドルドラッグ終了
+    if (isHandleDragging) {
+        isHandleDragging = false;
+        drawAll();
+        return;
+    }
     if (isDraggingPanel) { isDraggingPanel = false; if (!panelHasMoved) togglePanel(); return; }
     if (pendingSelectionMove && !pendingSelectionMove.active) {
         cancelPendingSelectionMove(true);
@@ -1278,3 +1329,116 @@ document.getElementById('canvas-wrapper').addEventListener('contextmenu', (e) =>
 });
 
 window.addEventListener('click', (e) => { if (contextMenu && e.target.closest('#context-menu') === null) contextMenu.style.display = 'none'; });
+
+// === 数字パッド（タブレット用） ===
+function initNumpad() {
+    const numpad = document.getElementById('numpad-panel');
+    const numpadHeader = document.getElementById('numpad-header');
+    const numpadClose = document.getElementById('numpad-close');
+    if (!numpad || !numpadHeader) return;
+
+    // 表示/非表示切替
+    window.toggleNumpad = function(show) {
+        if (typeof isTabletMode === 'function' && !isTabletMode()) return;
+        numpad.style.display = show ? 'block' : 'none';
+    };
+
+    // タッチでドラッグ
+    let dragOffsetX = 0, dragOffsetY = 0;
+    numpadHeader.addEventListener('touchstart', (e) => {
+        if (e.target === numpadClose) return;
+        const touch = e.touches[0];
+        const rect = numpad.getBoundingClientRect();
+        dragOffsetX = touch.clientX - rect.left;
+        dragOffsetY = touch.clientY - rect.top;
+        numpad.style.right = 'auto';
+        numpad.style.bottom = 'auto';
+        e.preventDefault();
+    }, { passive: false });
+    numpadHeader.addEventListener('touchmove', (e) => {
+        const touch = e.touches[0];
+        numpad.style.left = (touch.clientX - dragOffsetX) + 'px';
+        numpad.style.top = (touch.clientY - dragOffsetY) + 'px';
+        e.preventDefault();
+    }, { passive: false });
+
+    // 閉じるボタン
+    numpadClose.addEventListener('click', () => { numpad.style.display = 'none'; });
+    numpadClose.addEventListener('touchend', (e) => { e.preventDefault(); numpad.style.display = 'none'; });
+
+    // 数字・記号入力
+    function handleNumpadButton(btn) {
+        const val = btn.dataset.val;
+        const action = btn.dataset.action;
+        if (action === 'backspace') {
+            if (cellInput.style.display !== 'none') {
+                cellInput.value = cellInput.value.slice(0, -1);
+                cellInput.dispatchEvent(new Event('input'));
+            }
+        } else if (action === 'circle') {
+            if (cellInput.style.display !== 'none' && cellInput.value) {
+                cellInput.value = '○' + cellInput.value;
+                cellInput.dispatchEvent(new Event('input'));
+            }
+        } else if (action === 'square') {
+            if (cellInput.style.display !== 'none' && cellInput.value) {
+                cellInput.value = '□' + cellInput.value;
+                cellInput.dispatchEvent(new Event('input'));
+            }
+        } else if (action === 'enter') {
+            // Sound/Cameraセルならダイアログを開く
+            if (selectionStart && selectionStart.colType === 'SOUND') {
+                if (typeof saveInput === 'function') saveInput();
+                if (typeof window.openDialogueModal === 'function') window.openDialogueModal();
+                return;
+            }
+            if (selectionStart && selectionStart.colType === 'CAMERA') {
+                if (typeof saveInput === 'function') saveInput();
+                if (typeof window.openCameraModal === 'function') window.openCameraModal();
+                return;
+            }
+            // PC版Enterと同じ: 保存して下へ移動
+            if (typeof saveInput === 'function') saveInput();
+            if (typeof move === 'function') move(0, 1, false);
+        } else if (val) {
+            const isSymbol = ['●', '○', '×'].includes(val);
+            if (cellInput.style.display !== 'none') {
+                if (isSymbol) {
+                    cellInput.value = val;
+                    cellInputDirty = true;
+                    if (typeof saveInput === 'function') saveInput();
+                    if (typeof move === 'function') move(0, 1, false);
+                } else {
+                    cellInput.value += val;
+                    cellInput.dispatchEvent(new Event('input'));
+                }
+            } else if (selectionStart) {
+                focusCell();
+                cellInput.value = val;
+                if (isSymbol) {
+                    cellInputDirty = true;
+                    if (typeof saveInput === 'function') saveInput();
+                    if (typeof move === 'function') move(0, 1, false);
+                } else {
+                    cellInput.dispatchEvent(new Event('input'));
+                }
+            }
+        }
+    }
+    numpad.querySelectorAll('.numpad-grid button').forEach(btn => {
+        btn.addEventListener('click', () => handleNumpadButton(btn));
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); handleNumpadButton(btn); });
+    });
+
+    // 初期表示（タブレットモードの場合）
+    setTimeout(() => {
+        if (typeof isTabletMode === 'function' && isTabletMode() && typeof currentMode !== 'undefined' && currentMode === 'edit') {
+            numpad.style.display = 'block';
+        }
+    }, 500);
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initNumpad);
+} else {
+    initNumpad();
+}

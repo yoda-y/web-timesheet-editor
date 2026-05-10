@@ -56,7 +56,8 @@
   --range-bg: rgba(26, 115, 232, 0.1);
 }
 
-body { background-color: var(--bg-color); color: var(--text-color); font-family: sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+body { background-color: var(--bg-color); color: var(--text-color); font-family: sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; -webkit-user-select: none; user-select: none; }
+input, textarea { -webkit-user-select: text; user-select: text; }
 button, select { background: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 6px 16px; cursor: pointer; border-radius: 4px; font-size: 12px; }
 button:hover { background: var(--border-color); }
 
@@ -443,6 +444,10 @@ button:hover { background: var(--border-color); }
   position: relative;
   flex: 0 0 auto;
   transform-origin: 0 0;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
 }
 #preview-image {
   max-width: 100%;
@@ -1071,3 +1076,116 @@ button:hover { background: var(--border-color); }
 
 .menu-item { padding: 6px 12px; font-size: 12px; font-weight: bold; cursor: pointer; color: var(--text-color); border-radius: 2px; transition: 0.1s; }
 .menu-item:hover { background: var(--select-bg); color: #fff; }
+
+/* === Undo/Redoボタン（タブレット用） === */
+.undo-redo-float {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  display: flex;
+  gap: 8px;
+  z-index: 1000;
+}
+.undo-redo-float button {
+  width: 48px;
+  height: 48px;
+  font-size: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  background: var(--panel-bg);
+  color: var(--text-color);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.undo-redo-float button:active {
+  background: var(--select-bg);
+}
+.undo-redo-float .drag-handle {
+  width: 32px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--grid-medium);
+  cursor: move;
+  touch-action: none;
+}
+.tablet-draggable {
+  touch-action: none;
+}
+body:not(.tablet-mode) .undo-redo-float { display: none !important; }
+
+/* === 数字パッド（タブレット用） === */
+.numpad-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  z-index: 1000;
+  touch-action: none;
+}
+.numpad-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--highlight);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 8px 8px 0 0;
+  cursor: move;
+  font-size: 12px;
+  font-weight: bold;
+  touch-action: none;
+}
+.numpad-header button {
+  padding: 4px 10px;
+  font-size: 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+}
+.numpad-header button:active {
+  background: var(--hover-bg);
+  border-radius: 4px;
+}
+.numpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 52px);
+  gap: 6px;
+  padding: 8px;
+}
+.numpad-grid button {
+  height: 48px;
+  font-size: 20px;
+  font-weight: bold;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.numpad-grid button:active {
+  background: var(--select-bg);
+}
+.numpad-grid button.symbol {
+  background: var(--highlight);
+  font-size: 14px;
+  height: 40px;
+}
+.numpad-grid button.wide {
+  grid-column: span 2;
+}
+.numpad-grid .enter-btn {
+  grid-column: span 3;
+  background: var(--select-bg);
+  font-size: 16px;
+}
+/* タブレットモードのみ表示 */
+body:not(.tablet-mode) .numpad-panel { display: none !important; }

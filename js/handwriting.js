@@ -34,6 +34,12 @@ let handwritingUndoStack = [];
 let handwritingRedoStack = [];
 let handwritingImageCache = new Map();
 
+// タッチ/ペン判別・ピンチズーム用
+let activeTouches = new Map(); // pointerId -> {x, y}
+let pinchStartDist = null;
+let pinchStartZoom = null;
+
+
 function getHandwritingPageKey(pageIndex = currentPage) {
     return `page-${pageIndex}`;
 }
@@ -244,7 +250,24 @@ function handleHandwritingPointerDown(e) {
     if (currentMode !== 'preview' || e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    const tool = getEffectivePreviewTool();
+    // ペン使用時のブラウザ選択をクリア
+    if (window.getSelection) window.getSelection().removeAllRanges();
+
+    // タッチ入力を追跡（ピンチズーム用）
+    if (e.pointerType === 'touch') {
+        activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        // 2本指でピンチズーム開始
+        if (activeTouches.size === 2) {
+            const pts = [...activeTouches.values()];
+            pinchStartDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+            pinchStartZoom = previewZoom;
+            handwritingUiCanvas.setPointerCapture(e.pointerId);
+            return;
+        }
+    }
+
+    // ペン/タッチ判別: タッチはhand、ペン/マウスは現在のツール
+    const tool = (e.pointerType === 'touch') ? 'hand' : getEffectivePreviewTool();
     const pt = previewClientToCanvasPoint(e);
     handwritingUiCanvas.setPointerCapture(e.pointerId);
 
@@ -337,6 +360,28 @@ function handleHandwritingPointerDown(e) {
 function handleHandwritingPointerMove(e) {
     e.preventDefault();
     e.stopPropagation();
+
+    // ピンチズーム処理
+    if (e.pointerType === 'touch' && activeTouches.has(e.pointerId)) {
+        activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (activeTouches.size === 2 && pinchStartDist !== null) {
+            const pts = [...activeTouches.values()];
+            const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+            const centerX = (pts[0].x + pts[1].x) / 2;
+            const centerY = (pts[0].y + pts[1].y) / 2;
+            const rect = previewContainer.getBoundingClientRect();
+            const cx = centerX - rect.left;
+            const cy = centerY - rect.top;
+            const oldZoom = previewZoom;
+            const newZoom = Math.max(0.25, Math.min(5, pinchStartZoom * (dist / pinchStartDist)));
+            previewPanX = cx - (cx - previewPanX) * (newZoom / oldZoom);
+            previewPanY = cy - (cy - previewPanY) * (newZoom / oldZoom);
+            previewZoom = newZoom;
+            applyPreviewTransform();
+            return;
+        }
+    }
+
     if (previewZoomDrag) {
         const rect = previewContainer.getBoundingClientRect();
         const mouseX = previewZoomDrag.anchorX - rect.left;
@@ -350,7 +395,7 @@ function handleHandwritingPointerMove(e) {
         applyPreviewTransform();
         return;
     }
-    if (previewIsDragging && getEffectivePreviewTool() === 'hand') {
+    if (previewIsDragging) {
         const dx = e.clientX - previewDragStartX;
         const dy = e.clientY - previewDragStartY;
         previewPanX = previewPanStartX + dx;
@@ -404,12 +449,22 @@ function handleHandwritingPointerMove(e) {
 
 function handleHandwritingPointerUp(e) {
     e.stopPropagation();
+
+    // タッチ終了処理
+    if (e.pointerType === 'touch') {
+        activeTouches.delete(e.pointerId);
+        if (activeTouches.size < 2) {
+            pinchStartDist = null;
+            pinchStartZoom = null;
+        }
+    }
+
     if (previewZoomDrag) {
         previewZoomDrag = null;
         refreshPreviewToolButtons();
         return;
     }
-    if (previewIsDragging && getEffectivePreviewTool() === 'hand') {
+    if (previewIsDragging) {
         previewIsDragging = false;
         refreshPreviewToolButtons();
         return;
@@ -1222,3 +1277,71 @@ if (document.readyState === 'loading') {
 } else {
     initPreviewToolButtons();
 }
+
+// === Undo/Redoフローティングボタン（タブレット用） ===
+function initUndoRedoFloat() {
+    const undoRedoFloat = document.getElementById('undo-redo-float');
+    const undoBtn = document.getElementById('float-undo');
+    const redoBtn = document.getElementById('float-redo');
+    const dragHandle = undoRedoFloat ? undoRedoFloat.querySelector('.drag-handle') : null;
+    if (!undoRedoFloat || !undoBtn || !redoBtn) return;
+
+    // ボタンイベント
+    function doUndo() { undoHandwriting(); }
+    function doRedo() { redoHandwriting(); }
+    undoBtn.addEventListener('click', doUndo);
+    redoBtn.addEventListener('click', doRedo);
+    undoBtn.addEventListener('touchend', (e) => { e.preventDefault(); doUndo(); });
+    redoBtn.addEventListener('touchend', (e) => { e.preventDefault(); doRedo(); });
+
+    // タッチでドラッグ
+    if (dragHandle) {
+        let dragOffsetX = 0, dragOffsetY = 0;
+        dragHandle.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            const rect = undoRedoFloat.getBoundingClientRect();
+            dragOffsetX = touch.clientX - rect.left;
+            dragOffsetY = touch.clientY - rect.top;
+            undoRedoFloat.style.right = 'auto';
+            undoRedoFloat.style.bottom = 'auto';
+            e.preventDefault();
+        }, { passive: false });
+        dragHandle.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            undoRedoFloat.style.left = (touch.clientX - dragOffsetX) + 'px';
+            undoRedoFloat.style.top = (touch.clientY - dragOffsetY) + 'px';
+            e.preventDefault();
+        }, { passive: false });
+    }
+
+    // 初期表示
+    setTimeout(() => {
+        if (typeof isTabletMode === 'function' && isTabletMode() && typeof currentMode !== 'undefined' && currentMode === 'preview') {
+            undoRedoFloat.style.display = 'flex';
+        }
+    }, 500);
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initUndoRedoFloat);
+} else {
+    initUndoRedoFloat();
+}
+
+// === 2本指タップでUndo（タブレット用） ===
+(function() {
+    let lastTwoFingerTime = 0;
+    document.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2 && typeof currentMode !== 'undefined' && currentMode === 'preview') {
+            lastTwoFingerTime = Date.now();
+        }
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+        if (e.touches.length === 0 && Date.now() - lastTwoFingerTime < 300) {
+            // 2本指タップ検出
+            if (typeof undoHandwriting === 'function' && typeof currentMode !== 'undefined' && currentMode === 'preview') {
+                undoHandwriting();
+            }
+            lastTwoFingerTime = 0;
+        }
+    }, { passive: true });
+})();

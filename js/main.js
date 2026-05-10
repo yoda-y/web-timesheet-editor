@@ -1,3 +1,35 @@
+// === タブレットモード ===
+function isTabletMode() {
+    return localStorage.getItem('tabletMode') === 'true';
+}
+
+function setTabletMode(enabled) {
+    localStorage.setItem('tabletMode', enabled ? 'true' : 'false');
+    document.body.classList.toggle('tablet-mode', enabled);
+    updateTabletModeMenu();
+    // モード別パネル表示更新
+    const numpad = document.getElementById('numpad-panel');
+    const undoRedo = document.getElementById('undo-redo-float');
+    if (numpad) numpad.style.display = (enabled && currentMode === 'edit') ? 'block' : 'none';
+    if (undoRedo) undoRedo.style.display = (enabled && currentMode === 'preview') ? 'flex' : 'none';
+}
+
+function toggleTabletMode() {
+    setTabletMode(!isTabletMode());
+}
+
+function updateTabletModeMenu() {
+    const menuItem = document.getElementById('menu-tablet-mode');
+    if (menuItem) {
+        menuItem.textContent = isTabletMode() ? '✓ タブレットモード' : 'タブレットモード';
+    }
+}
+
+// 起動時にタブレットモード復元
+if (isTabletMode()) {
+    document.body.classList.add('tablet-mode');
+}
+
 // === エントリポイント ===
 if (typeof loadLang === 'function') loadLang();
 loadSettings();
@@ -11,6 +43,7 @@ window.onload = () => {
     if (typeof updatePageIndicator === 'function') updatePageIndicator();
     if (typeof initDocumentTabs === 'function') initDocumentTabs();
     if (typeof maybeOfferSessionRestore === 'function') maybeOfferSessionRestore();
+    updateTabletModeMenu();
 };
 
 // === Service Worker登録（PWA/オフライン対応） ===
