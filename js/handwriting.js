@@ -242,6 +242,7 @@ function previewClientToCanvasPoint(e) {
 
 function handleHandwritingPointerDown(e) {
     if (currentMode !== 'preview' || e.button !== 0) return;
+    e.preventDefault();
     e.stopPropagation();
     const tool = getEffectivePreviewTool();
     const pt = previewClientToCanvasPoint(e);
@@ -321,6 +322,7 @@ function handleHandwritingPointerDown(e) {
 }
 
 function handleHandwritingPointerMove(e) {
+    e.preventDefault();
     e.stopPropagation();
     if (previewZoomDrag) {
         const rect = previewContainer.getBoundingClientRect();

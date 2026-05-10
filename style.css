@@ -454,9 +454,13 @@ button:hover { background: var(--border-color); }
   top: 0;
   width: 100%;
   height: 100%;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 #handwriting-canvas {
   z-index: 1;
+  touch-action: none;
 }
 #handwriting-ui-canvas {
   z-index: 2;
