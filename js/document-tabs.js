@@ -197,7 +197,9 @@ function createNewBlankDocumentTab() {
 function closeDocumentTab(id) {
     const tab = documentTabs.find(item => item.id === id);
     if (!tab) return;
-    if (tab.dirty && !confirm(`「${tab.title || tab.fileName || '未保存'}」には未保存の変更があります。閉じますか？`)) return;
+    // アクティブタブの場合、グローバルのisDirtyを直接チェック
+    const isCurrentlyDirty = (id === activeDocumentTabId) ? isDirty : tab.dirty;
+    if (isCurrentlyDirty && !confirm(`「${tab.title || tab.fileName || '未保存'}」には未保存の変更があります。閉じますか？`)) return;
     const index = documentTabs.indexOf(tab);
     documentTabs.splice(index, 1);
     if (documentTabs.length === 0) {
@@ -248,7 +250,9 @@ function renderDocumentTabs() {
         close.textContent = '×';
         close.title = '閉じる';
         close.addEventListener('click', ev => {
+            ev.preventDefault();
             ev.stopPropagation();
+            ev.stopImmediatePropagation();
             closeDocumentTab(tab.id);
         });
         item.appendChild(close);
