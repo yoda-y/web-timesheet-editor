@@ -1223,6 +1223,17 @@ function handleHandwritingKeyDown(e) {
         if (matchShortcut(e, 'preview.tool.lasso')) { e.preventDefault(); e.stopImmediatePropagation(); setPreviewTool('select-lasso'); return; }
         if (matchShortcut(e, 'preview.tool.transform')) { e.preventDefault(); e.stopImmediatePropagation(); setPreviewTool('transform'); return; }
         if (matchShortcut(e, 'preview.tool.hand')) { e.preventDefault(); e.stopImmediatePropagation(); setPreviewTool('hand'); return; }
+        // ページ送り: , (前) / . (次)
+        if (e.key === ',' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault(); e.stopImmediatePropagation();
+            if (typeof goToPrevPage === 'function') goToPrevPage();
+            return;
+        }
+        if (e.key === '.' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault(); e.stopImmediatePropagation();
+            if (typeof goToNextPage === 'function') goToNextPage();
+            return;
+        }
     }
     if (currentMode === 'preview' && selectedStrokeIds.size > 0 && ((typeof matchShortcut === 'function' && matchShortcut(e, 'preview.confirm')) || e.key === 'Enter')) {
         e.preventDefault();

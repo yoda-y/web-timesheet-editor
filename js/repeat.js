@@ -5,7 +5,10 @@ function isNotEmptyOrSymbol(val) {
 }
 
 // 列データから自動的にリピート/止メ範囲を抽出
-function checkRepeatColumns(colData, longestDuration) {
+function checkRepeatColumns(colData, longestDuration, colIndex, applyExclusion = true) {
+    // 設定参照: 自動Rep無効なら何も返さない
+    if (typeof settings !== 'undefined' && settings.draw && settings.draw.repAutoEnabled === false) return [];
+    const minCycles = (typeof settings !== 'undefined' && settings.draw && settings.draw.repMinCycles) || 2;
     let minimumRepeatLength = 2;
     let repeatInfos = [];
     let dumpCells = [];
@@ -56,17 +59,22 @@ function checkRepeatColumns(colData, longestDuration) {
             if (dumpCells[fm] === fn_cell) break;
             let chunkLength = fm - fn + 1;
             let fl_lastNumbered = fm + 1;
+            let reachedEnd = false;
             for (let fl = fm + 1; fl < dumpCells.length; fl++) {
                 let fk = (fl - fn) % chunkLength + fn;
                 if (dumpCells[fk] === dumpCells[fl]) {
                     if (fl < dumpCells.length - 1) {
                         if (colData[fl] && isNotEmptyOrSymbol(colData[fl].value)) fl_lastNumbered = fl;
                         continue;
-                    } else fl_lastNumbered = fl + 1;
+                    } else { fl_lastNumbered = fl + 1; reachedEnd = true; }
                 } else {
                     if (colData[fl] && isNotEmptyOrSymbol(colData[fl].value)) fl_lastNumbered = fl;
+                    // 直前までで完全に一致したサイクル境界まで拡張（埋めの連続部分を取り込む）
+                    const completedCycles = Math.floor((fl - fn) / chunkLength);
+                    const cycleEnd = fn + completedCycles * chunkLength;
+                    if (cycleEnd > fl_lastNumbered) fl_lastNumbered = cycleEnd;
                     let repeatLength = fl_lastNumbered - fn;
-                    if (repeatLength >= chunkLength * 2 && repeatLength >= minimumRepeatLength + chunkLength) {
+                    if (repeatLength >= chunkLength * minCycles && repeatLength >= minimumRepeatLength + chunkLength) {
                         repeatInfos.push({ startF: fn, chunkLen: chunkLength, endF: fl_lastNumbered, isHold: false });
                         repeatFound = true;
                         fn = fl_lastNumbered - 1;
@@ -75,8 +83,22 @@ function checkRepeatColumns(colData, longestDuration) {
                     } else break;
                 }
             }
+            // 全フレーム一致のまま終端到達した場合もpush
+            if (reachedEnd && !repeatFound) {
+                let repeatLength = fl_lastNumbered - fn;
+                if (repeatLength >= chunkLength * minCycles && repeatLength >= minimumRepeatLength + chunkLength) {
+                    repeatInfos.push({ startF: fn, chunkLen: chunkLength, endF: fl_lastNumbered, isHold: false });
+                    repeatFound = true;
+                    fn = fl_lastNumbered - 1;
+                    previousRepeatEndFrame = fl_lastNumbered;
+                }
+            }
             if (repeatFound) break;
         }
+    }
+    // 除外リスト適用（colIndex指定 + applyExclusion=true のみ）
+    if (applyExclusion && colIndex !== undefined && typeof repExclusions !== 'undefined' && Array.isArray(repExclusions)) {
+        repeatInfos = repeatInfos.filter(r => !repExclusions.some(ex => ex.colIndex === colIndex && ex.startF === r.startF));
     }
     return repeatInfos;
 }

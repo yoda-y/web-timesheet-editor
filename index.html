@@ -333,6 +333,13 @@
           <a href="https://github.com/yoda-y/web-timesheet-editor" target="_blank" rel="noopener" style="color:var(--accent-blue);">GitHub</a>
         </div>
       </div>
+      <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--grid-light); font-size:11px;">
+        <div><strong>免責事項 (Disclaimer)</strong></div>
+        <div style="margin-top:4px; color:var(--grid-medium); line-height:1.6;">
+          本ツールは個人が開発した非公式の互換ツールです。各アニメーション制作会社や、XDTS/TDTSフォーマットの策定元（株式会社セルシス、東映アニメーション株式会社など）とは一切関係ありません。<br><br>
+          本ツールを使用したことによるデータの破損や、業務上のトラブルについて、作者は一切の責任を負いません。本番環境で使用する際は、必ず事前にバックアップを取得してください。
+        </div>
+      </div>
     </div>
     <div class="settings-actions">
       <button id="help-about-close" class="primary" data-i18n="btn.close">閉じる</button>
@@ -514,6 +521,12 @@
       <label data-i18n="draw.tailMargin">末尾マージン（コマ）:</label>
       <input type="number" id="drawTailMargin" min="0" max="120" value="18">
       <span class="settings-hint" data-i18n="draw.tailMarginHint">カット末尾より後ろに表示する空白コマ数</span>
+    </div>
+    <div class="settings-row">
+      <label>Rep自動付与:</label>
+      <input type="checkbox" id="drawRepAutoEnabled" checked>
+      <input type="number" id="drawRepMinCycles" min="2" max="10" value="2" style="width:60px; margin-left:12px;">
+      <span class="settings-hint">最小サイクル数（2=パターン+1リピート）</span>
     </div>
     <div class="settings-actions">
       <button id="settings-draw-reset" data-i18n="draw.resetThis">この画面をリセット</button>

@@ -13,7 +13,9 @@ const DEFAULT_SETTINGS = {
         cutOutsideOpacity: 0.5,     // カット尺外（暗くする）の濃さ
         headMarginEnabled: false,   // 先頭マージン ON/OFF
         headMargin: 0,              // 先頭マージン（コマ数）
-        tailMargin: 18              // 末尾マージン（コマ数）
+        tailMargin: 18,             // 末尾マージン（コマ数）
+        repAutoEnabled: true,       // Rep自動付与 ON/OFF
+        repMinCycles: 2             // Rep付与に必要な最小サイクル数（2 = 元パターン + リピート部分）
     },
     colors: {
         // fontColorId 0-5 のパレット

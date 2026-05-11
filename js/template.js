@@ -449,8 +449,14 @@ function drawDirectionArea(ctx, scale, startY, areaH, bodyW, pageIndex) {
                 allBooks.push({ text: bookName, colIndex, x: colX, seq: bookIdx });
             });
         }
+        // 文字幅で boxW を算出
+        ctx.font = `bold ${m(2.2)}px sans-serif`;
+        const bookBoxWMin = m(11);
+        allBooks.forEach(book => {
+            const tw = ctx.measureText(book.text || '').width;
+            book.boxW = Math.max(bookBoxWMin, tw + m(3));
+        });
         allBooks.sort((a, b) => a.x !== b.x ? a.x - b.x : a.seq - b.seq);
-        const bookBoxW = m(11);
         allBooks.forEach(book => {
             let rowIndex = book.seq;
             while (true) {
@@ -458,9 +464,11 @@ function drawDirectionArea(ctx, scale, startY, areaH, bodyW, pageIndex) {
                 for (const placed of allBooks) {
                     if (placed === book) break;
                     if (placed.row === rowIndex) {
-                        const bookRight = book.x + m(3) + bookBoxW;
-                        const placedRight = placed.x + m(3) + bookBoxW;
-                        if (!(bookRight < placed.x + m(3) || book.x + m(3) > placedRight)) {
+                        const bL = book.x + m(3);
+                        const bR = bL + book.boxW;
+                        const pL = placed.x + m(3);
+                        const pR = pL + placed.boxW;
+                        if (!(bR + m(2) < pL || bL > pR + m(2))) {
                             conflict = true;
                             break;
                         }
@@ -657,6 +665,13 @@ function drawBooksOnTemplate(ctx, scale, bodyY, bodyW) {
         }
     }
 
+    // 文字数に応じて幅を自動算出
+    ctx.font = `bold ${m(2.2)}px sans-serif`;
+    allBooks.forEach(book => {
+        const tw = ctx.measureText(book.text || '').width;
+        book.boxW = Math.max(bookBoxW, tw + m(3));
+    });
+
     // X座標でソート
     allBooks.sort((a, b) => a.x !== b.x ? a.x - b.x : a.seq - b.seq);
 
@@ -668,10 +683,11 @@ function drawBooksOnTemplate(ctx, scale, bodyY, bodyW) {
             for (const placed of allBooks) {
                 if (placed === book) break;
                 if (placed.row === rowIndex) {
-                    // 水平方向の重なりチェック
-                    const bookRight = book.x + m(3) + bookBoxW;
-                    const placedRight = placed.x + m(3) + bookBoxW;
-                    if (!(bookRight < placed.x + m(3) || book.x + m(3) > placedRight)) {
+                    const bL = book.x + m(3);
+                    const bR = bL + book.boxW;
+                    const pL = placed.x + m(3);
+                    const pR = pL + placed.boxW;
+                    if (!(bR + m(2) < pL || bL > pR + m(2))) {
                         conflict = true;
                         break;
                     }
@@ -709,13 +725,14 @@ function drawBooksOnTemplate(ctx, scale, bodyY, bodyW) {
         const colX = book.x;
         const boxX = colX + m(3);
         const boxY = baseBookY - bookBoxH - book.row * bookRowH;
+        const bw = book.boxW;
 
         // BOOKボックス（黒枠）
         ctx.fillStyle = TEMPLATE.BG_COLOR;
         ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
         ctx.lineWidth = TEMPLATE.LINE_THICK;
         ctx.beginPath();
-        ctx.roundRect(boxX, boxY, bookBoxW, bookBoxH, m(1));
+        ctx.roundRect(boxX, boxY, bw, bookBoxH, m(1));
         ctx.fill();
         ctx.stroke();
 
@@ -724,7 +741,7 @@ function drawBooksOnTemplate(ctx, scale, bodyY, bodyW) {
         ctx.font = `bold ${m(2.2)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(book.text, boxX + bookBoxW / 2, boxY + bookBoxH / 2);
+        ctx.fillText(book.text, boxX + bw / 2, boxY + bookBoxH / 2);
     });
 
     ctx.textAlign = 'left';
@@ -1462,7 +1479,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
         }
 
         // リピート・止め検出
-        const repeats = checkRepeatColumns(colData, targetFrames);
+        const repeats = checkRepeatColumns(colData, targetFrames, ci);
         const tx = x + ci * colW + colW / 2;
 
         repeats.forEach(r => {
@@ -1586,94 +1603,108 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
         if (block.startFrame >= endFrame || block.endFrame < absoluteStart) return;
         if (block.colIndex >= colCount) return;
 
+        // 真の始終点座標（ページ外でも論理位置を計算）
+        const tx = x + block.colIndex * colW;
+        const trueStartY = y + (block.startFrame - absoluteStart) * rowH;
+        const trueEndY = y + (block.endFrame - absoluteStart + 1) * rowH;
+        const trueBlockH = trueEndY - trueStartY;
+        // 表示クリップ範囲
         const sF = Math.max(block.startFrame, absoluteStart);
         const eF = Math.min(block.endFrame, endFrame - 1);
+        const clipStartY = y + (sF - absoluteStart) * rowH;
+        const clipEndY = y + (eF - absoluteStart + 1) * rowH;
 
-        const tx = x + block.colIndex * colW;
-        const startY = y + (sF - absoluteStart) * rowH;
-        const endY = y + (eF - absoluteStart + 1) * rowH;
-        const blockH = endY - startY;
+        // ページ範囲でクリップ。文字切れ防止のため上下にrowH*2の余裕
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(tx, clipStartY, colW, clipEndY - clipStartY);
+        ctx.clip();
 
-        // 背景
+        // 背景（真の範囲で描画。クリップで自動的に切り取られる）
         ctx.fillStyle = getSpeakerColorTemplate(block.speakerName);
-        ctx.fillRect(tx, startY, colW, blockH);
+        ctx.fillRect(tx, trueStartY, colW, trueBlockH);
 
-        // 上下線（太め）
+        // 上下線（太め）: 真の始終点の位置に描画。範囲外ならクリップで消える
         ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
         ctx.lineWidth = TEMPLATE.LINE_THICK + 1;
         ctx.beginPath();
-        ctx.moveTo(tx, startY);
-        ctx.lineTo(tx + colW, startY);
+        ctx.moveTo(tx, trueStartY);
+        ctx.lineTo(tx + colW, trueStartY);
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(tx, endY);
-        ctx.lineTo(tx + colW, endY);
+        ctx.moveTo(tx, trueEndY);
+        ctx.lineTo(tx + colW, trueEndY);
         ctx.stroke();
 
-        // テキスト
+        // テキスト（真の始点を基準に配置）
         ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-        let textStartY = startY + m(4);
-        const isShort = blockH <= rowH * 2;
+        let textStartY = trueStartY + m(4);
+        const isShort = trueBlockH <= rowH * 2;
 
-        // 話者名（自動リサイズ）
+        // 話者名（真の始点直下にのみ表示。複数ページ時もここだけ）
         if (block.speakerName && !isShort) {
             let speakerFontSize = m(2.5);
             ctx.font = `bold ${speakerFontSize}px sans-serif`;
-            // 幅に収まるまで縮小
             while (ctx.measureText(block.speakerName).width > colW - m(1) && speakerFontSize > m(1.5)) {
                 speakerFontSize -= m(0.2);
                 ctx.font = `bold ${speakerFontSize}px sans-serif`;
             }
             ctx.textAlign = 'center';
-            ctx.fillText(block.speakerName, tx + colW / 2, startY + m(3));
-            textStartY = startY + m(6);
+            ctx.fillText(block.speakerName, tx + colW / 2, trueStartY + m(3));
+            textStartY = trueStartY + m(6);
         }
 
-        // セリフテキスト（edit準拠の文字間隔）
+        // セリフテキスト: 真の範囲全体に展開
         if (block.text) {
             const fontSize = m(3);
             ctx.font = `bold ${fontSize}px sans-serif`;
             ctx.textAlign = 'center';
             const CHAR_H = fontSize * 1.2;
-            const textH = endY - textStartY - m(1);
+            const textH = trueEndY - textStartY - m(1);
             const chars = block.text.split('');
-            const targetSpacing = rowH * 3;
 
             let spacing;
             if (chars.length <= 1) {
                 spacing = 0;
             } else {
+                // 余白を均等に分配（最小は文字高の0.7倍まで）
                 const maxFitSpacing = (textH - CHAR_H) / (chars.length - 1);
-                spacing = Math.max(CHAR_H * 0.7, Math.min(targetSpacing, maxFitSpacing));
+                spacing = Math.max(CHAR_H * 0.7, maxFitSpacing);
             }
 
             const totalTextH = chars.length === 1 ? CHAR_H : (chars.length - 1) * spacing + CHAR_H;
             const actualStartY = textStartY + (CHAR_H / 2) + Math.max(0, (textH - totalTextH) / 2);
 
+            // ページ境界に重なる文字は近いページ側へずらす（切れ防止）
+            // 文字の実際の見た目（特に日本語）はCHAR_Hより大きいことがあるので余裕を取る
+            const pageH = TEMPLATE.FRAMES_PER_COL * rowH;
+            const SAFE = CHAR_H * 0.9; // 安全マージン
+            const adjustY = (yy) => {
+                const blockTopAbsPage = Math.floor((trueStartY - y) / pageH);
+                const blockBotAbsPage = Math.floor((trueEndY - y) / pageH);
+                for (let p = blockTopAbsPage; p <= blockBotAbsPage; p++) {
+                    const boundary = y + (p + 1) * pageH;
+                    if (Math.abs(yy - boundary) < SAFE) {
+                        return yy < boundary ? boundary - SAFE : boundary + SAFE;
+                    }
+                }
+                return yy;
+            };
+
             chars.forEach((ch, i) => {
+                const trueY = adjustY(actualStartY + i * spacing);
                 if (ch === 'ー') ch = '丨';
-                ctx.fillText(ch, tx + colW / 2, actualStartY + i * spacing);
+                ctx.fillText(ch, tx + colW / 2, trueY);
             });
         }
+        ctx.restore();
     });
 }
 
-// 話者カラー（テンプレート用）
+// 話者カラー（テンプレート用）- editモードと同一の色を使用
 function getSpeakerColorTemplate(name) {
-    const colors = [
-        'rgba(255, 200, 200, 0.5)',
-        'rgba(200, 255, 200, 0.5)',
-        'rgba(200, 200, 255, 0.5)',
-        'rgba(255, 255, 200, 0.5)',
-        'rgba(255, 200, 255, 0.5)',
-        'rgba(200, 255, 255, 0.5)'
-    ];
-    if (!name) return colors[0];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
+    if (typeof getSpeakerColor === 'function') return getSpeakerColor(name);
+    return 'rgba(255, 200, 200, 0.5)';
 }
 
 // カメラブロック描画（テンプレート用）- editモード準拠
@@ -1693,12 +1724,42 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
         const drawWidth = colW * drawCols;
 
         const tx = x + block.colIndex * colW;
-        const startY = y + (sF - absoluteStart) * rowH;
-        const endY = y + (eF - absoluteStart + 1) * rowH;
+        // 真の始終点座標で描画。ページ外はクリップで自動的に切り取る
+        const startY = y + (block.startFrame - absoluteStart) * rowH;
+        const endY = y + (block.endFrame - absoluteStart + 1) * rowH;
+        // ページ範囲でクリッピング設定
+        const clipStartY = y + (sF - absoluteStart) * rowH;
+        const clipEndY = y + (eF - absoluteStart + 1) * rowH;
+        ctx.save();
+        ctx.beginPath();
+        // 横方向は余裕を持たせて文字切れを防ぐ。縦方向もrowH*2の余裕で境界の文字切れ防止
+        ctx.rect(tx - colW, clipStartY, drawWidth + colW * 2, clipEndY - clipStartY);
+        ctx.clip();
 
         const vt = block.valueType;
         const pKind = (block.kind || '').split(' (')[0].trim();
         const tgts = (block.targetLayers || []).join(',');
+        // 長尺ブロック判定（3秒=72fr以上）
+        const isLongBlock = (block.endFrame - block.startFrame + 1) >= 72;
+        const labelAnchorY = isLongBlock ? (startY + rowH * 7) : (startY + (endY - startY) / 2);
+        // 対象レイヤーリスト（複数を改行で描画）
+        const tgtList = block.targetLayers || [];
+        // 横書きで [layer] を改行付き描画
+        const drawTgtsH = (cx, baseY, fontSize, withBg) => {
+            if (!tgtList.length) return baseY;
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            let curY = baseY;
+            const lineH = fontSize * 1.2;
+            tgtList.forEach(l => {
+                const txt = `[${l}]`;
+                if (withBg) drawTextBg(txt, cx, curY, fontSize);
+                ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+                ctx.fillText(txt, cx, curY);
+                curY += lineH;
+            });
+            return curY;
+        };
 
         ctx.fillStyle = TEMPLATE.TEXT_COLOR;
         ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
@@ -1710,14 +1771,27 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
         const isIris = pKind === "IrisIN" || pKind === "IrisOut";
 
         // 縦書きヘルパー（CAM SHAKE/fromTo用）
+        const pageH = TEMPLATE.FRAMES_PER_COL * rowH;
+        // ページ境界に重なる文字Yを上下にずらす（切れ防止、文字より少し余裕）
+        const adjustCharY = (yy, charH) => {
+            const safe = charH * 0.9;
+            for (let p = -2; p <= 4; p++) {
+                const boundary = y + p * pageH;
+                if (Math.abs(yy - boundary) < safe) {
+                    return yy < boundary ? boundary - safe : boundary + safe;
+                }
+            }
+            return yy;
+        };
         const drawVerticalLabel = (text, cx, cy, fontSize, charH) => {
             ctx.font = `bold ${fontSize}px sans-serif`;
             ctx.textAlign = 'center';
             const chars = text.split('');
             const startYt = cy - (chars.length * charH) / 2 + charH / 2;
             chars.forEach((c, i) => {
+                const charY = adjustCharY(startYt + i * charH, charH);
                 if (c === "ー") c = "丨";
-                ctx.fillText(c, cx, startYt + i * charH);
+                ctx.fillText(c, cx, charY);
             });
         };
 
@@ -1736,16 +1810,21 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             ctx.lineWidth = TEMPLATE.LINE_MEDIUM;
             ctx.beginPath(); ctx.moveTo(lineX, startY); ctx.lineTo(lineX, endY); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(lineX - m(0.5), startY); ctx.lineTo(lineX + m(2), startY); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(lineX - m(0.5), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
+            if (block.startFrame >= absoluteStart) {
+                ctx.beginPath(); ctx.moveTo(lineX - m(0.5), startY); ctx.lineTo(lineX + m(2), startY); ctx.stroke();
+            }
+            if (block.endFrame < endFrame) {
+                ctx.beginPath(); ctx.moveTo(lineX - m(0.5), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
+            }
             // kind名、Target名を0frの上（ブロック開始位置の上）に表示
             ctx.font = `bold ${m(2)}px sans-serif`;
             ctx.textAlign = 'left';
-            let labelY = startY - m(1);
-            if (tgts) {
-                ctx.fillText(`[${tgts}]`, lineX + m(2.5), labelY);
+            let labelY = labelAnchorY;
+            // 対象レイヤーを下から積み上げで描画
+            tgtList.slice().reverse().forEach(l => {
+                ctx.fillText(`[${l}]`, lineX + m(2.5), labelY);
                 labelY -= m(2.5);
-            }
+            });
             ctx.fillText(pKind, lineX + m(2.5), labelY);
             // インライン入力データを描画（太字）
             ctx.font = `bold ${m(2)}px sans-serif`;
@@ -1769,7 +1848,7 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             ctx.fill();
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
             ctx.stroke();
-            const midY = startY + (endY - startY) / 2;
+            const midY = labelAnchorY;
             ctx.textAlign = 'center';
             // kind名（背景付き横書き）
             drawTextBg(pKind, tx + drawWidth / 2, midY - (tgts ? m(1.5) : 0), m(2.5));
@@ -1777,12 +1856,7 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             ctx.font = `bold ${m(2.5)}px sans-serif`;
             ctx.fillText(pKind, tx + drawWidth / 2, midY - (tgts ? m(1.5) : 0));
             // Target名（背景付き横書き、縦に重ねる）
-            if (tgts) {
-                drawTextBg(`[${tgts}]`, tx + drawWidth / 2, midY + m(2), m(1.8));
-                ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-                ctx.font = `${m(1.8)}px sans-serif`;
-                ctx.fillText(`[${tgts}]`, tx + drawWidth / 2, midY + m(2));
-            }
+            drawTgtsH(tx + drawWidth / 2, midY + m(2), m(1.8), true);
         } else if (pKind === "FO" || pKind === "WO") {
             // FO/WO: 上向き三角形
             ctx.beginPath();
@@ -1794,7 +1868,7 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             ctx.fill();
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
             ctx.stroke();
-            const midY = startY + (endY - startY) / 2;
+            const midY = labelAnchorY;
             ctx.textAlign = 'center';
             // kind名（背景付き横書き）
             drawTextBg(pKind, tx + drawWidth / 2, midY - (tgts ? m(1.5) : 0), m(2.5));
@@ -1802,28 +1876,20 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             ctx.font = `bold ${m(2.5)}px sans-serif`;
             ctx.fillText(pKind, tx + drawWidth / 2, midY - (tgts ? m(1.5) : 0));
             // Target名（背景付き横書き、縦に重ねる）
-            if (tgts) {
-                drawTextBg(`[${tgts}]`, tx + drawWidth / 2, midY + m(2), m(1.8));
-                ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-                ctx.font = `${m(1.8)}px sans-serif`;
-                ctx.fillText(`[${tgts}]`, tx + drawWidth / 2, midY + m(2));
-            }
+            drawTgtsH(tx + drawWidth / 2, midY + m(2), m(1.8), true);
         } else if (isFill) {
             // BL K/W K: 塗りつぶし
             const isBlack = pKind === "BL K" || pKind === "黒コマ";
             ctx.fillStyle = isBlack ? '#333' : '#ddd';
             ctx.fillRect(tx + m(0.5), startY, drawWidth - m(1), endY - startY);
             ctx.fillStyle = isBlack ? '#fff' : '#111';
-            const midY = startY + (endY - startY) / 2;
+            const midY = labelAnchorY;
             ctx.textAlign = 'center';
             // kind名（横書き）
             ctx.font = `bold ${m(2.2)}px sans-serif`;
             ctx.fillText(pKind, tx + drawWidth / 2, midY - (tgts ? m(1.5) : 0));
-            // Target名（横書き、縦に重ねる）
-            if (tgts) {
-                ctx.font = `${m(1.8)}px sans-serif`;
-                ctx.fillText(`[${tgts}]`, tx + drawWidth / 2, midY + m(2));
-            }
+            // Target名（横書き、改行で複数表示）
+            drawTgtsH(tx + drawWidth / 2, midY + m(2), m(1.8), false);
         } else if (isIris) {
             // Iris: 台形状の開閉表現
             const inset = Math.max(m(1.2), drawWidth * 0.18);
@@ -1844,41 +1910,48 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             ctx.fill();
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
             ctx.stroke();
-            const midY = startY + (endY - startY) / 2;
+            const midY = labelAnchorY;
             ctx.textAlign = 'center';
             drawTextBg(pKind, tx + drawWidth / 2, midY - (tgts ? m(1.5) : 0), m(2.2));
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             ctx.font = `bold ${m(2.2)}px sans-serif`;
             ctx.fillText(pKind, tx + drawWidth / 2, midY - (tgts ? m(1.5) : 0));
-            if (tgts) {
-                drawTextBg(`[${tgts}]`, tx + drawWidth / 2, midY + m(2), m(1.8));
-                ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-                ctx.font = `${m(1.8)}px sans-serif`;
-                ctx.fillText(`[${tgts}]`, tx + drawWidth / 2, midY + m(2));
-            }
+            drawTgtsH(tx + drawWidth / 2, midY + m(2), m(1.8), true);
         } else if (isShake) {
             // CAM SHAKE/Handy: 波線
             const lineX = tx + drawWidth / 2;
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
-            ctx.beginPath(); ctx.moveTo(lineX - m(2), startY); ctx.lineTo(lineX + m(2), startY); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(lineX - m(2), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
+            if (block.startFrame >= absoluteStart) {
+                ctx.beginPath(); ctx.moveTo(lineX - m(2), startY); ctx.lineTo(lineX + m(2), startY); ctx.stroke();
+            }
+            if (block.endFrame < endFrame) {
+                ctx.beginPath(); ctx.moveTo(lineX - m(2), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
+            }
             ctx.beginPath();
             for (let py = startY; py <= endY; py += m(0.5)) {
                 const px = lineX + Math.sin((py - startY) * 0.3) * m(1);
                 if (py === startY) ctx.moveTo(px, py); else ctx.lineTo(px, py);
             }
             ctx.stroke();
-            const midY = startY + (endY - startY) / 2;
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-            // kind縦書き
-            drawVerticalLabel(pKind, lineX, midY - (tgts ? m(3) : 0), m(2.2), m(2.8));
-            // tgts縦書き
-            if (tgts) {
+            // kind縦書き: 上端を startY + rowH*7 に揃える
+            const kindChars = pKind.split('');
+            const kindCharH = m(2.8);
+            const kindTopY = isLongBlock ? (startY + rowH * 7) : (startY + (endY - startY) / 2 - (kindChars.length * kindCharH) / 2);
+            const midY = kindTopY + (kindChars.length * kindCharH) / 2;
+            drawVerticalLabel(pKind, lineX, midY, m(2.2), m(2.8));
+            // tgts縦書き（レイヤーごとに区切って積み上げ）
+            if (tgtList.length) {
                 ctx.font = `${m(1.8)}px sans-serif`;
                 ctx.textAlign = 'center';
-                const tgtChars = `[${tgts}]`.split('');
-                const tgtStartY = midY + pKind.length * m(1.4) + m(1);
-                tgtChars.forEach((c, i) => ctx.fillText(c, lineX, tgtStartY + i * m(2.2)));
+                let curY = kindTopY + kindChars.length * kindCharH + m(1);
+                tgtList.forEach(l => {
+                    const ch = `[${l}]`.split('');
+                    ch.forEach((c, i) => {
+                        ctx.fillText(c, lineX, adjustCharY(curY + i * m(2.2), m(2.2)));
+                    });
+                    curY += ch.length * m(2.2) + m(1);
+                });
             }
         } else if (vt === 'numericFr' || isStrobo) {
             // Strobo: 砂時計と菱形パターン
@@ -1917,18 +1990,13 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
                 ctx.closePath(); ctx.fill(); ctx.stroke();
             }
             // ラベル（背景付き横書き縦重ね）
-            const midY = startY + (endY - startY) / 2;
+            const midY = labelAnchorY;
             ctx.textAlign = 'center';
             drawTextBg(pKind, tx + drawWidth / 2, midY - (tgts ? m(1.5) : 0), m(2.2));
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             ctx.font = `bold ${m(2.2)}px sans-serif`;
             ctx.fillText(pKind, tx + drawWidth / 2, midY - (tgts ? m(1.5) : 0));
-            if (tgts) {
-                drawTextBg(`[${tgts}]`, tx + drawWidth / 2, midY + m(2), m(1.8));
-                ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-                ctx.font = `${m(1.8)}px sans-serif`;
-                ctx.fillText(`[${tgts}]`, tx + drawWidth / 2, midY + m(2));
-            }
+            drawTgtsH(tx + drawWidth / 2, midY + m(2), m(1.8), true);
         } else if (vt === 'fromToLayers') {
             // O.L: 砂時計形状
             ctx.beginPath();
@@ -1942,7 +2010,7 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
             ctx.stroke();
             ctx.textAlign = 'center';
-            const midY = startY + (endY - startY) / 2;
+            const midY = labelAnchorY;
             // O.L/Wipe横書き（背景付き）
             const olLabel = pKind === "Wipe" ? "Wipe" : "O.L";
             drawTextBg(olLabel, tx + drawWidth / 2, midY, m(2.5));
@@ -1968,20 +2036,39 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             const lineX = tx + drawWidth / 2;
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-            ctx.beginPath(); ctx.moveTo(lineX - m(2), startY); ctx.lineTo(lineX + m(2), startY); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(lineX - m(2), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
+            if (block.startFrame >= absoluteStart) {
+                ctx.beginPath(); ctx.moveTo(lineX - m(2), startY); ctx.lineTo(lineX + m(2), startY); ctx.stroke();
+            }
+            if (block.endFrame < endFrame) {
+                ctx.beginPath(); ctx.moveTo(lineX - m(2), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
+            }
             ctx.beginPath(); ctx.moveTo(lineX, startY); ctx.lineTo(lineX, endY); ctx.stroke();
-            const midY = startY + (endY - startY) / 2;
-            const label = tgts ? `[${tgts}]${pKind}` : pKind;
-            const chars = label.split('');
+            // 縦書き: [layer1] [layer2] ... [layerN] pKind の順で積み上げ
             const charH = m(2.6);
             const fontSize = m(2.1);
+            // 全体の文字数を計算
+            const tgtSegments = tgtList.map(l => `[${l}]`.split(''));
+            const pKindChars = pKind.split('');
+            const totalChars = tgtSegments.reduce((s, seg) => s + seg.length, 0) + pKindChars.length + tgtSegments.length; // tgt間にmargin1コマ相当
+            const labelTopY = isLongBlock ? (startY + rowH * 7) : (startY + (endY - startY) / 2 - (totalChars * charH) / 2);
+            // 背景
             const bgW = Math.max(m(4), fontSize * 1.35);
-            const bgH = chars.length * charH + m(1.6);
+            const bgH = totalChars * charH + m(1.6);
             ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
-            ctx.fillRect(lineX - bgW / 2, midY - bgH / 2, bgW, bgH);
+            ctx.fillRect(lineX - bgW / 2, labelTopY - m(0.8), bgW, bgH);
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-            drawVerticalLabel(label, lineX, midY, m(2.1), m(2.6));
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            let curY = labelTopY + charH / 2;
+            const drawCharAdj = (c) => {
+                ctx.fillText(c, lineX, adjustCharY(curY, charH));
+                curY += charH;
+            };
+            tgtSegments.forEach(seg => {
+                seg.forEach(drawCharAdj);
+                curY += charH; // レイヤー間のスペース
+            });
+            pKindChars.forEach(drawCharAdj);
         } else if (vt === 'fromTo' || vt === 'multiLayerDirection') {
             // fromTo: 矢印と縦線 + 中間点
             const lineX = tx + m(3);
@@ -2045,28 +2132,46 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             ctx.font = `bold ${m(2.8)}px sans-serif`;
             ctx.textAlign = 'center';
             const chars = pKind.split('');
-            const midY = startY + (endY - startY) / 2;
+            const midY = labelAnchorY;
             const charH = m(3.5);
             const textStartY = midY - (chars.length * charH) / 2 + charH / 2;
             chars.forEach((c, i) => {
                 if (c === "ー") c = "丨";
                 ctx.fillText(c, lineX + m(5), textStartY + i * charH);
             });
-            if (tgts) { ctx.font = `${m(2)}px sans-serif`; ctx.fillText(`[${tgts}]`, lineX + m(5), textStartY - m(2.5)); }
+            if (tgtList.length) {
+                ctx.font = `${m(2)}px sans-serif`;
+                let y2 = textStartY - m(2.5);
+                tgtList.slice().reverse().forEach(l => {
+                    ctx.fillText(`[${l}]`, lineX + m(5), y2);
+                    y2 -= m(2.5);
+                });
+            }
         } else {
             // デフォルト: 縦線とテキスト
             const lineX = tx + drawWidth / 2;
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
-            ctx.beginPath(); ctx.moveTo(lineX - m(2), startY); ctx.lineTo(lineX + m(2), startY); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(lineX - m(2), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
+            if (block.startFrame >= absoluteStart) {
+                ctx.beginPath(); ctx.moveTo(lineX - m(2), startY); ctx.lineTo(lineX + m(2), startY); ctx.stroke();
+            }
+            if (block.endFrame < endFrame) {
+                ctx.beginPath(); ctx.moveTo(lineX - m(2), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
+            }
             ctx.beginPath(); ctx.moveTo(lineX, startY); ctx.lineTo(lineX, endY); ctx.stroke();
-            const midY = startY + (endY - startY) / 2;
-            const dispText = tgts ? `[${tgts}] ${pKind}` : pKind;
+            const midY = labelAnchorY;
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             ctx.font = `bold ${m(2.5)}px sans-serif`;
             ctx.textAlign = 'center';
-            ctx.fillText(dispText, lineX, midY + m(1));
+            // tgts を上、pKind を下に積み上げ
+            let dispY = midY + m(1);
+            if (tgtList.length) {
+                const lineH = m(3);
+                let tgtY = dispY - lineH * tgtList.length;
+                tgtList.forEach(l => { ctx.fillText(`[${l}]`, lineX, tgtY); tgtY += lineH; });
+            }
+            ctx.fillText(pKind, lineX, dispY);
         }
+        ctx.restore();
     });
 }
 

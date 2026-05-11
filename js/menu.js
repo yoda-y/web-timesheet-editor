@@ -281,7 +281,7 @@ window.convertAllActionToCell = function() {
         let nextNumber = 1;
         const colData = [];
         for (let f = 0; f < totalFrames; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
-        const autoRepeats = (typeof checkRepeatColumns === 'function') ? checkRepeatColumns(colData, totalFrames).map(r => ({ ...r, colIndex: ci })) : [];
+        const autoRepeats = (typeof checkRepeatColumns === 'function') ? checkRepeatColumns(colData, totalFrames, ci).map(r => ({ ...r, colIndex: ci })) : [];
         for (let f = 0; f < totalFrames; f++) {
             const direct = cellData[`ACTION-${ci}-${f}`] || null;
             const manualRepeat = getManualRepeatData(ci, f);
@@ -424,6 +424,8 @@ function openDrawSettings() {
     document.getElementById('drawHeadMarginEnabled').checked = !!settings.draw.headMarginEnabled;
     document.getElementById('drawHeadMargin').value = settings.draw.headMargin || 0;
     document.getElementById('drawTailMargin').value = settings.draw.tailMargin != null ? settings.draw.tailMargin : 18;
+    document.getElementById('drawRepAutoEnabled').checked = settings.draw.repAutoEnabled !== false;
+    document.getElementById('drawRepMinCycles').value = settings.draw.repMinCycles || 2;
     modal.style.display = 'flex';
     setTimeout(() => document.getElementById('gapSettingInput').focus(), 10);
 }
@@ -462,6 +464,10 @@ document.getElementById('settings-draw-ok').addEventListener('click', () => {
     if (isNaN(tm) || tm < 0) tm = 0; if (tm > 120) tm = 120;
     settings.draw.headMargin = hm;
     settings.draw.tailMargin = tm;
+    settings.draw.repAutoEnabled = document.getElementById('drawRepAutoEnabled').checked;
+    let mc = parseInt(document.getElementById('drawRepMinCycles').value, 10);
+    if (isNaN(mc) || mc < 2) mc = 2; if (mc > 10) mc = 10;
+    settings.draw.repMinCycles = mc;
     saveSettings();
     closeDrawSettings();
     drawAll();

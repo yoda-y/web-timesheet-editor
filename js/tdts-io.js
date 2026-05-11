@@ -44,6 +44,10 @@ function _parseTDTSSingleTable(header, table, opts) {
     const hasDialogueInFile = (dialogueBlocksOut.length > 0);
     const hasCameraInFile = (cameraBlocksOut.length > 0);
 
+    // 手書きメモ収集（cell-level + header-level）
+    const memosOut = [];
+    const headerMemo = table.headerMemoImageData ? { imageData: table.headerMemoImageData } : null;
+
     // セルデータ + ブロック復元
     const cellOut = {};
     if (table.fields) table.fields.forEach(field => {
@@ -75,6 +79,8 @@ function _parseTDTSSingleTable(header, table, opts) {
                     else if (v === "SYMBOL_TICK_2") v = "○";
                     else if (v === "SYMBOL_NULL_CELL") v = "×";
                     else if (v === "SYMBOL_HYPHEN") v = "―";
+                    // x/X 単体 → × (ACTION/CELL のみ)
+                    else if ((v === "x" || v === "X") && (colType === "ACTION" || colType === "CELL")) v = "×";
                 }
                 let opt = null;
                 const ext = fr.data[0];
@@ -90,10 +96,22 @@ function _parseTDTSSingleTable(header, table, opts) {
                 else if (colType === "ACTION" && /^\d+$/.test(v)) opt = "OPTION_KEYFRAME";
                 const fcidIn = ext.fontColorId || 0;
                 cellOut[`${colType}-${colIdx}-${fr.frame}`] = { value: v, option: opt, text: txt, fontColorId: fcidIn };
+                // cell-level 手書きメモを収集
+                if (fr.data[0].memo && fr.data[0].memo.imageData) {
+                    memosOut.push({
+                        imageData: fr.data[0].memo.imageData,
+                        offsetX: fr.data[0].memo.offsetX || 0,
+                        offsetY: fr.data[0].memo.offsetY || 0,
+                        frame: fr.frame,
+                        colType,
+                        colIdx
+                    });
+                }
                 // ブロック自動復元
                 if (colType === "SOUND" && !hasDialogueInFile) {
                     if (v !== "―" && v !== "" && v !== "SYMBOL_NULL_CELL" && v !== "×") {
-                        if (currentDialogue) { currentDialogue.endFrame = fr.frame - 1; dialogueBlocksOut.push(currentDialogue); }
+                        // 前ブロックの endFrame は "―" で既に確定済み。上書きしない（ギャップを潰さない）
+                        if (currentDialogue) dialogueBlocksOut.push(currentDialogue);
                         currentDialogue = { id: Date.now() + Math.random(), colIndex: colIdx, speakerName: v, text: txt || "", startFrame: fr.frame, endFrame: fr.frame };
                     } else if (v === "―" && currentDialogue) currentDialogue.endFrame = fr.frame;
                 }
@@ -152,7 +170,9 @@ function _parseTDTSSingleTable(header, table, opts) {
         booksData: booksOut,
         dialogueBlocks: dialogueBlocksOut,
         cameraBlocks: cameraBlocksOut,
-        customRepeats: []
+        customRepeats: [],
+        memos: memosOut,
+        headerMemo
     };
 }
 
@@ -223,6 +243,16 @@ function extractXdtsCut(text) {
 document.getElementById('fileInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
+    // 既に同名ファイルが開かれていないかチェック
+    if (typeof documentTabs !== 'undefined' && Array.isArray(documentTabs)) {
+        const alreadyOpen = documentTabs.find(tab => tab.fileName === file.name);
+        if (alreadyOpen) {
+            alert(`「${file.name}」は既に開かれています。`);
+            if (typeof activateDocumentTab === 'function') activateDocumentTab(alreadyOpen.id);
+            e.target.value = '';
+            return;
+        }
+    }
     const reader = new FileReader();
     reader.onload = async function(evt) {
         try {
@@ -507,6 +537,7 @@ function _legacyDirectImportTDTS(e) { if (false) {
                                     else if (v === "SYMBOL_TICK_2") v = "○";
                                     else if (v === "SYMBOL_NULL_CELL") v = "×";
                                     else if (v === "SYMBOL_HYPHEN") v = "―";
+                                    else if ((v === "x" || v === "X") && (colType === "ACTION" || colType === "CELL")) v = "×";
                                 }
 
                                 let opt = null;
@@ -515,7 +546,8 @@ function _legacyDirectImportTDTS(e) { if (false) {
 
                                 if (colType === "SOUND" && !hasDialogueInFile) {
                                     if (v !== "―" && v !== "" && v !== "SYMBOL_NULL_CELL" && v !== "×") {
-                                        if (currentDialogue) { currentDialogue.endFrame = fr.frame - 1; dialogueBlocks.push(currentDialogue); }
+                                        // 前ブロックの endFrame は "―" で既に確定済み。上書きしない
+                                        if (currentDialogue) dialogueBlocks.push(currentDialogue);
                                         currentDialogue = { id: Date.now() + Math.random(), colIndex: colIdx, speakerName: v, text: txt || "", startFrame: fr.frame, endFrame: fr.frame };
                                     } else if (v === "―" && currentDialogue) { currentDialogue.endFrame = fr.frame; }
                                 }

@@ -95,6 +95,7 @@ function parseXDTSToRaw(text, opts) {
                     else if (v === "SYMBOL_TICK_2") v = "○";
                     else if (v === "SYMBOL_NULL_CELL") v = "×";
                     else if (v === "SYMBOL_HYPHEN") v = "―";
+                    else if ((v === "x" || v === "X") && (xType === "ACTION" || xType === "CELL")) v = "×";
                 }
 
                 const isNumeric = /^\d+$/.test(v);
@@ -123,7 +124,8 @@ function parseXDTSToRaw(text, opts) {
                 // ブロック自動復元
                 if (xType === "SOUND") {
                     if (v !== "―" && v !== "" && v !== "×") {
-                        if (currentDialogue) { currentDialogue.endFrame = fr.frame - 1; dialogueBlocksOut.push(currentDialogue); }
+                        // 前ブロックの endFrame は "―" で既に確定済み。上書きしない
+                        if (currentDialogue) dialogueBlocksOut.push(currentDialogue);
                         currentDialogue = { id: Date.now() + Math.random(), colIndex: colIdx, speakerName: v, text: txt || "", startFrame: fr.frame, endFrame: fr.frame };
                     } else if (v === "―" && currentDialogue) currentDialogue.endFrame = fr.frame;
                 }

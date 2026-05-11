@@ -23,6 +23,8 @@ let isMemoExpanded = true;
 let memoScrollLine = 0;
 let booksData = { "ACTION": {}, "SOUND": {}, "CELL": {}, "CAMERA": {} };
 let customRepeats = [];
+// Rep自動付与の除外リスト: [{colIndex, startF}] - 該当位置で始まるRepは表示しない
+let repExclusions = [];
 
 let dialogueBlocks = [];
 let editingDialogueId = null;

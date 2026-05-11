@@ -18,15 +18,29 @@ function resizeCanvases() {
             for (let i = 0; i < arr.length; i++) allBooks.push({ text: arr[i], type, idx: parseInt(idx), textIdx: i, x, seq: i });
         }
     }
+    // 文字数に応じて幅を自動算出
+    mCtx.font = "bold 10px sans-serif";
+    for (let book of allBooks) {
+        const tw = mCtx.measureText(book.text || '').width;
+        book.boxW = Math.max(40, Math.ceil(tw) + 12);
+        book.boxH = 18;
+    }
     allBooks.sort((a, b) => (a.x !== b.x) ? a.x - b.x : a.seq - b.seq);
     let maxRow = -1;
     for (let book of allBooks) {
         let rowIndex = book.seq;
+        const bookL = book.x + 12;
+        const bookR = bookL + book.boxW;
         while (true) {
             let conflict = false;
             for (let placed of allBooks) {
                 if (placed === book) break;
-                if (placed.row === rowIndex && !(book.x + 65 < placed.x || book.x > placed.x + 65)) { conflict = true; break; }
+                if (placed.row === rowIndex) {
+                    const pL = placed.x + 12;
+                    const pR = pL + placed.boxW;
+                    // 重なり判定（左右に12pxマージン）
+                    if (!(bookR + 12 < pL || bookL > pR + 12)) { conflict = true; break; }
+                }
             }
             if (!conflict) { book.row = rowIndex; if (rowIndex > maxRow) maxRow = rowIndex; break; }
             rowIndex++;
@@ -37,7 +51,6 @@ function resizeCanvases() {
     for (let book of window.bookLayout) {
         let branchY = colHeaderH - 50 - 15 - (book.row * 24);
         book.boxX = book.x + 12; book.boxY = branchY - 9; book.branchY = branchY;
-        book.boxW = 40; book.boxH = 18;
     }
     const hc = document.getElementById('columnHeaderCanvas');
     hc.width = baseWidth * dpr * currentZoom; hc.height = colHeaderH * dpr * currentZoom;
@@ -178,7 +191,7 @@ function drawColumnHeader() {
         ctx.fillStyle = getStyle('--book-bg');
         ctx.beginPath(); ctx.roundRect(book.boxX, book.boxY, book.boxW, book.boxH, 4); ctx.fill(); ctx.stroke();
         ctx.fillStyle = getStyle('--book-line'); ctx.textAlign = "center"; ctx.font = "bold 10px sans-serif";
-        ctx.fillText(book.text, book.boxX + 20, book.boxY + 13);
+        ctx.fillText(book.text, book.boxX + book.boxW / 2, book.boxY + 13);
         if (isDraggingThis) ctx.globalAlpha = 1.0;
     });
     if (isDraggingBook && draggingBook) {
@@ -258,7 +271,7 @@ function drawGrid() {
             for (let ci = 0; ci < s.cols; ci++) {
                 let colData = [];
                 for (let f = 0; f < numFrames; f++) colData[f] = cellData[`${s.type}-${ci}-${f}`] || null;
-                let rInfos = checkRepeatColumns(colData, numFrames);
+                let rInfos = checkRepeatColumns(colData, numFrames, ci);
                 for (let r of rInfos) autoRepeats.push({ colType: s.type, colIndex: ci, startF: r.startF, chunkLen: r.chunkLen, endF: r.endF, isHold: r.isHold });
             }
         }

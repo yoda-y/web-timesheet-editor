@@ -523,6 +523,71 @@ function applyImportData(raw, checks, mode) {
     if (raw.customRepeats && raw.customRepeats.length) customRepeats = customRepeats.concat(raw.customRepeats);
     if (checks.sound && typeof window.normalizeAllDialogueBlockCells === 'function') window.normalizeAllDialogueBlockCells();
     if (checks.camera && typeof window.normalizeAllCameraBlockCells === 'function') window.normalizeAllCameraBlockCells();
+
+    // TDTS手書きメモを手書きレイヤーに統合
+    if ((raw.memos && raw.memos.length) || raw.headerMemo) {
+        applyTdtsMemosToHandwriting(raw.memos || [], raw.headerMemo);
+        if (typeof showToast === 'function') {
+            showToast('TDTSの手書きメモを取り込みました。位置がずれている場合があります。', 5000);
+        }
+    }
+}
+
+// TDTS手書きメモ（cell-level + header-level）を手書きレイヤーに変換
+function applyTdtsMemosToHandwriting(memos, headerMemo) {
+    if (typeof TEMPLATE === 'undefined' || typeof HANDWRITING_BASE_DPI === 'undefined') return;
+    const pxPerMm = HANDWRITING_BASE_DPI / 25.4;
+    const canvasW = Math.round(TEMPLATE.WIDTH_MM * pxPerMm);
+    const rowHpx = TEMPLATE.ROW_HEIGHT * pxPerMm;
+    const colHeaderHpx = TEMPLATE.COL_HEADER_HEIGHT * pxPerMm;
+    const marginTopPx = (TEMPLATE.MARGIN_TOP || 10) * pxPerMm;
+    const gridTopPx = marginTopPx + colHeaderHpx;
+    const FRAMES_PER_PAGE = TEMPLATE.FRAMES_PER_COL;
+
+    // セルメモ
+    memos.forEach((memo, i) => {
+        const pageIdx = Math.floor(memo.frame / FRAMES_PER_PAGE);
+        const frameInPage = memo.frame % FRAMES_PER_PAGE;
+        const key = `page-${pageIdx}`;
+        if (!handwritingPages[key]) handwritingPages[key] = { strokes: [], images: [] };
+        // 画像サイズ算出のため一時Imageを作成
+        const dataUrl = `data:image/png;base64,${memo.imageData}`;
+        const tmpImg = new Image();
+        tmpImg.onload = () => {
+            const cellY = gridTopPx + frameInPage * rowHpx + (memo.offsetY || 0);
+            const cellX = (memo.offsetX || 0); // 列位置は近似（左端起点）
+            handwritingPages[key].images.push({
+                id: `tdts-memo-${Date.now()}-${i}`,
+                dataUrl,
+                x: cellX,
+                y: cellY,
+                w: tmpImg.width,
+                h: tmpImg.height
+            });
+            if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
+        };
+        tmpImg.src = dataUrl;
+    });
+
+    // ヘッダーメモ（Direction欄相当、ページ1の上部）
+    if (headerMemo && headerMemo.imageData) {
+        const key = 'page-0';
+        if (!handwritingPages[key]) handwritingPages[key] = { strokes: [], images: [] };
+        const dataUrl = `data:image/png;base64,${headerMemo.imageData}`;
+        const tmpImg = new Image();
+        tmpImg.onload = () => {
+            handwritingPages[key].images.push({
+                id: `tdts-headermemo-${Date.now()}`,
+                dataUrl,
+                x: marginTopPx, // 左マージンと同程度
+                y: marginTopPx,
+                w: tmpImg.width,
+                h: tmpImg.height
+            });
+            if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
+        };
+        tmpImg.src = dataUrl;
+    }
 }
 
 // === ドラッグ&ドロップ対応 ===
@@ -569,6 +634,15 @@ function applyImportData(raw, checks, mode) {
     }
 
     async function handleDroppedFile(file) {
+        // 既に同名ファイルが開かれていないかチェック
+        if (typeof documentTabs !== 'undefined' && Array.isArray(documentTabs)) {
+            const alreadyOpen = documentTabs.find(tab => tab.fileName === file.name);
+            if (alreadyOpen) {
+                alert(`「${file.name}」は既に開かれています。`);
+                if (typeof activateDocumentTab === 'function') activateDocumentTab(alreadyOpen.id);
+                return;
+            }
+        }
         const text = await file.text();
         const fmt = typeof detectFileFormat === 'function' ? detectFileFormat(text) : null;
         if (!fmt) {
@@ -661,19 +735,25 @@ function applyImportData(raw, checks, mode) {
 
     let dragCounter = 0;
 
+    // ファイルドラッグかを判定（内部要素のドラッグでは types に "Files" が含まれない）
+    const isFileDrag = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+
     document.addEventListener('dragenter', e => {
+        if (!isFileDrag(e)) return;
         e.preventDefault();
         dragCounter++;
         if (dragCounter === 1) showDragOverlay();
     });
 
     document.addEventListener('dragleave', e => {
+        if (!isFileDrag(e)) return;
         e.preventDefault();
         dragCounter--;
         if (dragCounter === 0) hideDragOverlay();
     });
 
     document.addEventListener('dragover', e => {
+        if (!isFileDrag(e)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
     });

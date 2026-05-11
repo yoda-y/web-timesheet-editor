@@ -54,7 +54,10 @@ function saveInput() {
     let val = cellInput.value.trim();
     const beforeSnapshot = (typeof snapshotState === 'function') ? snapshotState() : null;
     if (val === "-") val = "―";
-    if (val.toLowerCase() === "x") val = "×";
+    // x/X 単体 → × (カラ): ACTION/CELL カラムのみ
+    if ((val === "x" || val === "X") && (selectionStart.colType === "ACTION" || selectionStart.colType === "CELL")) {
+        val = "×";
+    }
     const oldVal = JSON.stringify(cellData[key] || {});
     let rangeCleared = false;
     const SYMBOL_VALUES = ["●", "○", "×", "―"];
@@ -1283,6 +1286,33 @@ document.getElementById('canvas-wrapper').addEventListener('contextmenu', (e) =>
             let clickedRepeat = customRepeats.find(r => r.colType === sec?.type && r.colIndex === ci && fi >= r.startF && fi <= r.endF);
             if (clickedRepeat) {
                 menuItems.push({ label: t('ctx.removeRepeat'), action: () => { pushHistory(); customRepeats = customRepeats.filter(r => r !== clickedRepeat); drawAll(); }, color: '#ff5555' });
+            }
+            // 自動Repの検出と除外メニュー (ACTION列のみ)
+            if (sec?.type === 'ACTION' && typeof checkRepeatColumns === 'function') {
+                const totalF = (parseInt(metaData.lengthSec) || 0) * 24 + (parseInt(metaData.lengthFrame) || 0);
+                if (totalF > 0) {
+                    const colData = [];
+                    for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
+                    // 除外済みも含めて取得（メニュー表示判定用）
+                    const autoReps = checkRepeatColumns(colData, totalF, ci, false).filter(r => !r.isHold);
+                    const hit = autoReps.find(r => fi >= r.startF && fi <= r.endF);
+                    if (hit) {
+                        const isExcluded = repExclusions.some(ex => ex.colIndex === ci && ex.startF === hit.startF);
+                        if (!isExcluded) {
+                            menuItems.push({ label: 'このRepを無効化', action: () => {
+                                pushHistory();
+                                repExclusions.push({ colIndex: ci, startF: hit.startF });
+                                drawAll();
+                            }, color: '#ff8800' });
+                        } else {
+                            menuItems.push({ label: 'このRepを有効化', action: () => {
+                                pushHistory();
+                                repExclusions = repExclusions.filter(ex => !(ex.colIndex === ci && ex.startF === hit.startF));
+                                drawAll();
+                            } });
+                        }
+                    }
+                }
             }
             if (selectionStart && selectionEnd) {
                 let minF = Math.min(selectionStart.frame, selectionEnd.frame);
