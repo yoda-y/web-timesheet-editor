@@ -332,6 +332,9 @@
         <div style="margin-top:8px;">
           <a href="https://github.com/yoda-y/web-timesheet-editor" target="_blank" rel="noopener" style="color:var(--accent-blue);">GitHub</a>
         </div>
+        <div style="margin-top:8px;">
+          <button id="about-changelog-btn" style="font-size:11px; padding:4px 10px; cursor:pointer;">更新履歴を見る</button>
+        </div>
       </div>
       <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--grid-light); font-size:11px;">
         <div><strong>免責事項 (Disclaimer)</strong></div>
@@ -343,6 +346,19 @@
     </div>
     <div class="settings-actions">
       <button id="help-about-close" class="primary" data-i18n="btn.close">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 更新履歴モーダル -->
+<div id="changelog-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner" style="min-width:520px; max-width:720px; max-height:80vh; display:flex; flex-direction:column;">
+    <h3>更新履歴</h3>
+    <div id="changelog-content" style="flex:1; overflow-y:auto; padding:12px 4px; font-size:12px; line-height:1.7; white-space:pre-wrap; font-family:monospace;">
+      読み込み中...
+    </div>
+    <div class="settings-actions">
+      <button id="changelog-close" class="primary">閉じる</button>
     </div>
   </div>
 </div>
@@ -359,6 +375,10 @@
       <button type="button" class="settings-hub-card" data-settings-open="settings.draw">
         <strong data-i18n="settings.draw.short">描画</strong>
         <span data-i18n="settings.draw.desc">線発生ギャップ、頭/尻マージンなど</span>
+      </button>
+      <button type="button" class="settings-hub-card" data-settings-open="settings.font">
+        <strong>文字</strong>
+        <span>セル番号・セリフ・カメラ・メタ情報のサイズ (mm)</span>
       </button>
       <button type="button" class="settings-hub-card" data-settings-open="settings.color">
         <strong data-i18n="settings.color.short">色</strong>
@@ -380,6 +400,14 @@
         <strong data-i18n="settings.externalTemplate.short">外部テンプレート</strong>
         <span data-i18n="settings.externalTemplate.desc">専用モーダルで流し込み項目とBBoxを管理予定</span>
       </button>
+    </div>
+    <div class="settings-hub-quick" style="display:flex; gap:16px; padding:10px 14px; margin-top:8px; border-top:1px solid var(--border-color); font-size:12px;">
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="hubHeadMarginToggle"><span>先頭マージン</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="hubTailMarginToggle"><span>末尾マージン</span>
+      </label>
     </div>
     <div class="settings-hub-backup">
       <button type="button" data-settings-open="file.settings.export" data-i18n="file.settings.export">設定を書き出し (JSON)</button>
@@ -482,6 +510,22 @@
       </div>
       <span class="settings-hint" style="margin-left:0;" data-i18n="editor.sharedMetaHint">チェック項目はシート間で同期されます。チェックを外すとシート個別の設定になります。</span>
     </div>
+    <div class="settings-row" style="flex-direction:column; align-items:flex-start; margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
+      <label style="font-weight:bold; margin-bottom:6px;">マージン設定</label>
+      <div class="settings-row" style="margin:4px 0;">
+        <label style="width:140px;">先頭マージン:</label>
+        <label style="min-width:0; display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="editorHeadMarginEnabled"><span>ON</span>
+        </label>
+        <input type="number" id="editorHeadMargin" min="0" max="120" value="0" style="width:60px; margin-left:12px;">
+        <span class="settings-hint">コマ数</span>
+      </div>
+      <div class="settings-row" style="margin:4px 0;">
+        <label style="width:140px;">末尾マージン:</label>
+        <input type="number" id="editorTailMargin" min="0" max="120" value="18">
+        <span class="settings-hint">カット末尾より後ろに表示する空白コマ数</span>
+      </div>
+    </div>
     <div class="settings-actions">
       <button id="settings-editor-cancel" data-i18n="btn.cancel">キャンセル</button>
       <button id="settings-editor-ok" class="primary" data-i18n="btn.ok">OK</button>
@@ -510,19 +554,6 @@
       <span class="settings-hint" data-i18n="draw.repeatColorHint">rep の下の青点線の色</span>
     </div>
     <div class="settings-row">
-      <label data-i18n="draw.headMarginEnabled">先頭マージン:</label>
-      <label style="min-width:0; display:flex; align-items:center; gap:6px; cursor:pointer;">
-        <input type="checkbox" id="drawHeadMarginEnabled"><span>ON</span>
-      </label>
-      <input type="number" id="drawHeadMargin" min="0" max="120" value="0" style="width:60px; margin-left:12px;">
-      <span class="settings-hint" data-i18n="draw.headMarginHint">コマ数</span>
-    </div>
-    <div class="settings-row">
-      <label data-i18n="draw.tailMargin">末尾マージン（コマ）:</label>
-      <input type="number" id="drawTailMargin" min="0" max="120" value="18">
-      <span class="settings-hint" data-i18n="draw.tailMarginHint">カット末尾より後ろに表示する空白コマ数</span>
-    </div>
-    <div class="settings-row">
       <label>Rep自動付与:</label>
       <input type="checkbox" id="drawRepAutoEnabled" checked>
       <input type="number" id="drawRepMinCycles" min="2" max="10" value="2" style="width:60px; margin-left:12px;">
@@ -532,6 +563,34 @@
       <button id="settings-draw-reset" data-i18n="draw.resetThis">この画面をリセット</button>
       <button id="settings-draw-cancel" data-i18n="btn.cancel">キャンセル</button>
       <button id="settings-draw-ok" class="primary" data-i18n="btn.ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- 文字設定モーダル -->
+<div id="settings-font-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner">
+    <h3>文字設定</h3>
+    <div class="settings-row">
+      <label style="width:140px;">セル番号 (mm):</label>
+      <input type="number" id="drawFontCellScale" min="1.0" max="10.0" step="0.1" value="2.7" style="width:70px;">
+    </div>
+    <div class="settings-row">
+      <label style="width:140px;">セリフ (mm):</label>
+      <input type="number" id="drawFontDialogueScale" min="1.0" max="10.0" step="0.1" value="3.5" style="width:70px;">
+    </div>
+    <div class="settings-row">
+      <label style="width:140px;">カメララベル (mm):</label>
+      <input type="number" id="drawFontCameraScale" min="1.0" max="10.0" step="0.1" value="2.7" style="width:70px;">
+    </div>
+    <div class="settings-row">
+      <label style="width:140px;">メタ情報 (mm):</label>
+      <input type="number" id="drawFontMetaScale" min="1.0" max="10.0" step="0.1" value="8.0" style="width:70px;">
+    </div>
+    <div class="settings-actions">
+      <button id="settings-font-reset">この画面をリセット</button>
+      <button id="settings-font-cancel">キャンセル</button>
+      <button id="settings-font-ok" class="primary">OK</button>
     </div>
   </div>
 </div>
@@ -761,6 +820,9 @@
   <div class="menu-label" data-i18n="settings.group.editing">編集・表示</div>
   <div class="menu-row" data-action="settings.editor" data-i18n="settings.editor">エディタ環境設定...</div>
   <div class="menu-row" data-action="settings.draw" data-i18n="settings.draw">描画設定...</div>
+  <div class="menu-row" data-action="settings.font">文字設定...</div>
+  <div class="menu-row" data-action="settings.toggleHeadMargin" id="menu-toggle-head-margin">先頭マージン</div>
+  <div class="menu-row" data-action="settings.toggleTailMargin" id="menu-toggle-tail-margin">末尾マージン</div>
   <div class="menu-row" data-action="settings.color" data-i18n="settings.color">色設定...</div>
   <div class="menu-row" data-action="settings.shortcut" data-i18n="settings.shortcut">ショートカット設定...</div>
   <div class="menu-sep"></div>
@@ -982,6 +1044,7 @@
       <button onclick="closeCameraModal()" data-i18n="btn.cancel" style="padding:4px 12px; background:transparent; color:var(--text-color); border:1px solid var(--border-color); cursor:pointer; border-radius:3px;">キャンセル</button>
     </div>
   </div>
+<script src="js/version.js"></script>
 <script src="js/state.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/settings.js"></script>

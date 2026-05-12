@@ -15,7 +15,13 @@ const DEFAULT_SETTINGS = {
         headMargin: 0,              // 先頭マージン（コマ数）
         tailMargin: 18,             // 末尾マージン（コマ数）
         repAutoEnabled: true,       // Rep自動付与 ON/OFF
-        repMinCycles: 2             // Rep付与に必要な最小サイクル数（2 = 元パターン + リピート部分）
+        repMinCycles: 2,            // Rep付与に必要な最小サイクル数（2 = 元パターン + リピート部分）
+        fontSize: {
+            cell: 2.7,              // mm
+            dialogue: 3.5,          // mm
+            camera: 2.7,            // mm
+            metaValue: 8.0          // mm
+        }
     },
     colors: {
         // fontColorId 0-5 のパレット

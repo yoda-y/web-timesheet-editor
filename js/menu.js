@@ -178,6 +178,21 @@ const menuActions = {
     // 設定
     'settings.main': () => openSettingsHub(),
     'settings.draw': () => openDrawSettings(),
+    'settings.font': () => openFontSettings(),
+    'settings.toggleHeadMargin': () => {
+        settings.draw.headMarginEnabled = !settings.draw.headMarginEnabled;
+        saveSettings();
+        updateSettingsMenuMarks();
+        if (typeof resizeCanvases === 'function') resizeCanvases();
+        if (typeof drawAll === 'function') drawAll();
+    },
+    'settings.toggleTailMargin': () => {
+        settings.draw.tailMargin = (settings.draw.tailMargin || 0) > 0 ? 0 : 18;
+        saveSettings();
+        updateSettingsMenuMarks();
+        if (typeof resizeCanvases === 'function') resizeCanvases();
+        if (typeof drawAll === 'function') drawAll();
+    },
     'settings.color': () => openColorSettings(),
     'settings.shortcut': () => openShortcutSettings(),
     'settings.editor': () => openEditorSettings(),
@@ -185,7 +200,11 @@ const menuActions = {
     'settings.naming': () => openNamingSettings(),
     'help.shortcuts': () => openHelpShortcuts(),
     'help.manual': () => openHelpManual(),
-    'help.about': () => { document.getElementById('help-about-modal').style.display = 'flex'; },
+    'help.about': () => {
+        const v = document.getElementById('about-version');
+        if (v && typeof APP_VERSION_LABEL !== 'undefined') v.textContent = APP_VERSION_LABEL;
+        document.getElementById('help-about-modal').style.display = 'flex';
+    },
     'settings.reset': () => {
         if (!confirm('全ての設定をデフォルトに戻しますか？')) return;
         resetSettings();
@@ -200,6 +219,14 @@ const menuActions = {
     // タブレットモード
     'settings.tabletMode': () => toggleTabletMode(),
 };
+
+// マージントグルのチェックマーク表示更新
+function updateSettingsMenuMarks() {
+    const head = document.getElementById('menu-toggle-head-margin');
+    const tail = document.getElementById('menu-toggle-tail-margin');
+    if (head) head.textContent = (settings.draw.headMarginEnabled ? '✓ ' : '   ') + '先頭マージン';
+    if (tail) tail.textContent = ((settings.draw.tailMargin || 0) > 0 ? '✓ ' : '   ') + '末尾マージン';
+}
 
 window.runMenuAction = function(actionId) {
     if (actionId && menuActions[actionId]) {
@@ -333,6 +360,7 @@ function openMenu(name) {
     const trigger = document.querySelector(`#menubar .menu-item[data-menu="${name}"]`);
     const dropdown = document.getElementById(`menu-${name}`);
     if (!trigger || !dropdown) return;
+    if (name === 'settings' && typeof updateSettingsMenuMarks === 'function') updateSettingsMenuMarks();
     const rect = trigger.getBoundingClientRect();
     dropdown.style.left = rect.left + 'px';
     dropdown.style.top = rect.bottom + 'px';
@@ -421,9 +449,6 @@ function openDrawSettings() {
     document.getElementById('gapSettingInput').value = settings.draw.lineGap;
     document.getElementById('drawTomeEnabled').checked = !!settings.draw.tomeEnabled;
     document.getElementById('drawRepeatColor').value = rgbaToHex(settings.draw.repeatDashColor) || '#4285f4';
-    document.getElementById('drawHeadMarginEnabled').checked = !!settings.draw.headMarginEnabled;
-    document.getElementById('drawHeadMargin').value = settings.draw.headMargin || 0;
-    document.getElementById('drawTailMargin').value = settings.draw.tailMargin != null ? settings.draw.tailMargin : 18;
     document.getElementById('drawRepAutoEnabled').checked = settings.draw.repAutoEnabled !== false;
     document.getElementById('drawRepMinCycles').value = settings.draw.repMinCycles || 2;
     modal.style.display = 'flex';
@@ -457,13 +482,6 @@ document.getElementById('settings-draw-ok').addEventListener('click', () => {
     settings.draw.tomeEnabled = document.getElementById('drawTomeEnabled').checked;
     const hex = document.getElementById('drawRepeatColor').value;
     settings.draw.repeatDashColor = hexToRgba(hex, 0.8);
-    settings.draw.headMarginEnabled = document.getElementById('drawHeadMarginEnabled').checked;
-    let hm = parseInt(document.getElementById('drawHeadMargin').value, 10);
-    if (isNaN(hm) || hm < 0) hm = 0; if (hm > 120) hm = 120;
-    let tm = parseInt(document.getElementById('drawTailMargin').value, 10);
-    if (isNaN(tm) || tm < 0) tm = 0; if (tm > 120) tm = 120;
-    settings.draw.headMargin = hm;
-    settings.draw.tailMargin = tm;
     settings.draw.repAutoEnabled = document.getElementById('drawRepAutoEnabled').checked;
     let mc = parseInt(document.getElementById('drawRepMinCycles').value, 10);
     if (isNaN(mc) || mc < 2) mc = 2; if (mc > 10) mc = 10;
@@ -483,8 +501,66 @@ document.getElementById('settings-draw-modal').addEventListener('click', (e) => 
     if (e.target.id === 'settings-draw-modal') closeDrawSettings();
 });
 
+// === 文字設定モーダル ===
+function openFontSettings() {
+    const fs = settings.draw.fontSize || {};
+    document.getElementById('drawFontCellScale').value = fs.cell != null ? fs.cell : 2.7;
+    document.getElementById('drawFontDialogueScale').value = fs.dialogue != null ? fs.dialogue : 3.5;
+    document.getElementById('drawFontCameraScale').value = fs.camera != null ? fs.camera : 2.7;
+    document.getElementById('drawFontMetaScale').value = fs.metaValue != null ? fs.metaValue : 8.0;
+    document.getElementById('settings-font-modal').style.display = 'flex';
+}
+function closeFontSettings() {
+    document.getElementById('settings-font-modal').style.display = 'none';
+}
+document.getElementById('settings-font-ok').addEventListener('click', () => {
+    const parseFS = (id, def) => {
+        let v = parseFloat(document.getElementById(id).value);
+        if (isNaN(v)) v = def;
+        return Math.max(1.0, Math.min(10.0, v));
+    };
+    if (!settings.draw.fontSize) settings.draw.fontSize = {};
+    settings.draw.fontSize.cell = parseFS('drawFontCellScale', 2.7);
+    settings.draw.fontSize.dialogue = parseFS('drawFontDialogueScale', 3.5);
+    settings.draw.fontSize.camera = parseFS('drawFontCameraScale', 2.7);
+    settings.draw.fontSize.metaValue = parseFS('drawFontMetaScale', 8.0);
+    saveSettings();
+    closeFontSettings();
+    if (typeof drawAll === 'function') drawAll();
+});
+document.getElementById('settings-font-cancel').addEventListener('click', closeFontSettings);
+document.getElementById('settings-font-reset').addEventListener('click', () => {
+    if (!confirm('文字設定をデフォルトに戻しますか？')) return;
+    settings.draw.fontSize = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.draw.fontSize));
+    saveSettings();
+    openFontSettings();
+});
+document.getElementById('settings-font-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'settings-font-modal') closeFontSettings();
+});
+
 function openSettingsHub() {
     document.getElementById('settings-hub-modal').style.display = 'flex';
+    const headToggle = document.getElementById('hubHeadMarginToggle');
+    const tailToggle = document.getElementById('hubTailMarginToggle');
+    if (headToggle) {
+        headToggle.checked = !!settings.draw.headMarginEnabled;
+        headToggle.onchange = () => {
+            settings.draw.headMarginEnabled = headToggle.checked;
+            saveSettings();
+            if (typeof drawAll === 'function') drawAll();
+            if (typeof resizeCanvases === 'function') resizeCanvases();
+        };
+    }
+    if (tailToggle) {
+        tailToggle.checked = (settings.draw.tailMargin || 0) > 0;
+        tailToggle.onchange = () => {
+            settings.draw.tailMargin = tailToggle.checked ? 18 : 0;
+            saveSettings();
+            if (typeof resizeCanvases === 'function') resizeCanvases();
+            if (typeof drawAll === 'function') drawAll();
+        };
+    }
 }
 function closeSettingsHub() {
     document.getElementById('settings-hub-modal').style.display = 'none';
@@ -608,6 +684,9 @@ function openEditorSettings() {
     document.querySelectorAll('#editor-shared-meta-checks input[data-meta-key]').forEach(cb => {
         cb.checked = shared.includes(cb.dataset.metaKey);
     });
+    document.getElementById('editorHeadMarginEnabled').checked = !!settings.draw.headMarginEnabled;
+    document.getElementById('editorHeadMargin').value = settings.draw.headMargin || 0;
+    document.getElementById('editorTailMargin').value = settings.draw.tailMargin != null ? settings.draw.tailMargin : 18;
     document.getElementById('settings-editor-modal').style.display = 'flex';
 }
 function closeEditorSettings() {
@@ -620,7 +699,16 @@ document.getElementById('settings-editor-ok').addEventListener('click', () => {
     });
     if (!settings.editor) settings.editor = {};
     settings.editor.sharedMetaKeys = newShared;
+    settings.draw.headMarginEnabled = document.getElementById('editorHeadMarginEnabled').checked;
+    let hm = parseInt(document.getElementById('editorHeadMargin').value, 10);
+    if (isNaN(hm) || hm < 0) hm = 0; if (hm > 120) hm = 120;
+    settings.draw.headMargin = hm;
+    let tm = parseInt(document.getElementById('editorTailMargin').value, 10);
+    if (isNaN(tm) || tm < 0) tm = 0; if (tm > 120) tm = 120;
+    settings.draw.tailMargin = tm;
     saveSettings();
+    if (typeof resizeCanvases === 'function') resizeCanvases();
+    if (typeof drawAll === 'function') drawAll();
     closeEditorSettings();
 });
 document.getElementById('settings-editor-cancel').addEventListener('click', closeEditorSettings);
@@ -1403,3 +1491,24 @@ document.getElementById('settings-naming-cancel').addEventListener('click', clos
 document.getElementById('settings-naming-modal').addEventListener('click', (e) => {
     if (e.target.id === 'settings-naming-modal') closeNamingSettings();
 });
+
+// 更新履歴（version.js に埋め込まれた APP_CHANGELOG を表示）
+const changelogBtn = document.getElementById('about-changelog-btn');
+if (changelogBtn) {
+    changelogBtn.addEventListener('click', () => {
+        const modal = document.getElementById('changelog-modal');
+        const content = document.getElementById('changelog-content');
+        if (modal && content) {
+            content.textContent = (typeof APP_CHANGELOG !== 'undefined')
+                ? APP_CHANGELOG
+                : 'CHANGELOG情報がありません。';
+            modal.style.display = 'flex';
+        }
+    });
+}
+const changelogClose = document.getElementById('changelog-close');
+if (changelogClose) {
+    changelogClose.addEventListener('click', () => {
+        document.getElementById('changelog-modal').style.display = 'none';
+    });
+}
