@@ -1167,8 +1167,40 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
         ctx.restore();
     };
 
+    // autoRepeats のスキップ範囲を事前収集（ACTION列のみ）
+    // checkRepeatColumns でカラムごとに自動rep範囲を計算
+    const autoRepSkipSet = new Set();
+    if (colType === 'ACTION' && typeof checkRepeatColumns === 'function') {
+        const totalF = (parseInt(metaData.lengthSec) || 0) * 24 + (parseInt(metaData.lengthFrame) || 0);
+        if (totalF > 0) {
+            for (let ci = 0; ci < colCount; ci++) {
+                const colData = [];
+                for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
+                const reps = checkRepeatColumns(colData, totalF, ci);
+                reps.forEach(r => {
+                    if (r.isHold) return;
+                    for (let f = r.startF + r.chunkLen; f < r.endF; f++) {
+                        autoRepSkipSet.add(`${ci}-${f}`);
+                    }
+                });
+            }
+        }
+    }
+    // customRepeats のスキップ範囲を事前収集（ACTION列のみ）
+    const customRepSkipSet = new Set();
+    if (colType === 'ACTION' && typeof customRepeats !== 'undefined' && Array.isArray(customRepeats)) {
+        customRepeats.forEach(rep => {
+            if (rep.colType !== 'ACTION') return;
+            for (let f = rep.startF; f <= rep.endF; f++) {
+                customRepSkipSet.add(`${rep.colIndex}-${f}`);
+            }
+        });
+    }
+
     for (let ci = 0; ci < colCount; ci++) {
         for (let f = absoluteStart; f < endFrame; f++) {
+            if (autoRepSkipSet.has(`${ci}-${f}`)) continue;
+            if (customRepSkipSet.has(`${ci}-${f}`)) continue;
             const key = `${colType}-${ci}-${f}`;
             const data = cellData[key];
             drawCellEntry(ci, f, data);
@@ -2433,6 +2465,23 @@ async function runImageExportFromDialog() {
         if (typeof saveSettings === 'function') saveSettings();
     }
 
+    // 保存先を先に確認（複数ページならフォルダ、単一なら個別ファイル）
+    // 重要: ユーザーのクリック直後に picker を呼ばないと一部ブラウザでブロックされる
+    let directoryHandle = null;
+    const needsDirectory = pages.length > 1 || (format === 'psd' && pages.length > 1);
+    if (needsDirectory && window.showDirectoryPicker) {
+        try {
+            directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            imageExportDirectoryHandle = directoryHandle;
+            if (typeof updateImageExportDestinationLabel === 'function') updateImageExportDestinationLabel();
+        } catch (err) {
+            if (err && err.name === 'AbortError') return; // ユーザーがキャンセル
+            console.error(err);
+            alert('保存先フォルダの選択に失敗しました。');
+            return;
+        }
+    }
+
     try {
         setImageExportBusy(true, '書き出し準備中...', 0);
         await exportTemplateImagePages({
@@ -2441,14 +2490,14 @@ async function runImageExportFromDialog() {
             filenameTemplate,
             pages,
             includeHandwriting,
-            directoryHandle: imageExportDirectoryHandle,
+            directoryHandle,
             onProgress: updateImageExportProgress
         });
         closeImageExportDialog();
     } catch (err) {
         if (err && err.name === 'AbortError') return;
         console.error(err);
-        alert('画像の保存に失敗しました。');
+        alert('画像の保存に失敗しました。\n' + (err && err.message ? err.message : ''));
     } finally {
         setImageExportBusy(false);
     }
@@ -2478,13 +2527,8 @@ async function exportTemplateImagePages(options) {
     const format = ['jpg', 'psd'].includes(options.format) ? options.format : 'png';
     const mimeType = format === 'jpg' ? 'image/jpeg' : format === 'psd' ? 'image/vnd.adobe.photoshop' : 'image/png';
     const ext = format === 'jpg' ? 'jpg' : format === 'psd' ? 'psd' : 'png';
+    // 保存先 directoryHandle は呼び出し側（runImageExportFromDialog）で取得済み
     let directoryHandle = options.directoryHandle || null;
-
-    if (!directoryHandle && window.showDirectoryPicker && options.pages.length > 1) {
-        directoryHandle = await window.showDirectoryPicker();
-        imageExportDirectoryHandle = directoryHandle;
-        updateImageExportDestinationLabel();
-    }
 
     if (format === 'psd' && options.pages.length > 1) {
         if (typeof buildTemplateMultiPagePsdBlob !== 'function') throw new Error('PSD exporter is not available.');

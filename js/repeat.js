@@ -6,8 +6,6 @@ function isNotEmptyOrSymbol(val) {
 
 // 列データから自動的にリピート/止メ範囲を抽出
 function checkRepeatColumns(colData, longestDuration, colIndex, applyExclusion = true) {
-    // 設定参照: 自動Rep無効なら何も返さない
-    if (typeof settings !== 'undefined' && settings.draw && settings.draw.repAutoEnabled === false) return [];
     const minCycles = (typeof settings !== 'undefined' && settings.draw && settings.draw.repMinCycles) || 2;
     let minimumRepeatLength = 2;
     let repeatInfos = [];
@@ -35,6 +33,9 @@ function checkRepeatColumns(colData, longestDuration, colIndex, applyExclusion =
         repeatInfos.push({ startF: 0, chunkLen: 1, endF: longestDuration, isHold: true });
         return repeatInfos;
     }
+
+    // 自動Rep無効なら止メ判定済みの結果のみ返す
+    if (typeof settings !== 'undefined' && settings.draw && settings.draw.repAutoEnabled === false) return repeatInfos;
 
     // 2. リピート(rep)列の検出
     let previousRepeatEndFrame = 0;
