@@ -52,6 +52,54 @@ function getHandwritingPage(pageIndex = currentPage) {
     return handwritingPages[key];
 }
 
+function hasHandwritingPagesData(pages) {
+    return Object.values(pages || {}).some(page =>
+        (Array.isArray(page.strokes) && page.strokes.length > 0) ||
+        (Array.isArray(page.images) && page.images.length > 0)
+    );
+}
+
+function hasHandwritingInSheetsData(sheetsData) {
+    return (sheetsData || []).some(sheet => hasHandwritingPagesData(sheet.handwritingPages || {}));
+}
+
+async function saveHandwritingBundleForFile(fileName, sheetsData, opts = {}) {
+    if (!hasHandwritingInSheetsData(sheetsData)) return true;
+    let directoryHandle = (typeof currentDirectoryHandle !== 'undefined') ? currentDirectoryHandle : null;
+    if (!directoryHandle && window.showDirectoryPicker) {
+        try {
+            directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            if (typeof currentDirectoryHandle !== 'undefined') currentDirectoryHandle = directoryHandle;
+        } catch (e) {
+            if (e && e.name === 'AbortError') return false;
+            throw e;
+        }
+    }
+    if (!directoryHandle) return false;
+    await exportHandwritingBundleToDirectory(directoryHandle, fileName, sheetsData, opts.dpi || HANDWRITING_BASE_DPI);
+    return true;
+}
+
+async function promptImportHandwritingBundleForFile(fileName) {
+    if (!window.showDirectoryPicker || typeof importHandwritingBundleFromDirectory !== 'function') return 0;
+    const shouldLoad = confirm('このファイルには手書きデータがあります。同名フォルダから手書きPNG/INIを読み込みますか？');
+    if (!shouldLoad) return 0;
+    try {
+        const directoryHandle = await window.showDirectoryPicker();
+        const count = await importHandwritingBundleFromDirectory(directoryHandle, fileName);
+        if (count > 0) {
+            if (typeof currentDirectoryHandle !== 'undefined') currentDirectoryHandle = directoryHandle;
+            showToast && showToast(`手書きPNG/INIを読み込みました (${count}件)`);
+        } else {
+            alert('同名フォルダ内に handwriting.ini または参照PNGが見つかりませんでした。');
+        }
+        return count;
+    } catch (e) {
+        if (e && e.name !== 'AbortError') console.warn('handwriting import failed', e);
+        return 0;
+    }
+}
+
 function exportHandwritingData() {
     return JSON.parse(JSON.stringify(handwritingPages || {}));
 }
@@ -314,11 +362,17 @@ function handleHandwritingPointerDown(e) {
         pushHandwritingHistory();
         handwritingDrag = {
             type: 'eraser',
-            stroke: { width: getDrawingSizePx('eraser'), points: [pt] },
+            stroke: {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                tool: 'eraser',
+                width: getDrawingSizePx('eraser'),
+                points: [pt]
+            },
             start: pt
         };
         eraseStrokesAtPoint(pt, handwritingDrag.stroke.width);
         renderHandwritingLayer();
+        drawStroke(handwritingCtx, handwritingDrag.stroke);
         e.preventDefault();
         return;
     }
@@ -423,6 +477,7 @@ function handleHandwritingPointerMove(e) {
         handwritingDrag.stroke.points.push(pt);
         eraseStrokesAtPoint(pt, handwritingDrag.stroke.width);
         renderHandwritingLayer();
+        drawStroke(handwritingCtx, handwritingDrag.stroke);
         return;
     }
 
@@ -484,6 +539,10 @@ function handleHandwritingPointerUp(e) {
     }
     if (handwritingDrag.type === 'eraser') {
         // 消しゴムは保存せず、触れたストロークを削除済み
+        if (handwritingDrag.stroke.points.length > 1) {
+            page.strokes.push(handwritingDrag.stroke);
+            markHandwritingDirty();
+        }
         handwritingDrag = null;
         renderHandwritingLayer();
         return;
@@ -529,13 +588,30 @@ function drawHandwritingImageElement(ctx, img, imageData) {
     ctx.restore();
 }
 
+function getImageBounds(imageData) {
+    if (!imageData) return null;
+    const rawX = imageData.x || 0;
+    const rawY = imageData.y || 0;
+    const rawW = imageData.w || handwritingCanvas?.width || Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4);
+    const rawH = imageData.h || handwritingCanvas?.height || Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4);
+    return {
+        x: Math.min(rawX, rawX + rawW),
+        y: Math.min(rawY, rawY + rawH),
+        w: Math.abs(rawW),
+        h: Math.abs(rawH)
+    };
+}
+
 function eraseStrokesAtPoint(pt, eraserWidth) {
     const page = getHandwritingPage();
     const radius = eraserWidth / 2;
     let changed = false;
     const newStrokes = [];
     for (const stroke of page.strokes) {
-        if (stroke.tool === 'eraser') { changed = true; continue; }
+        if (stroke.tool === 'eraser') {
+            newStrokes.push(stroke);
+            continue;
+        }
         const threshold = (radius + stroke.width / 2) ** 2;
         let segment = [];
         for (const p of stroke.points) {
@@ -563,13 +639,18 @@ function eraseStrokesAtPoint(pt, eraserWidth) {
 }
 
 function drawStroke(ctx, stroke) {
-    if (!stroke.points || stroke.points.length < 2 || stroke.tool === 'eraser') return;
+    if (!stroke.points || stroke.points.length < 2) return;
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = stroke.width;
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = stroke.color || '#000000';
+    if (stroke.tool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
+    } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = stroke.color || '#000000';
+    }
     ctx.beginPath();
     ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
     for (let i = 1; i < stroke.points.length; i++) {
@@ -681,10 +762,15 @@ async function exportHandwritingPngPages(dpi = HANDWRITING_BASE_DPI) {
         }
     }
 
+    const entries = [];
+    const sheetNo = (typeof currentSheetIndex !== 'undefined') ? currentSheetIndex + 1 : 1;
     for (const pageIndex of pageIndexes) {
         const canvas = await renderHandwritingPageToCanvas(pageIndex, dpi);
-        await saveHandwritingPngBlob(canvas, expandHandwritingFilenameTemplate(pageIndex, 'png'), directoryHandle);
+        const filename = expandHandwritingFilenameTemplate(pageIndex, 'png');
+        await saveHandwritingPngBlob(canvas, filename, directoryHandle);
+        entries.push({ sheet: sheetNo, page: pageIndex + 1, file: filename });
     }
+    await saveHandwritingIni(directoryHandle, entries, dpi);
 }
 
 function getHandwritingPageIndexesFromData(sourcePages) {
@@ -699,7 +785,7 @@ function getHandwritingPageIndexesFromData(sourcePages) {
 }
 
 async function exportHandwritingBundleToDirectory(directoryHandle, folderName, sheetsData, dpi = HANDWRITING_BASE_DPI) {
-    if (!directoryHandle || !window.showDirectoryPicker) return;
+    if (!directoryHandle) return;
     const safeFolderName = sanitizeFilePart(folderName.replace(/\.tdts$/i, '')) || 'timesheet';
     const handwritingDir = await directoryHandle.getDirectoryHandle(safeFolderName, { create: true });
     const entries = [];
@@ -730,10 +816,21 @@ async function saveHandwritingIni(directoryHandle, entries, dpi) {
         lines.push(`sheet${n}=${entry.sheet}`);
         lines.push(`page${n}=${entry.page}`);
     });
-    const fileHandle = await directoryHandle.getFileHandle('handwriting.ini', { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(lines.join('\n'));
-    await writable.close();
+    const text = lines.join('\n');
+    if (directoryHandle) {
+        const fileHandle = await directoryHandle.getFileHandle('handwriting.ini', { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(text);
+        await writable.close();
+        return;
+    }
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'handwriting.ini';
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 async function importHandwritingBundleFromDirectory(directoryHandle, folderName) {
@@ -843,11 +940,87 @@ function parseHandwritingFilename(filename) {
 async function importHandwritingPngFiles() {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/png,image/jpeg';
+    input.accept = '.ini,image/png,image/jpeg';
     input.multiple = true;
     input.onchange = async () => {
         const files = Array.from(input.files || []);
         if (!files.length) return;
+
+        const iniFile = files.find(file => /\.ini$/i.test(file.name));
+        if (iniFile) {
+            const imageFiles = new Map();
+            files.forEach(file => {
+                imageFiles.set(file.name.toLowerCase(), file);
+                imageFiles.set(file.name.replace(/\\/g, '/').split('/').pop().toLowerCase(), file);
+            });
+            const entries = parseHandwritingIni(await iniFile.text());
+            const touchedPages = new Set();
+            let importedFromIni = 0;
+            let iniDirectoryHandle = null;
+            for (const entry of entries) {
+                let pngFile = imageFiles.get(String(entry.file || '').toLowerCase()) ||
+                    imageFiles.get(String(entry.file || '').replace(/\\/g, '/').split('/').pop().toLowerCase());
+                if (!pngFile && window.showDirectoryPicker) {
+                    try {
+                        if (!iniDirectoryHandle) iniDirectoryHandle = await window.showDirectoryPicker();
+                        const basename = String(entry.file || '').replace(/\\/g, '/').split('/').pop();
+                        pngFile = await (await iniDirectoryHandle.getFileHandle(basename)).getFile();
+                    } catch (e) {
+                        pngFile = null;
+                    }
+                }
+                if (!pngFile) continue;
+                const dataUrl = await readFileAsDataUrl(pngFile);
+                const sheetIndex = Math.max(0, (entry.sheet || 1) - 1);
+                const pageIndex = Math.max(0, (entry.page || 1) - 1);
+                if (typeof sheets !== 'undefined' && sheets[sheetIndex]) {
+                    if (!sheets[sheetIndex].handwritingPages) sheets[sheetIndex].handwritingPages = {};
+                    const key = getHandwritingPageKey(pageIndex);
+                    const touchKey = `${sheetIndex}:${key}`;
+                    if (!touchedPages.has(touchKey)) {
+                        sheets[sheetIndex].handwritingPages[key] = { strokes: [], images: [] };
+                        touchedPages.add(touchKey);
+                    }
+                    sheets[sheetIndex].handwritingPages[key].images.push({
+                        id: `ini-${Date.now()}-${importedFromIni}`,
+                        dataUrl,
+                        x: 0,
+                        y: 0,
+                        w: Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4),
+                        h: Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
+                    });
+                } else {
+                    const page = getHandwritingPage(pageIndex);
+                    if (!touchedPages.has(pageIndex)) {
+                        page.strokes = [];
+                        page.images = [];
+                        touchedPages.add(pageIndex);
+                    }
+                    page.images.push({
+                        id: `ini-${Date.now()}-${importedFromIni}`,
+                        dataUrl,
+                        x: 0,
+                        y: 0,
+                        w: handwritingCanvas?.width || Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4),
+                        h: handwritingCanvas?.height || Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
+                    });
+                }
+                importedFromIni++;
+            }
+            if (importedFromIni > 0) {
+                if (typeof sheets !== 'undefined' && typeof currentSheetIndex !== 'undefined' && sheets[currentSheetIndex]) {
+                    importHandwritingData(sheets[currentSheetIndex].handwritingPages || {});
+                } else {
+                    renderHandwritingLayer();
+                    drawHandwritingUi();
+                }
+                markHandwritingDirty();
+                showToast && showToast(`${importedFromIni}件の手書きPNGをINIから読み込みました`);
+            } else {
+                alert('INIに記載されたPNGが見つかりませんでした。handwriting.ini と参照PNGを一緒に選択してください。');
+            }
+            return;
+        }
 
         let importedCount = 0;
         const importResults = [];
@@ -994,10 +1167,16 @@ function getStrokeBounds(stroke) {
 }
 
 function getSelectedStrokesBounds() {
-    const boxes = getHandwritingPage().strokes
+    const page = getHandwritingPage();
+    const boxes = page.strokes
         .filter(stroke => selectedStrokeIds.has(stroke.id))
         .map(getStrokeBounds)
         .filter(Boolean);
+    page.images
+        .filter(imageData => selectedStrokeIds.has(imageData.id))
+        .map(getImageBounds)
+        .filter(Boolean)
+        .forEach(box => boxes.push(box));
     if (!boxes.length) return null;
     const x1 = Math.min(...boxes.map(b => b.x));
     const y1 = Math.min(...boxes.map(b => b.y));
@@ -1012,18 +1191,36 @@ function rectsIntersect(a, b) {
 
 function selectStrokesInRect(rect) {
     const ids = new Set();
-    getHandwritingPage().strokes.forEach(stroke => {
+    const page = getHandwritingPage();
+    page.strokes.forEach(stroke => {
         const box = getStrokeBounds(stroke);
         if (box && rectsIntersect(rect, box)) ids.add(stroke.id);
+    });
+    page.images.forEach(imageData => {
+        const box = getImageBounds(imageData);
+        if (box && rectsIntersect(rect, box)) ids.add(imageData.id);
     });
     return ids;
 }
 
 function selectStrokesInPolygon(poly) {
     const ids = new Set();
-    getHandwritingPage().strokes.forEach(stroke => {
+    const page = getHandwritingPage();
+    page.strokes.forEach(stroke => {
         if (stroke.tool === 'eraser') return;
         if (stroke.points.some(pt => pointInPolygon(pt, poly))) ids.add(stroke.id);
+    });
+    page.images.forEach(imageData => {
+        const box = getImageBounds(imageData);
+        if (!box) return;
+        const points = [
+            { x: box.x, y: box.y },
+            { x: box.x + box.w, y: box.y },
+            { x: box.x, y: box.y + box.h },
+            { x: box.x + box.w, y: box.y + box.h },
+            { x: box.x + box.w / 2, y: box.y + box.h / 2 }
+        ];
+        if (points.some(pt => pointInPolygon(pt, poly))) ids.add(imageData.id);
     });
     return ids;
 }
@@ -1068,10 +1265,19 @@ function cancelTransformSelection() {
 }
 
 function endTransformSession(restore) {
+    const page = getHandwritingPage();
     if (restore && transformSession) {
-        getHandwritingPage().strokes.forEach(stroke => {
+        page.strokes.forEach(stroke => {
             const original = transformSession.originals.get(stroke.id);
-            if (original) stroke.points = original.map(p => ({ ...p }));
+            if (original && original.type === 'stroke') stroke.points = original.points.map(p => ({ ...p }));
+        });
+        page.images.forEach(imageData => {
+            const original = transformSession.originals.get(imageData.id);
+            if (!original || original.type !== 'image') return;
+            imageData.x = original.x;
+            imageData.y = original.y;
+            imageData.w = original.w;
+            imageData.h = original.h;
         });
     }
     transformSession = null;
@@ -1090,6 +1296,7 @@ function deleteSelectedStrokes() {
     endTransformSession(false);
     const page = getHandwritingPage();
     page.strokes = page.strokes.filter(stroke => !selectedStrokeIds.has(stroke.id));
+    page.images = page.images.filter(imageData => !selectedStrokeIds.has(imageData.id));
     selectedStrokeIds.clear();
     handwritingDrag = null;
     renderHandwritingLayer();
@@ -1161,21 +1368,41 @@ function drawPolygonPath(ctx, points, closePath) {
 
 function cloneSelectedStrokes() {
     const originals = new Map();
-    getHandwritingPage().strokes.forEach(stroke => {
+    const page = getHandwritingPage();
+    page.strokes.forEach(stroke => {
         if (selectedStrokeIds.has(stroke.id)) {
-            originals.set(stroke.id, stroke.points.map(p => ({ ...p })));
+            originals.set(stroke.id, { type: 'stroke', points: stroke.points.map(p => ({ ...p })) });
+        }
+    });
+    page.images.forEach(imageData => {
+        if (selectedStrokeIds.has(imageData.id)) {
+            originals.set(imageData.id, {
+                type: 'image',
+                x: imageData.x || 0,
+                y: imageData.y || 0,
+                w: imageData.w || 0,
+                h: imageData.h || 0
+            });
         }
     });
     return originals;
 }
 
 function applySelectedTransform(dx, dy, pt) {
+    const page = getHandwritingPage();
     if (handwritingDrag.mode === 'move') {
-        getHandwritingPage().strokes.forEach(stroke => {
+        page.strokes.forEach(stroke => {
             if (!selectedStrokeIds.has(stroke.id)) return;
             const original = handwritingDrag.originals.get(stroke.id);
-            if (!original) return;
-            stroke.points = original.map(p => ({ x: p.x + dx, y: p.y + dy }));
+            if (!original || original.type !== 'stroke') return;
+            stroke.points = original.points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+        });
+        page.images.forEach(imageData => {
+            if (!selectedStrokeIds.has(imageData.id)) return;
+            const original = handwritingDrag.originals.get(imageData.id);
+            if (!original || original.type !== 'image') return;
+            imageData.x = original.x + dx;
+            imageData.y = original.y + dy;
         });
         return;
     }
@@ -1201,14 +1428,23 @@ function applySelectedTransform(dx, dy, pt) {
     const scaleX = Math.abs(originalVector.x) < 1 ? 1 : currentVector.x / originalVector.x;
     const scaleY = Math.abs(originalVector.y) < 1 ? 1 : currentVector.y / originalVector.y;
 
-    getHandwritingPage().strokes.forEach(stroke => {
+    page.strokes.forEach(stroke => {
         if (!selectedStrokeIds.has(stroke.id)) return;
         const original = handwritingDrag.originals.get(stroke.id);
-        if (!original) return;
-        stroke.points = original.map(p => ({
+        if (!original || original.type !== 'stroke') return;
+        stroke.points = original.points.map(p => ({
             x: anchor.x + (p.x - anchor.x) * scaleX,
             y: anchor.y + (p.y - anchor.y) * scaleY
         }));
+    });
+    page.images.forEach(imageData => {
+        if (!selectedStrokeIds.has(imageData.id)) return;
+        const original = handwritingDrag.originals.get(imageData.id);
+        if (!original || original.type !== 'image') return;
+        imageData.x = anchor.x + (original.x - anchor.x) * scaleX;
+        imageData.y = anchor.y + (original.y - anchor.y) * scaleY;
+        imageData.w = original.w * scaleX;
+        imageData.h = original.h * scaleY;
     });
 }
 

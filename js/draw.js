@@ -387,7 +387,7 @@ function drawGrid() {
             drawRepMark(ctx, sec, rep.colIndex, rep.startF, rep.endF + 1, firstVal, firstData, typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep');
         } else {
             ctx.fillStyle = "rgba(200, 200, 200, 0.5)"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
-            let endF = Math.min(rep.endF, targetFrames - 1);
+            let endF = Math.min(rep.endF, numFrames - 1);
             for (let f = rep.startF; f <= endF; f++) {
                 let pData = getEffectiveRepeatPatternData(rep, f);
                 if (pData && pData.value !== "") {
@@ -422,7 +422,6 @@ function drawGrid() {
         // 内部記号はスキップ
         if (data.value && internalSymbols.includes(data.value)) continue;
         // カット尺以降のセル値は描画しない（TDTSの拡張データ等を表示しないため）
-        if (typeof targetFrames !== 'undefined' && targetFrames > 0 && f >= targetFrames) continue;
         // マージン部含めて描画（cut外も表示）
         let tx = 0, ty = frameY(f) + 16;
         const sec = sections.find(s => s.type === ct);
@@ -439,6 +438,9 @@ function drawGrid() {
             // 止メの場合: 1コマ目以外は省略
             let h = autoRepeats.find(rep => rep.isHold && rep.colIndex === ci && f >= 1 && f < rep.endF);
             if (h) isOmitted = true;
+            if (customRepeats.some(rep => rep.colType === ct && rep.colIndex === ci && f >= rep.startF && f <= rep.endF)) {
+                isOmitted = true;
+            }
         }
         if (isOmitted) continue;
         let isSelectedCol = (selectionStart && selectionStart.colType === ct && selectionStart.colIndex === ci);

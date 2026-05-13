@@ -305,6 +305,11 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
             if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
             // 手書きデータ有無の通知（クリックで手書き読み込みダイアログを開く）
             if (raw._hasHandwriting) {
+                if (typeof promptImportHandwritingBundleForFile === 'function') {
+                    await promptImportHandwritingBundleForFile(fileName);
+                    drawAll();
+                    if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
+                }
                 showToast && showToast('手書きデータあり - クリックしてPNG読み込み', 8000, () => {
                     if (typeof importHandwritingPngFiles === 'function') importHandwritingPngFiles();
                 });
@@ -836,13 +841,13 @@ window.exportTDTS = async function(arg) {
     }
     const fileContent = "toeiDigitalTimeSheet Save Data\n" + JSON.stringify(tdts, null, 4);
     // 別名保存時は現在のファイル名を優先
-    const fileName = (saveAs && currentFileName)
+    const fileName = currentFileName
         ? currentFileName.replace(/\.(tdts|xdts)$/i, '') + '.tdts'
         : (typeof buildTimesheetSaveFilename === 'function')
             ? buildTimesheetSaveFilename('tdts')
             : `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.tdts`;
     try {
-        if (directoryWorkflow && window.showDirectoryPicker) {
+        if ((directoryWorkflow || (hasHandwritingData && (saveAs || !currentFileHandle) && !currentDirectoryHandle)) && window.showDirectoryPicker) {
             const directoryHandle = await window.showDirectoryPicker();
             const handle = await directoryHandle.getFileHandle(fileName, { create: true });
             const writable = await handle.createWritable();
@@ -853,9 +858,9 @@ window.exportTDTS = async function(arg) {
             currentFileFormat = 'tdts';
             currentDirectoryHandle = directoryHandle;
             setCurrentFileName(handle.name || fileName, 'tdts');
-            if (typeof exportHandwritingBundleToDirectory === 'function') {
+            if (typeof saveHandwritingBundleForFile === 'function') {
                 try {
-                    await exportHandwritingBundleToDirectory(directoryHandle, fileName, allSheetData, 150);
+                    await saveHandwritingBundleForFile(fileName, allSheetData, { dpi: 150 });
                 } catch (handwritingErr) {
                     console.warn('handwriting auto-save failed', handwritingErr);
                     if (hasHandwritingData) {
@@ -871,7 +876,7 @@ window.exportTDTS = async function(arg) {
             types: { 'application/octet-stream': ['.tdts'] }
         }, { saveAs });
         // 手書きも保存（対応ブラウザのみ）
-        if (savedHandle && hasHandwritingData && typeof exportHandwritingBundleToDirectory === 'function') {
+        if (false && savedHandle && hasHandwritingData && typeof exportHandwritingBundleToDirectory === 'function') {
             if (currentDirectoryHandle) {
                 // 上書き保存 or 既にディレクトリがある場合: 自動保存
                 try {
@@ -892,6 +897,15 @@ window.exportTDTS = async function(arg) {
                         console.warn('handwriting save failed', handwritingErr);
                     }
                 }
+            }
+        }
+        if (savedHandle && hasHandwritingData && typeof saveHandwritingBundleForFile === 'function') {
+            try {
+                const ok = await saveHandwritingBundleForFile(savedHandle.name || fileName, allSheetData, { dpi: 150 });
+                if (!ok) alert('TDTSは保存しましたが、手書きPNG/INIの保存先フォルダが選択されませんでした。');
+            } catch (handwritingErr) {
+                console.warn('handwriting auto-save failed', handwritingErr);
+                alert('TDTSは保存しましたが、手書きPNG/INIの自動保存に失敗しました。');
             }
         }
         if (typeof markClean === 'function') markClean();

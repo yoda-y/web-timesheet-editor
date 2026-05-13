@@ -697,6 +697,11 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
         if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
 
         if (raw._hasHandwriting) {
+            if (typeof promptImportHandwritingBundleForFile === 'function') {
+                await promptImportHandwritingBundleForFile(file.name);
+                if (typeof drawAll === 'function') drawAll();
+                if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
+            }
             showToast('このファイルには手書きデータがあります。「フォルダから開く」で自動読み込みできます。', 5000);
         } else {
             showToast(`${file.name} を読み込みました`);

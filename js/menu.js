@@ -105,7 +105,10 @@ const menuActions = {
         if (currentFileFormat === 'xdts') window.exportXDTS({ saveAs: false });
         else window.exportTDTS({ saveAs: false });
     },
-    'file.saveAs': () => window.exportTDTS({ saveAs: true }),
+    'file.saveAs': () => {
+        if (currentFileFormat === 'xdts') window.exportXDTS({ saveAs: true });
+        else window.exportTDTS({ saveAs: true });
+    },
     'file.import.tdts': () => document.getElementById('fileInput').click(),
     'file.import.xdts': () => document.getElementById('fileInput').click(),
     'file.export.tdts': () => window.exportTDTS({ saveAs: true }),

@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.7.0';
+const APP_VERSION = '0.7.1';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,22 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.7.1 (2026-05-13)
+
+### 修正
+- カット尺以降のACTION/CELL値がEdit/Previewで表示されない問題を修正
+- ACTION/CELLの手動Repがカット尺以降でも省略・描画されるよう調整
+- 手書きPNG保存時に \`handwriting.ini\` も出力するよう修正
+- TDTS/XDTS保存時に手書きPNG/INIも半自動で保存するよう改善
+- 手書きあり保存時は保存先フォルダ選択1回で、本体ファイルと同名フォルダ内のPNG/INIをまとめて保存するよう改善
+- 手書きありTDTS読み込み時に、同名フォルダからPNG/INIを読み込む確認を追加
+- \`handwriting.ini\` から複数ページ分の手書きPNGを読み込めるよう改善
+- 読み込んだ手書きPNGを消しゴム、選択、変形、削除できるよう改善
+- 手書きあり保存時のファイル名を、既存ファイル名優先、新規時は命名規則に従うよう調整
+
+### 検討
+- HTML出力 / GitHub Pages投稿機能は後回し
 
 ## v0.7.0 (2026-05-12)
 

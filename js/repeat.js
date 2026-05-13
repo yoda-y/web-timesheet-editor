@@ -119,8 +119,7 @@ window.applyRepeat = function(mode = 'repeat') {
     }
     if (pattern.every(d => d === null)) return;
     pushHistory();
-    const targetFrameCount = (parseInt(metaData.lengthSec) || 0) * 24 + (parseInt(metaData.lengthFrame) || 0);
-    const repeatLimit = targetFrameCount > 0 ? Math.min(numFrames, targetFrameCount) : numFrames;
+    const repeatLimit = numFrames;
     let endF = repeatLimit - 1;
     for (let f = maxF + 1; f < repeatLimit; f++) {
         if (cellData[`${selectionStart.colType}-${selectionStart.colIndex}-${f}`]) { endF = f - 1; break; }
@@ -169,7 +168,8 @@ function getRepeatPatternData(rep, f) {
 
 // 描画ヘルパー: rep 表記（先頭セル番号 + "rep" + 青点線）
 function drawRepMark(ctx, sec, colIndex, chunkStartFrame, endF, firstVal, firstData, label = 'rep') {
-    if (chunkStartFrame >= targetFrames) return;
+    const drawFrameLimit = (typeof numFrames !== 'undefined' && numFrames > 0) ? numFrames : targetFrames;
+    if (chunkStartFrame >= drawFrameLimit) return;
     let tx = sec.x + colIndex * sec.cw + sec.cw / 2;
     ctx.fillStyle = getStyle('--text-color');
     ctx.font = "bold 12px sans-serif";
@@ -179,7 +179,7 @@ function drawRepMark(ctx, sec, colIndex, chunkStartFrame, endF, firstVal, firstD
     drawRepOptionMark(ctx, tx, ty, firstData);
     let repFrame = label === 'rep' ? chunkStartFrame + 1 : chunkStartFrame + 1;
     let labelBottomY = null;
-    if (repFrame < targetFrames) {
+    if (repFrame < drawFrameLimit) {
         if (label === 'rep') {
             ctx.fillText(label, tx, frameY(repFrame) + 16);
         } else {
@@ -187,8 +187,8 @@ function drawRepMark(ctx, sec, colIndex, chunkStartFrame, endF, firstVal, firstD
         }
     }
     let lineStartF = repFrame + 1;
-    let lineEndF = Math.min(endF - 1, repFrame + 6, targetFrames - 1);
-    if (lineEndF >= lineStartF && lineStartF < targetFrames) {
+    let lineEndF = Math.min(endF - 1, repFrame + 6, drawFrameLimit - 1);
+    if (lineEndF >= lineStartF && lineStartF < drawFrameLimit) {
         ctx.strokeStyle = (typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)";
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 4]);

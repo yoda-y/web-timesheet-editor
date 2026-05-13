@@ -1199,7 +1199,8 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
     // checkRepeatColumns でカラムごとに自動rep範囲を計算
     const autoRepSkipSet = new Set();
     if (colType === 'ACTION' && typeof checkRepeatColumns === 'function') {
-        const totalF = (parseInt(metaData.lengthSec) || 0) * 24 + (parseInt(metaData.lengthFrame) || 0);
+        const targetF = (parseInt(metaData.lengthSec) || 0) * 24 + (parseInt(metaData.lengthFrame) || 0);
+        const totalF = Math.max(targetF, endFrame);
         if (totalF > 0) {
             for (let ci = 0; ci < colCount; ci++) {
                 const colData = [];
@@ -1225,9 +1226,8 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
         });
     }
 
-    const targetFramesLimit = (parseInt(metaData.lengthSec) || 0) * 24 + (parseInt(metaData.lengthFrame) || 0);
     for (let ci = 0; ci < colCount; ci++) {
-        for (let f = absoluteStart; f < endFrame && (targetFramesLimit <= 0 || f < targetFramesLimit); f++) {
+        for (let f = absoluteStart; f < endFrame; f++) {
             if (autoRepSkipSet.has(`${ci}-${f}`)) continue;
             if (customRepSkipSet.has(`${ci}-${f}`)) continue;
             const key = `${colType}-${ci}-${f}`;
@@ -1237,7 +1237,6 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
     }
 
     if (typeof customRepeats !== 'undefined' && Array.isArray(customRepeats) && colType === 'CELL') {
-        const targetFrames = (parseInt(metaData.lengthSec) || 0) * 24 + (parseInt(metaData.lengthFrame) || 0);
         customRepeats.forEach(rep => {
             if (rep.colType !== colType) return;
             if (rep.colIndex < 0 || rep.colIndex >= colCount) return;
@@ -1245,7 +1244,7 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
             if (rep.endF < absoluteStart || rep.startF >= endFrame) return;
 
             const startF = Math.max(rep.startF, absoluteStart);
-            const endF = Math.min(rep.endF, endFrame - 1, targetFrames > 0 ? targetFrames - 1 : Number.MAX_SAFE_INTEGER);
+            const endF = Math.min(rep.endF, endFrame - 1);
             for (let f = startF; f <= endF; f++) {
                 const key = `${colType}-${rep.colIndex}-${f}`;
                 if (cellData[key]?.value) continue;
@@ -1548,19 +1547,19 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
     if (typeof checkRepeatColumns !== 'function') return;
 
     const targetFrames = (parseInt(metaData.lengthSec) || 0) * 24 + (parseInt(metaData.lengthFrame) || 0);
-    if (targetFrames <= 0) return;
-
     const endFrame = absoluteStart + TEMPLATE.FRAMES_PER_COL;
+    const drawFrameLimit = Math.max(targetFrames, endFrame);
+    if (drawFrameLimit <= 0) return;
 
     for (let ci = 0; ci < colCount; ci++) {
         // 列データ収集
         const colData = [];
-        for (let f = 0; f < targetFrames; f++) {
+        for (let f = 0; f < drawFrameLimit; f++) {
             colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
         }
 
         // リピート・止め検出
-        const repeats = checkRepeatColumns(colData, targetFrames, ci);
+        const repeats = checkRepeatColumns(colData, drawFrameLimit, ci);
         const tx = x + ci * colW + colW / 2;
 
         repeats.forEach(r => {
@@ -1597,14 +1596,14 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
 
                 // "rep"
                 const repTextFrame = chunkStartFrame + 1;
-                if (repTextFrame >= absoluteStart && repTextFrame < endFrame && repTextFrame < targetFrames) {
+                if (repTextFrame >= absoluteStart && repTextFrame < endFrame && repTextFrame < drawFrameLimit) {
                     const repTextY = y + (repTextFrame - absoluteStart) * rowH;
                     drawRepeatTextWithBg(ctx, 'rep', tx, repTextY + rowH / 2, `bold ${m(2)}px sans-serif`, scale);
                 }
 
                 // 点線
                 const lineStartF = repTextFrame + 1;
-                const lineEndF = Math.min(r.endF - 1, chunkStartFrame + 6, targetFrames - 1);
+                const lineEndF = Math.min(r.endF - 1, chunkStartFrame + 6, drawFrameLimit - 1);
                 if (lineEndF >= lineStartF && lineStartF >= absoluteStart && lineStartF < endFrame) {
                     const lineStartY = y + (lineStartF - absoluteStart) * rowH;
                     const lineEndY = y + (Math.min(lineEndF, endFrame - 1) - absoluteStart + 1) * rowH;
@@ -1641,7 +1640,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
 
             const repTextFrame = chunkStartFrame + 1;
             let labelBox = null;
-            if (repTextFrame >= absoluteStart && repTextFrame < endFrame && repTextFrame < targetFrames) {
+            if (repTextFrame >= absoluteStart && repTextFrame < endFrame && repTextFrame < drawFrameLimit) {
                 const repTextY = y + (repTextFrame - absoluteStart) * rowH;
                 const label = typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep';
                 if (label === 'rep') {
@@ -1652,7 +1651,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
             }
 
             const lineStartF = repTextFrame + 1;
-            const lineEndF = Math.min(rep.endF, chunkStartFrame + 6, targetFrames - 1);
+            const lineEndF = Math.min(rep.endF, chunkStartFrame + 6, drawFrameLimit - 1);
             if (lineEndF >= lineStartF && lineStartF >= absoluteStart && lineStartF < endFrame) {
                 const baseLineStartY = y + (lineStartF - absoluteStart) * rowH;
                 const lineStartY = labelBox ? Math.max(baseLineStartY, labelBox.bottom + m(0.4)) : baseLineStartY;

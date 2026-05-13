@@ -298,17 +298,47 @@ window.exportXDTS = async function(arg) {
     };
 
     const fileContent = "exchangeDigitalTimeSheet Save Data\n" + JSON.stringify(xdts, null, 4);
+    const allSheetData = (typeof exportAllSheetsData === 'function')
+        ? exportAllSheetsData()
+        : [{ name: metaData.sheetName, color: 0, metaData, cellData, booksData, customRepeats, dialogueBlocks, cameraBlocks, sections, handwritingPages }];
+    const hasHandwritingData = (typeof hasHandwritingInSheetsData === 'function') && hasHandwritingInSheetsData(allSheetData);
     // 別名保存時は現在のファイル名を優先
-    const fileName = (saveAs && currentFileName)
+    const fileName = currentFileName
         ? currentFileName.replace(/\.(tdts|xdts)$/i, '') + '.xdts'
         : (typeof buildTimesheetSaveFilename === 'function')
             ? buildTimesheetSaveFilename('xdts')
             : `timesheet${metaData.scene ? `_s${metaData.scene}` : ''}${metaData.cut ? `_cut${metaData.cut}` : ''}.xdts`;
     try {
-        await saveFileWithPicker('xdts', fileName, fileContent, {
+        if (hasHandwritingData && (saveAs || !currentFileHandle) && !currentDirectoryHandle && window.showDirectoryPicker) {
+            const directoryHandle = await window.showDirectoryPicker();
+            const handle = await directoryHandle.getFileHandle(fileName, { create: true });
+            const writable = await handle.createWritable();
+            await writable.write(fileContent);
+            await writable.close();
+            await saveLastFileHandle('xdts', handle);
+            currentFileHandle = handle;
+            currentFileFormat = 'xdts';
+            currentDirectoryHandle = directoryHandle;
+            setCurrentFileName(handle.name || fileName, 'xdts');
+            if (typeof saveHandwritingBundleForFile === 'function') {
+                await saveHandwritingBundleForFile(fileName, allSheetData, { dpi: 150 });
+            }
+            if (typeof markClean === 'function') markClean();
+            return;
+        }
+        const savedHandle = await saveFileWithPicker('xdts', fileName, fileContent, {
             description: 'exchange Digital Time Sheet',
             types: { 'application/octet-stream': ['.xdts'] }
         }, { saveAs });
+        if (savedHandle && hasHandwritingData && typeof saveHandwritingBundleForFile === 'function') {
+            try {
+                const ok = await saveHandwritingBundleForFile(savedHandle.name || fileName, allSheetData, { dpi: 150 });
+                if (!ok) alert('XDTSは保存しましたが、手書きPNG/INIの保存先フォルダが選択されませんでした。');
+            } catch (handwritingErr) {
+                console.warn('handwriting auto-save failed', handwritingErr);
+                alert('XDTSは保存しましたが、手書きPNG/INIの自動保存に失敗しました。');
+            }
+        }
         if (typeof markClean === 'function') markClean();
     } catch (err) { if (err.name !== 'AbortError') alert("XDTS 保存に失敗しました。"); }
 };
