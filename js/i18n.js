@@ -155,6 +155,7 @@ const I18N = {
         'extTpl.newTemplateName': '新規テンプレート',
         'extTpl.unnamed': '(無名)',
         'extTpl.imageNotSet': '画像未設定',
+        'extTpl.newOption': '+ 新規テンプレート追加...',
         // BBoxエディタ
         'bbox.modalTitlePrefix': 'BBoxエディタ - ',
         'bbox.section.tags': 'タグ一覧',
@@ -612,6 +613,7 @@ const I18N = {
         'extTpl.newTemplateName': 'New Template',
         'extTpl.unnamed': '(Untitled)',
         'extTpl.imageNotSet': 'No image',
+        'extTpl.newOption': '+ Add new template...',
         // BBox Editor
         'bbox.modalTitlePrefix': 'BBox Editor - ',
         'bbox.section.tags': 'Tags',
