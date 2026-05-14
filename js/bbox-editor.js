@@ -26,10 +26,12 @@ function undoBBox() {
 window.bboxEditorPushHistory = pushBBoxHistory;
 window.bboxEditorUndo = undoBBox;
 
+const _bi18n = (key, fallback) => (typeof t === 'function' ? t(key) : null) || fallback;
+
 function openBBoxEditor(templateId) {
     return (async () => {
         const tpl = await window.externalTemplate.get(templateId);
-        if (!tpl) { alert('テンプレートが見つかりません'); return; }
+        if (!tpl) { alert(_bi18n('bbox.alert.notFound', 'テンプレートが見つかりません')); return; }
         bboxEditorTemplate = JSON.parse(JSON.stringify(tpl));
         if (!bboxEditorTemplate.bboxes) bboxEditorTemplate.bboxes = {};
         // 初回（bboxes が空）の場合、基本タグをデフォルトON
@@ -47,7 +49,7 @@ function openBBoxEditor(templateId) {
         }
         bboxEditorHistory = [];
         bboxEditorSelectedTag = null;
-        document.getElementById('bbox-editor-template-name').textContent = tpl.name || '無名';
+        document.getElementById('bbox-editor-template-name').textContent = tpl.name || _bi18n('bbox.template.untitled', '無名');
         renderBBoxEditorTagList();
         renderBBoxEditorPropsForm();
         updateBBoxEditorImageInfo();
@@ -77,7 +79,14 @@ function renderBBoxEditorTagList() {
         if (!cats[cat]) cats[cat] = [];
         cats[cat].push({ key, ...t });
     }
-    const catLabels = { meta: 'メタ情報', staff: '担当者', timeline: 'タイムライン', custom: 'カスタム', extra: '拡張', other: 'その他' };
+    const catLabels = {
+        meta:     _bi18n('bbox.cat.meta',     'メタ情報'),
+        staff:    _bi18n('bbox.cat.staff',    '担当者'),
+        timeline: _bi18n('bbox.cat.timeline', 'タイムライン'),
+        custom:   _bi18n('bbox.cat.custom',   'カスタム'),
+        extra:    _bi18n('bbox.cat.extra',    '拡張'),
+        other:    _bi18n('bbox.cat.other',    'その他'),
+    };
     let html = '';
     Object.keys(catLabels).forEach(cat => {
         if (!cats[cat]) return;
@@ -229,10 +238,11 @@ function updateBBoxEditorImageInfo() {
     const info = document.getElementById('bbox-editor-image-info');
     const noImg = document.getElementById('bbox-editor-no-image');
     if (bboxEditorTemplate.image) {
-        info.textContent = `画像: ${bboxEditorTemplate.imageWidth} × ${bboxEditorTemplate.imageHeight} px`;
+        const tpl = _bi18n('bbox.alert.imageInfo', '画像: {w} × {h} px');
+        info.textContent = tpl.replace('{w}', bboxEditorTemplate.imageWidth).replace('{h}', bboxEditorTemplate.imageHeight);
         if (noImg) noImg.style.display = 'none';
     } else {
-        info.textContent = '画像なし';
+        info.textContent = _bi18n('bbox.alert.noImageInfo', '画像なし');
         if (noImg) noImg.style.display = 'block';
     }
 }
@@ -284,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const toSave = JSON.parse(JSON.stringify(bboxEditorTemplate));
             await window.externalTemplate.save(toSave);
             console.log('[BBox] 保存成功:', toSave.id, Object.keys(toSave.bboxes).length, 'tags');
-            if (typeof showToast === 'function') showToast('BBox設定を保存しました', 2000);
+            if (typeof showToast === 'function') showToast(_bi18n('bbox.alert.savedToast', 'BBox設定を保存しました'), 2000);
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
             // 親モーダルが開いていれば draft を再読込
             const extModal = document.getElementById('external-template-modal');
@@ -294,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
             closeBBoxEditor();
         } catch (err) {
             console.error('BBox保存エラー:', err);
-            alert('保存に失敗しました: ' + (err.message || err));
+            alert(_bi18n('bbox.alert.saveFailed', '保存に失敗しました: ') + (err.message || err));
         }
     });
 

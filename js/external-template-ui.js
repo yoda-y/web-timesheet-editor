@@ -4,6 +4,8 @@
 let extTplCurrentId = null;
 let extTplDraft = null;
 
+const _ei18n = (key, fallback) => (typeof t === 'function' ? t(key) : null) || fallback;
+
 // ── モーダル開閉 ──────────────────────────────────────────
 async function openExternalTemplateModal() {
     document.getElementById('external-template-modal').style.display = 'flex';
@@ -31,7 +33,7 @@ async function refreshExternalTemplateList() {
     const lblExp = i18n('extTpl.export', '書出');
     const lblDel = i18n('extTpl.delete', '削除');
     listEl.innerHTML = items.map(tpl => {
-        const escapedName = (tpl.name || '(無名)').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const escapedName = (tpl.name || _ei18n('extTpl.unnamed', '(無名)')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         return `<div class="ext-tpl-list-item" data-id="${tpl.id}">
             <span class="name">${escapedName}</span>
             <span class="row-btns">
@@ -58,7 +60,7 @@ async function refreshExternalTemplateList() {
                 await refreshExternalTemplateList();
                 if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
             } else if (action === 'delete') {
-                if (!confirm('削除してよろしいですか？')) return;
+                if (!confirm(_ei18n('extTpl.confirmDelete', '削除してよろしいですか？'))) return;
                 await window.externalTemplate.delete(id);
                 if (extTplCurrentId === id) showExternalTemplateDetail(null);
                 await refreshExternalTemplateList();
@@ -112,7 +114,7 @@ function updateExternalTemplateImagePreview(dataUrl, w, h) {
         info.textContent = `${w} × ${h} px`;
     } else {
         img.removeAttribute('src');
-        info.textContent = '画像未設定';
+        info.textContent = _ei18n('extTpl.imageNotSet', '画像未設定');
     }
 }
 
@@ -168,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await showExternalTemplateDetail(newTpl.id);
         } catch (err) {
             console.error('外部テンプレート新規追加エラー:', err);
-            alert('新規追加に失敗しました:\n' + (err && err.message ? err.message : err));
+            alert(_ei18n('extTpl.alert.newFailed', '新規追加に失敗しました:\n') + (err && err.message ? err.message : err));
         }
     });
 
@@ -186,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
             await showExternalTemplateDetail(tpl.id);
         } catch (err) {
-            alert('インポートに失敗しました: ' + (err.message || err));
+            alert(_ei18n('extTpl.alert.importFailed', 'インポートに失敗しました: ') + (err.message || err));
         }
         e.target.value = '';
     });
@@ -205,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
             extTplDraft.imageHeight = result.height;
             updateExternalTemplateImagePreview(result.dataUrl, result.width, result.height);
         } catch (err) {
-            alert('画像読み込みに失敗しました: ' + (err.message || err));
+            alert(_ei18n('extTpl.alert.imageLoadFailed', '画像読み込みに失敗しました: ') + (err.message || err));
         }
         e.target.value = '';
     });
@@ -214,29 +216,29 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('ext-tpl-save-btn').addEventListener('click', async () => {
         if (!extTplDraft) return;
         try {
-            extTplDraft.name = document.getElementById('ext-tpl-name-input').value.trim() || '無名テンプレート';
+            extTplDraft.name = document.getElementById('ext-tpl-name-input').value.trim() || _ei18n('extTpl.untitled', '無名テンプレート');
             extTplDraft.updatedAt = Date.now();
             await window.externalTemplate.save(extTplDraft);
             await refreshExternalTemplateList();
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
-            if (typeof showToast === 'function') showToast('テンプレートを保存しました', 2000);
+            if (typeof showToast === 'function') showToast(_ei18n('extTpl.toast.saved', 'テンプレートを保存しました'), 2000);
         } catch (err) {
             console.error('テンプレート保存エラー:', err);
-            alert('保存に失敗しました:\n' + (err && err.message ? err.message : err));
+            alert(_ei18n('bbox.alert.saveFailed', '保存に失敗しました: ') + (err && err.message ? err.message : err));
         }
     });
 
     // BBoxエディタを開く
     document.getElementById('ext-tpl-bbox-editor-btn').addEventListener('click', async () => {
-        if (!extTplCurrentId) { alert('テンプレートを選択してください'); return; }
+        if (!extTplCurrentId) { alert(_ei18n('extTpl.alert.selectTemplate', 'テンプレートを選択してください')); return; }
         if (!extTplDraft || !extTplDraft.image) {
-            alert('先に背景画像を設定してから「保存」してください');
+            alert(_ei18n('extTpl.alert.imageRequired', '先に背景画像を設定してから「保存」してください'));
             return;
         }
         if (typeof window.openBBoxEditor !== 'function') return;
         try {
             // 未保存の draft 内容を先に保存してから開く（画像反映のため）
-            extTplDraft.name = document.getElementById('ext-tpl-name-input').value.trim() || '無名テンプレート';
+            extTplDraft.name = document.getElementById('ext-tpl-name-input').value.trim() || _ei18n('extTpl.untitled', '無名テンプレート');
             extTplDraft.updatedAt = Date.now();
             await window.externalTemplate.save(extTplDraft);
             await refreshExternalTemplateList();
@@ -244,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await window.openBBoxEditor(extTplCurrentId);
         } catch (err) {
             console.error('BBoxエディタを開けません:', err);
-            alert('BBoxエディタを開けませんでした: ' + (err && err.message ? err.message : err));
+            alert(_ei18n('extTpl.alert.openFailed', 'BBoxエディタを開けませんでした: ') + (err && err.message ? err.message : err));
         }
     });
 

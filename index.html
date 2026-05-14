@@ -420,61 +420,61 @@
 <!-- BBoxエディタモーダル -->
 <div id="bbox-editor-modal" class="settings-modal" style="display:none;">
   <div class="settings-modal-inner bbox-editor-inner">
-    <h3>BBoxエディタ - <span id="bbox-editor-template-name">-</span></h3>
+    <h3><span data-i18n="bbox.modalTitlePrefix">BBoxエディタ - </span><span id="bbox-editor-template-name">-</span></h3>
     <div class="bbox-editor-body">
       <div class="bbox-editor-tags">
-        <div class="bbox-editor-section-title">タグ一覧</div>
+        <div class="bbox-editor-section-title" data-i18n="bbox.section.tags">タグ一覧</div>
         <div id="bbox-editor-tag-list" class="bbox-editor-tag-list">
           <!-- JSがカテゴリごとに生成 -->
         </div>
       </div>
       <div class="bbox-editor-canvas-wrap">
         <div class="bbox-editor-canvas-toolbar">
-          <span id="bbox-editor-image-info" class="bbox-editor-image-info">画像なし</span>
-          <span class="bbox-editor-canvas-hint">Space+ドラッグ: パン / Space+Ctrl+ドラッグ: ズーム / クリック: 選択 / ドラッグ: 移動・ハンドルでリサイズ</span>
+          <span id="bbox-editor-image-info" class="bbox-editor-image-info" data-i18n="bbox.alert.noImageInfo">画像なし</span>
+          <span class="bbox-editor-canvas-hint" data-i18n="bbox.canvas.hint">Space+ドラッグ: パン / Space+Ctrl+ドラッグ: ズーム / クリック: 選択 / ドラッグ: 移動・ハンドルでリサイズ</span>
         </div>
         <div id="bbox-editor-canvas-container" class="bbox-editor-canvas-container">
           <canvas id="bbox-editor-canvas"></canvas>
-          <div id="bbox-editor-no-image" class="bbox-editor-no-image">背景画像が設定されていません</div>
+          <div id="bbox-editor-no-image" class="bbox-editor-no-image" data-i18n="bbox.noImage">背景画像が設定されていません</div>
         </div>
       </div>
       <div class="bbox-editor-props">
-        <div class="bbox-editor-section-title">プロパティ</div>
-        <div id="bbox-editor-props-empty" class="bbox-editor-props-empty">BBoxを選択してください</div>
+        <div class="bbox-editor-section-title" data-i18n="bbox.section.props">プロパティ</div>
+        <div id="bbox-editor-props-empty" class="bbox-editor-props-empty" data-i18n="bbox.props.empty">BBoxを選択してください</div>
         <div id="bbox-editor-props-form" class="bbox-editor-props-form" style="display:none;">
-          <div class="settings-row"><label>タグ:</label>
+          <div class="settings-row"><label data-i18n="bbox.prop.tag">タグ:</label>
             <span id="bbox-prop-tag-label" class="bbox-prop-readonly"></span>
             <label style="margin-left:8px; font-size:11px; display:inline-flex; align-items:center; gap:4px;">
-              <input type="checkbox" id="bbox-prop-locked"> ロック
+              <input type="checkbox" id="bbox-prop-locked"> <span data-i18n="bbox.prop.locked">ロック</span>
             </label>
           </div>
-          <div class="settings-row"><label>X (0-1):</label><input type="number" id="bbox-prop-x" min="0" max="1" step="0.001"></div>
-          <div class="settings-row"><label>Y (0-1):</label><input type="number" id="bbox-prop-y" min="0" max="1" step="0.001"></div>
-          <div class="settings-row"><label>W (0-1):</label><input type="number" id="bbox-prop-w" min="0" max="1" step="0.001"></div>
-          <div class="settings-row"><label>H (0-1):</label><input type="number" id="bbox-prop-h" min="0" max="1" step="0.001"></div>
+          <div class="settings-row"><label data-i18n="bbox.prop.x">X (0-1):</label><input type="number" id="bbox-prop-x" min="0" max="1" step="0.001"></div>
+          <div class="settings-row"><label data-i18n="bbox.prop.y">Y (0-1):</label><input type="number" id="bbox-prop-y" min="0" max="1" step="0.001"></div>
+          <div class="settings-row"><label data-i18n="bbox.prop.w">W (0-1):</label><input type="number" id="bbox-prop-w" min="0" max="1" step="0.001"></div>
+          <div class="settings-row"><label data-i18n="bbox.prop.h">H (0-1):</label><input type="number" id="bbox-prop-h" min="0" max="1" step="0.001"></div>
           <div class="settings-row" id="bbox-prop-prefix-row" style="display:none;">
-            <label>接頭辞:</label><input type="text" id="bbox-prop-prefix" placeholder="#/S- 等">
+            <label data-i18n="bbox.prop.prefix">接頭辞:</label><input type="text" id="bbox-prop-prefix" placeholder="#/S- 等" data-i18n-placeholder="bbox.prop.prefixPlaceholder">
           </div>
           <div class="settings-row" id="bbox-prop-label-row" style="display:none;">
-            <label>ラベル:</label><input type="text" id="bbox-prop-label" placeholder="色指定 等">
+            <label data-i18n="bbox.prop.label">ラベル:</label><input type="text" id="bbox-prop-label" placeholder="色指定 等" data-i18n-placeholder="bbox.prop.labelPlaceholder">
           </div>
           <div class="settings-row" id="bbox-prop-type-row" style="display:none;">
-            <label>入力タイプ:</label>
+            <label data-i18n="bbox.prop.type">入力タイプ:</label>
             <select id="bbox-prop-type"><option value="text">text</option><option value="multiline">multiline</option></select>
           </div>
           <div class="settings-row" id="bbox-prop-frames-row" style="display:none;">
-            <label>フレーム数:</label><input type="number" id="bbox-prop-frames" min="1" max="999" step="1" value="72">
+            <label data-i18n="bbox.prop.frames">フレーム数:</label><input type="number" id="bbox-prop-frames" min="1" max="999" step="1" value="72">
           </div>
           <div class="settings-row" id="bbox-prop-columns-row" style="display:none;">
-            <label>カラム数:</label><input type="number" id="bbox-prop-columns" min="1" max="20" step="1" value="5">
+            <label data-i18n="bbox.prop.columns">カラム数:</label><input type="number" id="bbox-prop-columns" min="1" max="20" step="1" value="5">
           </div>
         </div>
       </div>
     </div>
     <div class="settings-actions">
       <span class="bbox-editor-hint" style="font-size:11px;color:#888;margin-right:auto;">Ctrl+ホイール: ズーム ／ Space+ドラッグ: パン</span>
-      <button id="bbox-editor-cancel-btn">キャンセル</button>
-      <button id="bbox-editor-save-btn" class="primary">保存</button>
+      <button id="bbox-editor-cancel-btn" data-i18n="btn.cancel">キャンセル</button>
+      <button id="bbox-editor-save-btn" class="primary" data-i18n="btn.save">保存</button>
     </div>
   </div>
 </div>
