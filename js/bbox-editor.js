@@ -106,7 +106,11 @@ function toggleBBoxEnabled(tagKey, enabled) {
 }
 
 function selectBBoxTag(tagKey) {
-    if (!bboxEditorTemplate.bboxes[tagKey]) return;
+    // null/未定義 or 対象BBoxが存在しない場合は選択解除
+    if (!tagKey || !bboxEditorTemplate || !bboxEditorTemplate.bboxes[tagKey]) {
+        clearBBoxSelection();
+        return;
+    }
     bboxEditorSelectedTag = tagKey;
     document.querySelectorAll('.bbox-editor-tag-item').forEach(el => {
         el.classList.toggle('selected', el.dataset.tag === tagKey);
@@ -115,6 +119,14 @@ function selectBBoxTag(tagKey) {
     if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
 }
 window.selectBBoxTag = selectBBoxTag;
+
+function clearBBoxSelection() {
+    bboxEditorSelectedTag = null;
+    document.querySelectorAll('.bbox-editor-tag-item').forEach(el => el.classList.remove('selected'));
+    renderBBoxEditorPropsForm();
+    if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
+}
+window.clearBBoxSelection = clearBBoxSelection;
 
 function renderBBoxEditorPropsForm() {
     const empty = document.getElementById('bbox-editor-props-empty');

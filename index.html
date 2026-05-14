@@ -372,47 +372,47 @@
 <!-- 外部テンプレート設定モーダル -->
 <div id="external-template-modal" class="settings-modal" style="display:none;">
   <div class="settings-modal-inner ext-tpl-modal-inner">
-    <h3>外部テンプレート設定</h3>
+    <h3 data-i18n="extTpl.modalTitle">外部テンプレート設定</h3>
     <div class="ext-tpl-body">
       <div class="ext-tpl-left">
-        <div class="ext-tpl-list-header">テンプレート一覧</div>
+        <div class="ext-tpl-list-header" data-i18n="extTpl.listHeader">テンプレート一覧</div>
         <div id="ext-tpl-list" class="ext-tpl-list">
           <!-- JSが生成 -->
-          <div class="ext-tpl-empty">テンプレートがまだありません</div>
+          <div class="ext-tpl-empty" data-i18n="extTpl.empty">テンプレートがまだありません</div>
         </div>
         <div class="ext-tpl-list-actions">
-          <button id="ext-tpl-new-btn" type="button">+ 新規追加</button>
-          <button id="ext-tpl-import-btn" type="button">インポート (JSON)</button>
+          <button id="ext-tpl-new-btn" type="button" data-i18n="extTpl.newBtn">+ 新規追加</button>
+          <button id="ext-tpl-import-btn" type="button" data-i18n="extTpl.importBtn">インポート (JSON)</button>
           <input type="file" id="ext-tpl-import-file" accept="application/json" style="display:none;">
         </div>
       </div>
       <div class="ext-tpl-right">
         <div id="ext-tpl-detail" class="ext-tpl-detail">
-          <div class="ext-tpl-placeholder">左から選択するか、新規追加してください</div>
+          <div class="ext-tpl-placeholder" data-i18n="extTpl.placeholder">左から選択するか、新規追加してください</div>
         </div>
         <div id="ext-tpl-edit-form" class="ext-tpl-edit-form" style="display:none;">
           <div class="settings-row">
-            <label style="width:90px;">テンプレート名:</label>
+            <label style="width:90px;" data-i18n="extTpl.nameLabel">テンプレート名:</label>
             <input type="text" id="ext-tpl-name-input" style="flex:1;">
           </div>
           <div class="settings-row">
-            <label style="width:90px;">背景画像:</label>
-            <button id="ext-tpl-image-btn" type="button">画像を選択...</button>
+            <label style="width:90px;" data-i18n="extTpl.imageLabel">背景画像:</label>
+            <button id="ext-tpl-image-btn" type="button" data-i18n="extTpl.imagePickBtn">画像を選択...</button>
             <input type="file" id="ext-tpl-image-file" accept="image/png,image/jpeg" style="display:none;">
           </div>
           <div class="ext-tpl-image-preview-wrap">
-            <img id="ext-tpl-image-preview" alt="プレビュー">
+            <img id="ext-tpl-image-preview" alt="">
             <div id="ext-tpl-image-info" class="ext-tpl-image-info"></div>
           </div>
           <div class="settings-row" style="margin-top:12px; gap:8px;">
-            <button id="ext-tpl-bbox-editor-btn" type="button">BBoxエディタを開く</button>
-            <button id="ext-tpl-save-btn" type="button" class="primary">保存</button>
+            <button id="ext-tpl-bbox-editor-btn" type="button" data-i18n="extTpl.openBBoxEditor">BBoxエディタを開く</button>
+            <button id="ext-tpl-save-btn" type="button" class="primary" data-i18n="btn.save">保存</button>
           </div>
         </div>
       </div>
     </div>
     <div class="settings-actions">
-      <button id="ext-tpl-close-btn" class="primary">閉じる</button>
+      <button id="ext-tpl-close-btn" class="primary" data-i18n="btn.close">閉じる</button>
     </div>
   </div>
 </div>
@@ -940,7 +940,7 @@
   <div class="menu-label" data-i18n="settings.group.preview">Preview</div>
   <div class="menu-row" data-action="settings.sidebar" data-i18n="settings.sidebar">サイドバー設定...</div>
   <div class="menu-row" data-action="settings.naming" data-i18n="settings.naming">命名規則設定...</div>
-  <div class="menu-row" data-action="settings.externalTemplate">外部テンプレート設定...</div>
+  <div class="menu-row" data-action="settings.externalTemplate" data-i18n="settings.externalTemplate">外部テンプレート設定...</div>
   <div class="menu-sep"></div>
   <div class="menu-label" data-i18n="settings.group.backup">設定データ</div>
   <div class="menu-row" data-action="file.settings.export" data-i18n="file.settings.export">設定を書き出し (JSON)</div>

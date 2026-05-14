@@ -21,11 +21,12 @@ window.openExternalTemplateModal = openExternalTemplateModal;
 async function refreshExternalTemplateList() {
     const listEl = document.getElementById('ext-tpl-list');
     const items = await window.externalTemplate.list();
+    const i18n = (key, fallback) => (typeof t === 'function' ? t(key) : null) || fallback;
     if (!items.length) {
-        listEl.innerHTML = '<div class="ext-tpl-empty">テンプレートがまだありません</div>';
+        const emptyText = i18n('extTpl.empty', 'テンプレートがまだありません');
+        listEl.innerHTML = `<div class="ext-tpl-empty">${emptyText}</div>`;
         return;
     }
-    const i18n = (key, fallback) => (typeof t === 'function' ? t(key) : null) || fallback;
     const lblDup = i18n('extTpl.duplicate', '複製');
     const lblExp = i18n('extTpl.export', '書出');
     const lblDel = i18n('extTpl.delete', '削除');
