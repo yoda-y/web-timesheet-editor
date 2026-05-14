@@ -92,6 +92,7 @@ function createDefaultBBox(tagName) {
     const tagDef = EXTERNAL_TEMPLATE_TAGS[tagName] || {};
     const bbox = {
         enabled: false,
+        locked: false,
         x: pos.x, y: pos.y, w: pos.w, h: pos.h
     };
     if (tagDef.prefixable) bbox.prefix = '';

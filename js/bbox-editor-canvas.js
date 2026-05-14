@@ -36,7 +36,8 @@ const bboxEditorState = {
     dragOrigBBox: null,
     zoom: 1.0,            // 表示倍率
     isPanning: false,
-    panStart: { x: 0, y: 0, scrollLeft: 0, scrollTop: 0 }
+    panStart: { x: 0, y: 0, scrollLeft: 0, scrollTop: 0 },
+    zoomDrag: null        // { startY, startZoom, anchorClientX, anchorClientY, anchorContentX, anchorContentY }
 };
 
 // 画像キャッシュ: dataUrl -> HTMLImageElement
@@ -91,15 +92,22 @@ function drawAllBBoxes(ctx, cw, ch) {
         ctx.fillStyle = isSelected ? 'rgba(255,140,0,0.15)' : 'rgba(30,120,255,0.12)';
         ctx.fillRect(bx, by, bw, bh);
 
-        // 枠
-        ctx.strokeStyle = isSelected ? '#ff8c00' : '#1e78ff';
-        ctx.lineWidth   = isSelected ? 2.5 : 1.5;
+        // 枠（locked は破線グレー）
+        if (bbox.locked) {
+            ctx.setLineDash([4, 4]);
+            ctx.strokeStyle = isSelected ? '#aaa' : '#888';
+        } else {
+            ctx.setLineDash([]);
+            ctx.strokeStyle = isSelected ? '#ff8c00' : '#1e78ff';
+        }
+        ctx.lineWidth = isSelected ? 2.5 : 1.5;
         ctx.strokeRect(bx, by, bw, bh);
+        ctx.setLineDash([]);
 
         // ラベル
         const label = (tags[tagKey] && tags[tagKey].label) || tagKey;
         ctx.font = '11px sans-serif';
-        ctx.fillStyle = isSelected ? '#ff8c00' : '#1e78ff';
+        ctx.fillStyle = bbox.locked ? (isSelected ? '#aaa' : '#888') : (isSelected ? '#ff8c00' : '#1e78ff');
         ctx.fillText(label, bx + 2, by - 3 < 10 ? by + 11 : by - 3);
 
         // 選択中のみハンドル描画
@@ -242,6 +250,22 @@ function setupBBoxCanvasEvents() {
     canvas.addEventListener('mousedown', function(e) {
         const container = document.getElementById('bbox-editor-canvas-container');
 
+        // Space+Ctrl+ドラッグ: ズーム
+        if (bboxEditorSpacePressed && e.ctrlKey) {
+            const containerRect = container ? container.getBoundingClientRect() : canvas.getBoundingClientRect();
+            bboxEditorState.zoomDrag = {
+                startY: e.clientY,
+                startZoom: bboxEditorState.zoom,
+                anchorClientX: e.clientX,
+                anchorClientY: e.clientY,
+                anchorContentX: e.clientX - containerRect.left + (container ? container.scrollLeft : 0),
+                anchorContentY: e.clientY - containerRect.top  + (container ? container.scrollTop  : 0)
+            };
+            canvas.style.cursor = 'zoom-in';
+            e.preventDefault();
+            return;
+        }
+
         // Space+ドラッグ: パン
         if (bboxEditorSpacePressed) {
             bboxEditorState.isPanning = true;
@@ -274,10 +298,17 @@ function setupBBoxCanvasEvents() {
         // ハンドルヒットテスト（選択中BBoxのみ）
         const handle = findHandleAt(x, y, selectedTag);
         if (handle) {
+            const tpl = window.bboxEditorGetTemplate();
+            const selBBox = tpl && tpl.bboxes && tpl.bboxes[selectedTag];
+            if (selBBox && selBBox.locked) {
+                // locked: リサイズ不可
+                e.preventDefault();
+                return;
+            }
+            if (typeof window.bboxEditorPushHistory === 'function') window.bboxEditorPushHistory();
             bboxEditorState.dragMode = 'resize';
             bboxEditorState.resizeHandle = handle;
             bboxEditorState.dragStart = { x, y };
-            const tpl = window.bboxEditorGetTemplate();
             bboxEditorState.dragOrigBBox = { ...tpl.bboxes[selectedTag] };
             e.preventDefault();
             return;
@@ -286,11 +317,19 @@ function setupBBoxCanvasEvents() {
         // BBoxヒットテスト
         const hit = findBBoxAt(x, y);
         if (hit) {
+            const tpl = window.bboxEditorGetTemplate();
+            const hitBBox = tpl && tpl.bboxes && tpl.bboxes[hit];
             window.bboxEditorSetSelectedTag(hit);
             window.bboxEditorRenderTagList();
+            if (hitBBox && hitBBox.locked) {
+                // locked: 選択のみ・移動不可
+                window.bboxEditorRenderCanvas();
+                e.preventDefault();
+                return;
+            }
+            if (typeof window.bboxEditorPushHistory === 'function') window.bboxEditorPushHistory();
             bboxEditorState.dragMode = 'move';
             bboxEditorState.dragStart = { x, y };
-            const tpl = window.bboxEditorGetTemplate();
             bboxEditorState.dragOrigBBox = { ...tpl.bboxes[hit] };
             window.bboxEditorRenderCanvas();
             e.preventDefault();
@@ -304,6 +343,27 @@ function setupBBoxCanvasEvents() {
     });
 
     canvas.addEventListener('mousemove', function(e) {
+        // ズームドラッグ中
+        if (bboxEditorState.zoomDrag) {
+            const zd = bboxEditorState.zoomDrag;
+            const container = document.getElementById('bbox-editor-canvas-container');
+            const oldZoom = bboxEditorState.zoom;
+            const dy = zd.startY - e.clientY;
+            const newZoom = Math.max(0.2, Math.min(5.0, zd.startZoom * Math.pow(1.01, dy)));
+            if (Math.abs(newZoom - oldZoom) > 1e-6) {
+                bboxEditorState.zoom = newZoom;
+                window.bboxEditorRenderCanvas();
+                // anchor 位置を画面で固定
+                if (container) {
+                    const ratio = newZoom / oldZoom;
+                    const containerRect = container.getBoundingClientRect();
+                    container.scrollLeft = zd.anchorContentX * ratio - (zd.anchorClientX - containerRect.left);
+                    container.scrollTop  = zd.anchorContentY * ratio - (zd.anchorClientY - containerRect.top);
+                }
+            }
+            return;
+        }
+
         // パン中
         if (bboxEditorState.isPanning) {
             const container = document.getElementById('bbox-editor-canvas-container');
@@ -377,9 +437,14 @@ function setupBBoxCanvasEvents() {
     });
 
     canvas.addEventListener('mouseup', function() {
+        if (bboxEditorState.zoomDrag) {
+            bboxEditorState.zoomDrag = null;
+            canvas.style.cursor = bboxEditorSpacePressed ? 'grab' : 'crosshair';
+            return;
+        }
         if (bboxEditorState.isPanning) {
             bboxEditorState.isPanning = false;
-            canvas.style.cursor = 'crosshair';
+            canvas.style.cursor = bboxEditorSpacePressed ? 'grab' : 'crosshair';
             return;
         }
         if (bboxEditorState.dragMode) {
@@ -394,9 +459,13 @@ function setupBBoxCanvasEvents() {
 
     // キャンバス外でマウスアップした場合の保険
     window.addEventListener('mouseup', function() {
+        if (bboxEditorState.zoomDrag) {
+            bboxEditorState.zoomDrag = null;
+            canvas.style.cursor = bboxEditorSpacePressed ? 'grab' : 'crosshair';
+        }
         if (bboxEditorState.isPanning) {
             bboxEditorState.isPanning = false;
-            canvas.style.cursor = 'crosshair';
+            canvas.style.cursor = bboxEditorSpacePressed ? 'grab' : 'crosshair';
         }
         if (bboxEditorState.dragMode) {
             bboxEditorState.dragMode = null;

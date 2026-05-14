@@ -6,6 +6,26 @@
 let bboxEditorTemplate = null;     // 編集中テンプレートの作業コピー
 let bboxEditorSelectedTag = null;  // 選択中タグ名
 
+// ── Undo履歴 ──
+let bboxEditorHistory = [];
+const BBOX_HISTORY_MAX = 50;
+
+function pushBBoxHistory() {
+    if (!bboxEditorTemplate) return;
+    bboxEditorHistory.push(JSON.stringify(bboxEditorTemplate.bboxes));
+    if (bboxEditorHistory.length > BBOX_HISTORY_MAX) bboxEditorHistory.shift();
+}
+function undoBBox() {
+    if (!bboxEditorTemplate || bboxEditorHistory.length === 0) return;
+    const prev = bboxEditorHistory.pop();
+    bboxEditorTemplate.bboxes = JSON.parse(prev);
+    renderBBoxEditorTagList();
+    renderBBoxEditorPropsForm();
+    if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
+}
+window.bboxEditorPushHistory = pushBBoxHistory;
+window.bboxEditorUndo = undoBBox;
+
 function openBBoxEditor(templateId) {
     return (async () => {
         const tpl = await window.externalTemplate.get(templateId);
@@ -25,6 +45,7 @@ function openBBoxEditor(templateId) {
                 }
             });
         }
+        bboxEditorHistory = [];
         bboxEditorSelectedTag = null;
         document.getElementById('bbox-editor-template-name').textContent = tpl.name || '無名';
         renderBBoxEditorTagList();
@@ -80,6 +101,7 @@ function renderBBoxEditorTagList() {
         cb.addEventListener('change', (e) => {
             const tagKey = cb.dataset.tagToggle;
             e.stopPropagation();
+            pushBBoxHistory();
             toggleBBoxEnabled(tagKey, cb.checked);
         });
     });
@@ -169,6 +191,8 @@ function renderBBoxEditorPropsForm() {
         document.getElementById('bbox-prop-frames').value = bbox.frames || 72;
         document.getElementById('bbox-prop-columns').value = bbox.columns || 5;
     } else { framesRow.style.display = 'none'; colsRow.style.display = 'none'; }
+    // ロック
+    document.getElementById('bbox-prop-locked').checked = !!bbox.locked;
 }
 window.renderBBoxEditorPropsForm = renderBBoxEditorPropsForm;
 
@@ -182,7 +206,9 @@ const TIMELINE_PAIRS = {
 
 // プロパティ変更時の反映
 function bindBBoxPropInput(id, key, parser) {
-    document.getElementById(id).addEventListener('input', (e) => {
+    const el = document.getElementById(id);
+    el.addEventListener('focus', () => pushBBoxHistory());
+    el.addEventListener('input', (e) => {
         if (!bboxEditorSelectedTag) return;
         const bbox = bboxEditorTemplate.bboxes[bboxEditorSelectedTag];
         let v = parser ? parser(e.target.value) : e.target.value;
@@ -217,7 +243,26 @@ window.bboxEditorGetSelectedTag = () => bboxEditorSelectedTag;
 window.bboxEditorSetSelectedTag = (tag) => selectBBoxTag(tag);
 window.bboxEditorRenderTagList = () => renderBBoxEditorTagList();
 
-// イベント配線
+// Ctrl+Z: BBoxエディタが開いている時のUndo（window-captureで最上流に登録）
+// handwriting.js などの document-capture より先に処理させるため window レベル
+window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+        const modal = document.getElementById('bbox-editor-modal');
+        if (!modal) return;
+        const display = modal.style.display;
+        if (display === 'none' || display === '') return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        e.stopPropagation();
+        const target = e.target;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) {
+            target.blur();
+        }
+        undoBBox();
+    }
+}, true);
+
+// その他のイベント配線
 document.addEventListener('DOMContentLoaded', () => {
     // プロパティ入力
     bindBBoxPropInput('bbox-prop-x', 'x', parseFloat);
@@ -241,6 +286,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('[BBox] 保存成功:', toSave.id, Object.keys(toSave.bboxes).length, 'tags');
             if (typeof showToast === 'function') showToast('BBox設定を保存しました', 2000);
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
+            // 親モーダルが開いていれば draft を再読込
+            const extModal = document.getElementById('external-template-modal');
+            if (extModal && extModal.style.display !== 'none' && typeof window.refreshExternalTemplateDraftAfterSave === 'function') {
+                await window.refreshExternalTemplateDraftAfterSave(bboxEditorTemplate.id);
+            }
             closeBBoxEditor();
         } catch (err) {
             console.error('BBox保存エラー:', err);
@@ -249,4 +299,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('bbox-editor-cancel-btn').addEventListener('click', closeBBoxEditor);
+
+    // ロックチェックボックス
+    document.getElementById('bbox-prop-locked').addEventListener('change', (e) => {
+        if (!bboxEditorSelectedTag || !bboxEditorTemplate) return;
+        pushBBoxHistory();
+        bboxEditorTemplate.bboxes[bboxEditorSelectedTag].locked = e.target.checked;
+        if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
+    });
+
 });

@@ -251,3 +251,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // 閉じる
     document.getElementById('ext-tpl-close-btn').addEventListener('click', closeExternalTemplateModal);
 });
+
+// BBoxエディタ保存後に呼ばれる: draft と一覧を再読込
+window.refreshExternalTemplateDraftAfterSave = async function(templateId) {
+    if (extTplCurrentId === templateId) {
+        const tpl = await window.externalTemplate.get(templateId);
+        if (tpl) {
+            extTplDraft = JSON.parse(JSON.stringify(tpl));
+            await refreshExternalTemplateList();
+        }
+    }
+};
