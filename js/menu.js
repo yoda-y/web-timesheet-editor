@@ -199,6 +199,7 @@ const menuActions = {
     'settings.color': () => openColorSettings(),
     'settings.shortcut': () => openShortcutSettings(),
     'settings.editor': () => openEditorSettings(),
+    'settings.externalTemplate': () => openExternalTemplateModal(),
     'settings.sidebar': () => openSidebarSettings(),
     'settings.naming': () => openNamingSettings(),
     'help.shortcuts': () => openHelpShortcuts(),

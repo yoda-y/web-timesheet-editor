@@ -421,7 +421,6 @@ function drawGrid() {
         if (ct === "SOUND") continue;
         // 内部記号はスキップ
         if (data.value && internalSymbols.includes(data.value)) continue;
-        // カット尺以降のセル値は描画しない（TDTSの拡張データ等を表示しないため）
         // マージン部含めて描画（cut外も表示）
         let tx = 0, ty = frameY(f) + 16;
         const sec = sections.find(s => s.type === ct);

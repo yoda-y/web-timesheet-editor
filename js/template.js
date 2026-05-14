@@ -1552,7 +1552,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
     if (drawFrameLimit <= 0) return;
 
     for (let ci = 0; ci < colCount; ci++) {
-        // 列データ収集
+        // 列データ収集（Rep継続が尺を超える場合も検出するため範囲拡張）
         const colData = [];
         for (let f = 0; f < drawFrameLimit; f++) {
             colData[f] = cellData[`ACTION-${ci}-${f}`] || null;

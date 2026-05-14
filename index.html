@@ -71,7 +71,13 @@
     </div>
     <div class="sidebar-content">
       <select id="template-select" class="sidebar-select">
-        <option value="default">A3 標準</option>
+        <optgroup label="標準">
+          <option value="default">A3 標準</option>
+        </optgroup>
+        <optgroup label="外部テンプレート" id="template-select-external-group">
+          <!-- JSが動的生成 -->
+        </optgroup>
+        <option value="__new_external__">+ 新規テンプレート追加...</option>
       </select>
       <div class="sidebar-row" style="margin-top:4px;">
         <button class="sidebar-btn small disabled" data-i18n="sidebar.add">追加</button>
@@ -363,6 +369,111 @@
   </div>
 </div>
 
+<!-- 外部テンプレート設定モーダル -->
+<div id="external-template-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner ext-tpl-modal-inner">
+    <h3>外部テンプレート設定</h3>
+    <div class="ext-tpl-body">
+      <div class="ext-tpl-left">
+        <div class="ext-tpl-list-header">テンプレート一覧</div>
+        <div id="ext-tpl-list" class="ext-tpl-list">
+          <!-- JSが生成 -->
+          <div class="ext-tpl-empty">テンプレートがまだありません</div>
+        </div>
+        <div class="ext-tpl-list-actions">
+          <button id="ext-tpl-new-btn" type="button">+ 新規追加</button>
+          <button id="ext-tpl-import-btn" type="button">インポート (JSON)</button>
+          <input type="file" id="ext-tpl-import-file" accept="application/json" style="display:none;">
+        </div>
+      </div>
+      <div class="ext-tpl-right">
+        <div id="ext-tpl-detail" class="ext-tpl-detail">
+          <div class="ext-tpl-placeholder">左から選択するか、新規追加してください</div>
+        </div>
+        <div id="ext-tpl-edit-form" class="ext-tpl-edit-form" style="display:none;">
+          <div class="settings-row">
+            <label style="width:90px;">テンプレート名:</label>
+            <input type="text" id="ext-tpl-name-input" style="flex:1;">
+          </div>
+          <div class="settings-row">
+            <label style="width:90px;">背景画像:</label>
+            <button id="ext-tpl-image-btn" type="button">画像を選択...</button>
+            <input type="file" id="ext-tpl-image-file" accept="image/png,image/jpeg" style="display:none;">
+          </div>
+          <div class="ext-tpl-image-preview-wrap">
+            <img id="ext-tpl-image-preview" alt="プレビュー">
+            <div id="ext-tpl-image-info" class="ext-tpl-image-info"></div>
+          </div>
+          <div class="settings-row" style="margin-top:12px; gap:8px;">
+            <button id="ext-tpl-bbox-editor-btn" type="button">BBoxエディタを開く</button>
+            <button id="ext-tpl-save-btn" type="button" class="primary">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="settings-actions">
+      <button id="ext-tpl-close-btn" class="primary">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- BBoxエディタモーダル -->
+<div id="bbox-editor-modal" class="settings-modal" style="display:none;">
+  <div class="settings-modal-inner bbox-editor-inner">
+    <h3>BBoxエディタ - <span id="bbox-editor-template-name">-</span></h3>
+    <div class="bbox-editor-body">
+      <div class="bbox-editor-tags">
+        <div class="bbox-editor-section-title">タグ一覧</div>
+        <div id="bbox-editor-tag-list" class="bbox-editor-tag-list">
+          <!-- JSがカテゴリごとに生成 -->
+        </div>
+      </div>
+      <div class="bbox-editor-canvas-wrap">
+        <div class="bbox-editor-canvas-toolbar">
+          <span id="bbox-editor-image-info" class="bbox-editor-image-info">画像なし</span>
+          <span class="bbox-editor-canvas-hint">クリックで選択、ドラッグで移動・端ハンドルでリサイズ</span>
+        </div>
+        <div id="bbox-editor-canvas-container" class="bbox-editor-canvas-container">
+          <canvas id="bbox-editor-canvas"></canvas>
+          <div id="bbox-editor-no-image" class="bbox-editor-no-image">背景画像が設定されていません</div>
+        </div>
+      </div>
+      <div class="bbox-editor-props">
+        <div class="bbox-editor-section-title">プロパティ</div>
+        <div id="bbox-editor-props-empty" class="bbox-editor-props-empty">BBoxを選択してください</div>
+        <div id="bbox-editor-props-form" class="bbox-editor-props-form" style="display:none;">
+          <div class="settings-row"><label>タグ:</label><span id="bbox-prop-tag-label" class="bbox-prop-readonly"></span></div>
+          <div class="settings-row"><label>X (0-1):</label><input type="number" id="bbox-prop-x" min="0" max="1" step="0.001"></div>
+          <div class="settings-row"><label>Y (0-1):</label><input type="number" id="bbox-prop-y" min="0" max="1" step="0.001"></div>
+          <div class="settings-row"><label>W (0-1):</label><input type="number" id="bbox-prop-w" min="0" max="1" step="0.001"></div>
+          <div class="settings-row"><label>H (0-1):</label><input type="number" id="bbox-prop-h" min="0" max="1" step="0.001"></div>
+          <div class="settings-row" id="bbox-prop-prefix-row" style="display:none;">
+            <label>接頭辞:</label><input type="text" id="bbox-prop-prefix" placeholder="#/S- 等">
+          </div>
+          <div class="settings-row" id="bbox-prop-label-row" style="display:none;">
+            <label>ラベル:</label><input type="text" id="bbox-prop-label" placeholder="色指定 等">
+          </div>
+          <div class="settings-row" id="bbox-prop-type-row" style="display:none;">
+            <label>入力タイプ:</label>
+            <select id="bbox-prop-type"><option value="text">text</option><option value="multiline">multiline</option></select>
+          </div>
+          <div class="settings-row" id="bbox-prop-frames-row" style="display:none;">
+            <label>フレーム数:</label><input type="number" id="bbox-prop-frames" min="1" max="999" step="1" value="72">
+          </div>
+          <div class="settings-row" id="bbox-prop-columns-row" style="display:none;">
+            <label>カラム数:</label><input type="number" id="bbox-prop-columns" min="1" max="20" step="1" value="5">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="settings-actions">
+      <span class="bbox-editor-hint" style="font-size:11px;color:#888;margin-right:auto;">Ctrl+ホイール: ズーム ／ Space+ドラッグ: パン</span>
+      <button id="bbox-editor-cancel-btn">キャンセル</button>
+      <button id="bbox-editor-save-btn" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- 設定一覧モーダル -->
 <div id="settings-hub-modal" class="settings-modal" style="display:none;">
   <div class="settings-modal-inner settings-hub-inner">
@@ -396,7 +507,7 @@
         <strong data-i18n="settings.naming.short">命名規則</strong>
         <span data-i18n="settings.naming.desc">画像書き出し、TDTS/XDTS保存名</span>
       </button>
-      <button type="button" class="settings-hub-card disabled" disabled>
+      <button type="button" class="settings-hub-card" data-settings-open="settings.externalTemplate">
         <strong data-i18n="settings.externalTemplate.short">外部テンプレート</strong>
         <span data-i18n="settings.externalTemplate.desc">専用モーダルで流し込み項目とBBoxを管理予定</span>
       </button>
@@ -829,7 +940,7 @@
   <div class="menu-label" data-i18n="settings.group.preview">Preview</div>
   <div class="menu-row" data-action="settings.sidebar" data-i18n="settings.sidebar">サイドバー設定...</div>
   <div class="menu-row" data-action="settings.naming" data-i18n="settings.naming">命名規則設定...</div>
-  <div class="menu-row menu-disabled" data-action="settings.template" data-i18n="settings.externalTemplate">外部テンプレート設定...（準備中）</div>
+  <div class="menu-row" data-action="settings.externalTemplate">外部テンプレート設定...</div>
   <div class="menu-sep"></div>
   <div class="menu-label" data-i18n="settings.group.backup">設定データ</div>
   <div class="menu-row" data-action="file.settings.export" data-i18n="file.settings.export">設定を書き出し (JSON)</div>
@@ -1068,6 +1179,10 @@
 <script src="js/preview.js"></script>
 <script src="js/handwriting.js"></script>
 <script src="js/psd-export.js"></script>
+<script src="js/external-template.js"></script>
+<script src="js/external-template-ui.js"></script>
+<script src="js/bbox-editor.js"></script>
+<script src="js/bbox-editor-canvas.js"></script>
 <script src="js/menu.js"></script>
 <script src="js/main.js"></script>
 

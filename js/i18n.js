@@ -123,6 +123,9 @@ const I18N = {
         'btn.close': '閉じる',
         'btn.import': 'JSON読み込み',
         'btn.export': 'JSON書き出し',
+        'extTpl.duplicate': '複製',
+        'extTpl.export': '書き出し',
+        'extTpl.delete': '削除',
         // インラインラベル
         'label.zoom': 'Zoom:',
         'label.inputColor': '入力色:',
@@ -514,6 +517,9 @@ const I18N = {
         'btn.close': 'Close',
         'btn.import': 'Import JSON',
         'btn.export': 'Export JSON',
+        'extTpl.duplicate': 'Duplicate',
+        'extTpl.export': 'Export',
+        'extTpl.delete': 'Delete',
         // Inline labels
         'label.zoom': 'Zoom:',
         'label.inputColor': 'Input Color:',
