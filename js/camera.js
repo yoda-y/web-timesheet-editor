@@ -615,7 +615,8 @@ function drawCameraBlocks(ctx) {
             ctx.fillText(dispText, tx + drawWidth / 2, topTextY + 2);
         } else if (vt === 'fromTo' || vt === 'multiLayerDirection') {
             if (selectedCameraId === block.id) { ctx.strokeStyle = getStyle('--select-border'); ctx.lineWidth = 2; ctx.strokeRect(tx, startY, drawWidth, endY - startY); ctx.strokeStyle = isRed ? 'red' : getStyle('--text-color'); ctx.lineWidth = 1.5; }
-            let lineX = tx + 12;
+            let lineX = tx + 8;
+            let labelX = lineX + 14;
             let wpYs = [];
             if (block.waypoints && block.waypoints.length > 0) {
                 block.waypoints.forEach((wp, idx) => {
@@ -641,7 +642,7 @@ function drawCameraBlocks(ctx) {
                         ctx.strokeStyle = isDraggingWp ? 'red' : getStyle('--text-color');
                         ctx.fillStyle = isDraggingWp ? 'red' : getStyle('--text-color');
                         ctx.beginPath(); ctx.moveTo(lineX - 6, wpY); ctx.lineTo(lineX + 6, wpY); ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1.5;
-                        if (wp.label) ctx.fillText(wp.label, lineX + 10, wpY + 4);
+                        if (wp.label) ctx.fillText(wp.label, lineX + 8, wpY + 4);
                         ctx.strokeStyle = getStyle('--text-color'); ctx.fillStyle = getStyle('--text-color');
                     }
                 });
@@ -666,19 +667,54 @@ function drawCameraBlocks(ctx) {
             let maxGap = 0; let bestCenterY = startY + (endY - startY) / 2;
             for (let i = 0; i < points.length - 1; i++) { let gap = points[i + 1] - points[i]; if (gap > maxGap) { maxGap = gap; bestCenterY = points[i] + gap / 2; } }
             ctx.fillStyle = isRed ? 'red' : getStyle('--text-color'); ctx.font = "10px sans-serif"; ctx.textAlign = "left";
-            if (block.fromText) ctx.fillText(block.fromText, lineX + 10, startY + 12);
-            if (block.toText) ctx.fillText(block.toText, lineX + 10, endY - 4);
+            if (block.fromText) ctx.fillText(block.fromText, lineX + 8, startY + 12);
+            if (block.toText) ctx.fillText(block.toText, lineX + 8, endY - 4);
             ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
             let chars = pKind.split('');
-            let textHeight = chars.length * 14 + (tgts ? 16 : 0);
-            let textStartY = bestCenterY - textHeight / 2 + (tgts ? 24 : 10);
+            let targetRows = tgts ? Math.max(1, String(tgts).split(',').filter(Boolean).length) : 0;
+            let targetBlockH = targetRows ? targetRows * 13 + 6 : 0;
+            let textHeight = chars.length * 14 + targetBlockH;
+            let avoidRanges = [];
+            if (block.fromText) avoidRanges.push({ top: startY + 5, bottom: startY + 20 });
+            if (block.toText) avoidRanges.push({ top: endY - 12, bottom: endY + 4 });
+            if (block.waypoints && block.waypoints.length > 0) {
+                block.waypoints.forEach((wp) => {
+                    let wpY = frameY(wp.frame) + (rowHeight / 2);
+                    if (wpY > startY && wpY < endY) avoidRanges.push({ top: wpY - 12, bottom: wpY + 12 });
+                });
+            }
+            let chooseOpenTop = (desiredCenter, labelH) => {
+                let safeTop = startY + 4;
+                let safeBottom = endY - 4;
+                let blocked = avoidRanges
+                    .map(r => ({ top: Math.max(safeTop, r.top), bottom: Math.min(safeBottom, r.bottom) }))
+                    .filter(r => r.bottom > r.top)
+                    .sort((a, b) => a.top - b.top);
+                let free = [];
+                let cur = safeTop;
+                blocked.forEach(r => {
+                    if (r.top > cur) free.push({ top: cur, bottom: r.top });
+                    cur = Math.max(cur, r.bottom);
+                });
+                if (cur < safeBottom) free.push({ top: cur, bottom: safeBottom });
+                if (!free.length) return Math.max(safeTop, Math.min(safeBottom - labelH, desiredCenter - labelH / 2));
+                return free.map(r => {
+                    let canFit = (r.bottom - r.top) >= labelH;
+                    let top = canFit
+                        ? Math.max(r.top, Math.min(r.bottom - labelH, desiredCenter - labelH / 2))
+                        : r.top + (r.bottom - r.top - labelH) / 2;
+                    return { top, canFit, distance: Math.abs(top + labelH / 2 - desiredCenter), size: r.bottom - r.top };
+                }).sort((a, b) => (b.canFit - a.canFit) || (a.distance - b.distance) || (b.size - a.size))[0].top;
+            };
+            let labelTopY = chooseOpenTop(bestCenterY, textHeight);
+            let textStartY = labelTopY + targetBlockH + 10;
             ctx.fillStyle = getStyle('--bg-color');
             let bgWidth = tgts ? Math.max(14, ctx.measureText(`[${tgts}]`).width + 4) : 14;
-            ctx.fillRect(lineX + 18 - bgWidth / 2, bestCenterY - textHeight / 2 - 2, bgWidth, textHeight + 4);
+            ctx.fillRect(labelX - bgWidth / 2, labelTopY - 2, bgWidth, textHeight + 4);
             ctx.fillStyle = isRed ? 'red' : getStyle('--text-color');
-            if (tgts) { ctx.font = "9px sans-serif"; ctx.fillText(`[${tgts}]`, lineX + 18, bestCenterY - textHeight / 2 + 8); }
+            if (tgts) { ctx.font = "9px sans-serif"; ctx.fillText(`[${tgts}]`, labelX, labelTopY + 8); }
             ctx.font = "bold 12px sans-serif";
-            chars.forEach((c, i) => { if (c === "ー") c = "丨"; ctx.fillText(c, lineX + 18, textStartY + i * 14); });
+            chars.forEach((c, i) => { if (c === "ー") c = "丨"; ctx.fillText(c, labelX, textStartY + i * 14); });
         } else if (vt === 'fromToLayers') {
             if (selectedCameraId === block.id) { ctx.strokeStyle = getStyle('--select-border'); ctx.lineWidth = 2; ctx.strokeRect(tx, startY, drawWidth, endY - startY); ctx.strokeStyle = isRed ? 'red' : getStyle('--text-color'); ctx.lineWidth = 1.5; }
             ctx.beginPath();

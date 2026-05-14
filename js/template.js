@@ -1882,6 +1882,30 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
             ctx.fillRect(cx - tw / 2 - padding, cy - fontSize * 0.8, tw + padding * 2, fontSize * 1.2);
         };
+        const chooseOpenLabelTop = (desiredCenter, labelH, avoidRanges, topLimit, bottomLimit) => {
+            const safeTop = topLimit + m(1);
+            const safeBottom = bottomLimit - m(1);
+            const blocked = avoidRanges
+                .map(r => ({ top: Math.max(safeTop, r.top), bottom: Math.min(safeBottom, r.bottom) }))
+                .filter(r => r.bottom > r.top)
+                .sort((a, b) => a.top - b.top);
+            const free = [];
+            let cur = safeTop;
+            blocked.forEach(r => {
+                if (r.top > cur) free.push({ top: cur, bottom: r.top });
+                cur = Math.max(cur, r.bottom);
+            });
+            if (cur < safeBottom) free.push({ top: cur, bottom: safeBottom });
+            if (!free.length) return Math.max(safeTop, Math.min(safeBottom - labelH, desiredCenter - labelH / 2));
+            const scored = free.map(r => {
+                const canFit = (r.bottom - r.top) >= labelH;
+                const top = canFit
+                    ? Math.max(r.top, Math.min(r.bottom - labelH, desiredCenter - labelH / 2))
+                    : r.top + (r.bottom - r.top - labelH) / 2;
+                return { top, canFit, distance: Math.abs((top + labelH / 2) - desiredCenter), size: r.bottom - r.top };
+            }).sort((a, b) => (b.canFit - a.canFit) || (a.distance - b.distance) || (b.size - a.size));
+            return scored[0].top;
+        };
 
         // インライン編集（Rolling等）の場合 - 黒線で描画、入力データも表示
         if (block.isInlineEdit) {
@@ -2016,10 +2040,21 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             // kind縦書き: 上端を startY + rowH*7 に揃える
             const kindChars = pKind.split('');
-            const kindCharH = m(2.8);
+            const kindFontSize = m(2.2) * getFontScale('camera');
+            const kindCharH = m(2.8) * getFontScale('camera');
+            const targetCharH = m(2.2) * getFontScale('camera');
             const kindTopY = isLongBlock ? (startY + rowH * 7) : (startY + (endY - startY) / 2 - (kindChars.length * kindCharH) / 2);
             const midY = kindTopY + (kindChars.length * kindCharH) / 2;
-            drawVerticalLabel(pKind, lineX, midY, m(2.2) * getFontScale('camera'), m(2.8) * getFontScale('camera'));
+            let labelBgH = kindChars.length * kindCharH;
+            if (tgtList.length) {
+                labelBgH += m(1);
+                tgtList.forEach(l => { labelBgH += `[${l}]`.length * targetCharH + m(1); });
+            }
+            const labelBgW = Math.max(m(4.2), kindFontSize * 1.45);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+            ctx.fillRect(lineX - labelBgW / 2, kindTopY - m(0.8), labelBgW, labelBgH + m(1.6));
+            ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+            drawVerticalLabel(pKind, lineX, midY, kindFontSize, kindCharH);
             // tgts縦書き（レイヤーごとに区切って積み上げ）
             if (tgtList.length) {
                 ctx.font = `${m(1.8) * getFontScale('camera')}px sans-serif`;
@@ -2028,9 +2063,9 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
                 tgtList.forEach(l => {
                     const ch = `[${l}]`.split('');
                     ch.forEach((c, i) => {
-                        ctx.fillText(c, lineX, adjustCharY(curY + i * m(2.2), m(2.2)));
+                        ctx.fillText(c, lineX, adjustCharY(curY + i * targetCharH, targetCharH));
                     });
-                    curY += ch.length * m(2.2) + m(1);
+                    curY += ch.length * targetCharH + m(1);
                 });
             }
         } else if (vt === 'numericFr' || isStrobo) {
@@ -2151,7 +2186,8 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             pKindChars.forEach(drawCharAdj);
         } else if (vt === 'fromTo' || vt === 'multiLayerDirection') {
             // fromTo: 矢印と縦線 + 中間点
-            const lineX = tx + m(3);
+            const lineX = tx + m(2.2);
+            const labelX = lineX + m(3.6);
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             // 上下矢印
@@ -2169,7 +2205,7 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
                         if (wp.label) {
                             ctx.font = `${m(2)}px sans-serif`;
                             ctx.textAlign = 'left';
-                            ctx.fillText(wp.label, lineX + m(2.5), wpY + m(0.8));
+                            ctx.fillText(wp.label, lineX + m(2), wpY + m(0.8));
                         }
                     }
                 });
@@ -2206,25 +2242,46 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             // from/to テキスト
             ctx.font = `${m(2.2) * getFontScale('camera')}px sans-serif`;
             ctx.textAlign = 'left';
-            if (block.fromText) ctx.fillText(block.fromText, lineX + m(2.5), startY + m(3));
-            if (block.toText) ctx.fillText(block.toText, lineX + m(2.5), endY - m(1));
+            if (block.fromText) ctx.fillText(block.fromText, lineX + m(2), startY + m(3));
+            if (block.toText) ctx.fillText(block.toText, lineX + m(2), endY - m(1));
             // kind縦書き
             ctx.font = `bold ${m(2.8) * getFontScale('camera')}px sans-serif`;
             ctx.textAlign = 'center';
             const chars = pKind.split('');
             const midY = labelAnchorY;
             const charH = m(3.5) * getFontScale('camera');
-            const textStartY = midY - (chars.length * charH) / 2 + charH / 2;
+            const targetGap = m(3.2);
+            const targetBlockH = tgtList.length ? tgtList.length * targetGap + m(1.4) : 0;
+            const labelTotalH = targetBlockH + chars.length * charH;
+            const avoidRanges = [];
+            if (block.fromText) avoidRanges.push({ top: startY + m(3) - m(3.2), bottom: startY + m(3) + m(2) });
+            if (block.toText) avoidRanges.push({ top: endY - m(1) - m(3.2), bottom: endY - m(1) + m(2) });
+            if (block.waypoints && block.waypoints.length > 0) {
+                block.waypoints.forEach(wp => {
+                    if (wp.frame >= sF && wp.frame <= eF) {
+                        const wpY = y + (wp.frame - absoluteStart) * rowH + rowH / 2;
+                        avoidRanges.push({ top: wpY - m(3.4), bottom: wpY + m(3.4) });
+                    }
+                });
+            }
+            const labelTopY = chooseOpenLabelTop(midY, labelTotalH, avoidRanges, startY, endY);
+            const textStartY = labelTopY + targetBlockH + charH / 2;
+            const kindBgW = Math.max(m(4), m(2.8) * getFontScale('camera') * 1.35);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+            ctx.fillRect(labelX - kindBgW / 2, textStartY - charH / 2 - m(0.8), kindBgW, chars.length * charH + m(1.6));
+            ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             chars.forEach((c, i) => {
                 if (c === "ー") c = "丨";
-                ctx.fillText(c, lineX + m(5), textStartY + i * charH);
+                ctx.fillText(c, labelX, textStartY + i * charH);
             });
             if (tgtList.length) {
                 ctx.font = `${m(2) * getFontScale('camera')}px sans-serif`;
-                let y2 = textStartY - m(2.5);
+                let y2 = labelTopY + targetGap;
                 tgtList.slice().reverse().forEach(l => {
-                    ctx.fillText(`[${l}]`, lineX + m(5), y2);
-                    y2 -= m(2.5);
+                    drawTextBg(`[${l}]`, labelX, y2, m(2) * getFontScale('camera'), m(0.5));
+                    ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+                    ctx.fillText(`[${l}]`, labelX, y2);
+                    y2 += targetGap;
                 });
             }
         } else {
