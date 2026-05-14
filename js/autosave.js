@@ -185,7 +185,7 @@ window.addEventListener('beforeunload', (e) => {
     flushAutoSave();
     if (isDirty) {
         e.preventDefault();
-        e.returnValue = '未保存の変更があります。本当にページを閉じますか？';
+        e.returnValue = (typeof t === 'function') ? t('beforeunload.warning') : '未保存の変更があります。離れますか？';
         return e.returnValue;
     }
 });

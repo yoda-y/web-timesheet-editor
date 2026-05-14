@@ -93,7 +93,7 @@ let currentFileName = '';
 function updateCurrentFileLabel() {
     const el = document.getElementById('current-file-label');
     if (!el) return;
-    const name = currentFileName || '未保存';
+    const name = currentFileName || (typeof t === 'function' ? t('file.unsaved') : '未保存');
     el.textContent = name;
     el.title = currentFileFormat ? `${name} (${currentFileFormat.toUpperCase()})` : name;
 }

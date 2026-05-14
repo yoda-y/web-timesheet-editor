@@ -13,6 +13,12 @@ const I18N = {
         // ステータス
         'status.saved': '保存済み',
         'status.dirty': '● 未保存',
+        // ファイル・タブ状態
+        'file.unsaved': '未保存',
+        'tab.unsavedTitle': '未保存',
+        'tab.confirmClose': '変更が保存されていません。閉じますか？',
+        'tab.confirmCloseAll': '未保存の変更があります。すべて閉じますか？',
+        'beforeunload.warning': '未保存の変更があります。離れますか？',
         // メニュー
         'menu.file': 'ファイル',
         'menu.edit': '編集',
@@ -146,6 +152,7 @@ const I18N = {
         'extTpl.alert.imageLoadFailed': '画像読み込みに失敗しました: ',
         'extTpl.toast.saved': 'テンプレートを保存しました',
         'extTpl.untitled': '無名テンプレート',
+        'extTpl.newTemplateName': '新規テンプレート',
         'extTpl.unnamed': '(無名)',
         'extTpl.imageNotSet': '画像未設定',
         // BBoxエディタ
@@ -462,6 +469,12 @@ const I18N = {
         // Status
         'status.saved': 'Saved',
         'status.dirty': '● Unsaved',
+        // File / tab state
+        'file.unsaved': 'Unsaved',
+        'tab.unsavedTitle': 'Unsaved',
+        'tab.confirmClose': 'Unsaved changes. Close anyway?',
+        'tab.confirmCloseAll': 'There are unsaved changes. Close all?',
+        'beforeunload.warning': 'You have unsaved changes. Leave anyway?',
         // Menu
         'menu.file': 'File',
         'menu.edit': 'Edit',
@@ -595,6 +608,7 @@ const I18N = {
         'extTpl.alert.imageLoadFailed': 'Failed to load image: ',
         'extTpl.toast.saved': 'Template saved',
         'extTpl.untitled': 'Untitled Template',
+        'extTpl.newTemplateName': 'New Template',
         'extTpl.unnamed': '(Untitled)',
         'extTpl.imageNotSet': 'No image',
         // BBox Editor

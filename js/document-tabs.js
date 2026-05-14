@@ -34,7 +34,7 @@ function captureDocumentTabState(tab) {
     tab.fileHandle = currentFileHandle || null;
     tab.directoryHandle = currentDirectoryHandle || null;
     tab.dirty = !!isDirty;
-    tab.title = currentFileName || tab.title || '未保存';
+    tab.title = currentFileName || tab.title || (typeof t === 'function' ? t('tab.unsavedTitle') : '未保存');
 }
 
 function saveActiveDocumentTabState() {
@@ -73,7 +73,7 @@ function initDocumentTabs() {
     const id = `doc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const tab = {
         id,
-        title: currentFileName || '未保存',
+        title: currentFileName || (typeof t === 'function' ? t('tab.unsavedTitle') : '未保存'),
         fileName: currentFileName || '',
         fileFormat: currentFileFormat || null,
         fileHandle: currentFileHandle || null,
@@ -104,7 +104,7 @@ function createDocumentTabForIncomingDocument(name, format, handle, directoryHan
     const canReuse = active && !active.dirty && !active.fileName && documentTabs.length === 1;
     const tab = canReuse ? active : {
         id: `doc-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        title: name || '未保存',
+        title: name || (typeof t === 'function' ? t('tab.unsavedTitle') : '未保存'),
         fileName: '',
         fileFormat: null,
         fileHandle: null,
@@ -114,7 +114,7 @@ function createDocumentTabForIncomingDocument(name, format, handle, directoryHan
     };
     if (!canReuse) documentTabs.push(tab);
     activeDocumentTabId = tab.id;
-    tab.title = name || '未保存';
+    tab.title = name || (typeof t === 'function' ? t('tab.unsavedTitle') : '未保存');
     tab.fileName = name || '';
     tab.fileFormat = format || null;
     tab.fileHandle = handle || null;
@@ -127,7 +127,7 @@ function syncActiveDocumentTabAfterLoad(name, format, handle, directoryHandle) {
     initDocumentTabs();
     const tab = getActiveDocumentTab();
     if (!tab) return;
-    tab.title = name || currentFileName || '未保存';
+    tab.title = name || currentFileName || (typeof t === 'function' ? t('tab.unsavedTitle') : '未保存');
     tab.fileName = currentFileName || name || '';
     tab.fileFormat = currentFileFormat || format || null;
     tab.fileHandle = currentFileHandle || handle || null;
@@ -144,7 +144,7 @@ function updateActiveDocumentTabMeta() {
     tab.fileFormat = currentFileFormat || null;
     tab.fileHandle = currentFileHandle || null;
     tab.directoryHandle = currentDirectoryHandle || null;
-    tab.title = currentFileName || tab.title || '未保存';
+    tab.title = currentFileName || tab.title || (typeof t === 'function' ? t('tab.unsavedTitle') : '未保存');
     tab.dirty = !!isDirty;
     renderDocumentTabs();
 }
@@ -186,7 +186,7 @@ function createNewBlankDocumentTab() {
     // 既存のアクティブタブがあれば保存
     if (activeDocumentTabId) saveActiveDocumentTabState();
     const id = `doc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const tab = { id, title: '未保存', fileName: '', fileFormat: null, fileHandle: null, directoryHandle: null, dirty: false, snapshot: null };
+    const tab = { id, title: (typeof t === 'function' ? t('tab.unsavedTitle') : '未保存'), fileName: '', fileFormat: null, fileHandle: null, directoryHandle: null, dirty: false, snapshot: null };
     documentTabs.push(tab);
     activeDocumentTabId = id;
     resetWorkspaceToBlankDocument();
@@ -204,7 +204,7 @@ function closeDocumentTab(id) {
     if (id === activeDocumentTabId && typeof isDirty !== 'undefined') {
         tab.dirty = isDirty;
     }
-    if (tab.dirty && !confirm(`「${tab.title || tab.fileName || '未保存'}」には未保存の変更があります。閉じますか？`)) return;
+    if (tab.dirty && !confirm(`「${tab.title || tab.fileName || (typeof t === 'function' ? t('tab.unsavedTitle') : '未保存')}」${typeof t === 'function' ? t('tab.confirmClose') : '変更が保存されていません。閉じますか？'}`)) return;
     const index = documentTabs.indexOf(tab);
     documentTabs.splice(index, 1);
     if (documentTabs.length === 0) {
@@ -244,10 +244,10 @@ function renderDocumentTabs() {
         item.dataset.tabId = tab.id;
         item.classList.toggle('active', tab.id === activeDocumentTabId);
         item.classList.toggle('dirty', !!tab.dirty);
-        item.title = tab.fileName || tab.title || '未保存';
+        item.title = tab.fileName || tab.title || (typeof t === 'function' ? t('tab.unsavedTitle') : '未保存');
         const title = document.createElement('span');
         title.className = 'document-tab-title';
-        title.textContent = tab.fileName || tab.title || '未保存';
+        title.textContent = tab.fileName || tab.title || (typeof t === 'function' ? t('tab.unsavedTitle') : '未保存');
         item.appendChild(title);
         const close = document.createElement('button');
         close.type = 'button';

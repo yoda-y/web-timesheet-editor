@@ -156,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const newTpl = {
                 id: window.externalTemplate.generateId(),
-                name: '新規テンプレート',
+                name: _ei18n('extTpl.newTemplateName', '新規テンプレート'),
                 image: null,
                 imageWidth: 0,
                 imageHeight: 0,
