@@ -88,6 +88,40 @@ function renderTemplate(dpi, pageIndex = 0) {
     const scale = dpi / 25.4;
     const m = (mm) => mm * scale;
 
+    // 外部テンプレートが選択されていれば、画像のみを描画してreturn
+    const extTpl = (typeof getCurrentExternalTemplate === 'function') ? getCurrentExternalTemplate() : null;
+    const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage() : null;
+    if (extTpl && extImg) {
+        ctx.fillStyle = TEMPLATE.BG_COLOR;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const cw = canvas.width, ch = canvas.height;
+        const iw = extImg.naturalWidth || extImg.width;
+        const ih = extImg.naturalHeight || extImg.height;
+        if (iw > 0 && ih > 0) {
+            const ratio = Math.min(cw / iw, ch / ih);
+            const dw = iw * ratio;
+            const dh = ih * ratio;
+            const dx = (cw - dw) / 2;
+            const dy = (ch - dh) / 2;
+            ctx.drawImage(extImg, dx, dy, dw, dh);
+
+            // Phase 3b: メタ/staff BBox 描画
+            const bboxToCanvas = (b) => ({
+                x: dx + b.x * dw,
+                y: dy + b.y * dh,
+                w: b.w * dw,
+                h: b.h * dh
+            });
+            // ページオフセット計算（外部テンプレ用ページング）
+            const pageOffset = (typeof getExternalTemplatePageStartFrame === 'function')
+                ? getExternalTemplatePageStartFrame(pageIndex)
+                : 0;
+            drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex);
+            drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset);
+        }
+        return canvas;
+    }
+
     const isPage0 = (typeof hasPage0 === 'function') && hasPage0() && pageIndex === 0;
     const isFirstNormalPage = isPage0 ? false : (pageIndex === 0 || (hasPage0() && pageIndex === 1));
 
@@ -290,6 +324,138 @@ function drawPage0Timeline(ctx, scale, startX, startY, bodyW, pageIndex) {
         ctx.moveTo(snapLine(startX, ctx.lineWidth), fy);
         ctx.lineTo(snapLine(startX + bodyW, ctx.lineWidth), fy);
         ctx.stroke();
+    }
+}
+
+// === Phase 3b: 外部テンプレート メタ/staff BBox 描画 ===
+
+function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex) {
+    if (!extTpl.bboxes || typeof metaData === 'undefined') return;
+
+    // 1ページ目限定で描画するタグ（標準A3のDirection欄ルールに準拠）
+    // 将来BOOKラベルを実装する際も同じルールを適用する
+    const PAGE1_ONLY_TAGS = new Set(['direction']);
+    const isFirstPage = (typeof pageIndex !== 'number') || pageIndex === 0;
+
+    const tagDefs = (window.externalTemplate && window.externalTemplate.tags) || {};
+
+    const getMetaValue = (tag) => {
+        const m = metaData;
+        switch (tag) {
+            case 'title':       return m.title || '';
+            case 'episode':     return m.subTitle || '';
+            case 'scene':       return m.scene || '';
+            case 'cut':         return m.cut || '';
+            case 'sheet':       return '';  // 廃止タグ（後方互換: 空文字を返す）
+            case 'currentPage': {
+                const cp = (typeof currentPage !== 'undefined') ? (currentPage + 1) : 1;
+                return String(cp);
+            }
+            case 'totalPages': {
+                const tp = (typeof getTotalPages === 'function') ? getTotalPages() : 1;
+                return String(tp);
+            }
+            case 'date':        return '';
+            case 'studio':      return '';
+            case 'memo':        return '';
+            case 'direction':   return m.memo || '';
+            case 'lengthFrame': return m.lengthFrame || '';
+            case 'lengthSec':   return m.lengthSec || '';
+            case 'name':        return m.creator || '';
+            case 'director':    return '';
+            case 'supervisor':  return '';
+            case 'inbetween':   return '';
+            case 'custom1':
+            case 'custom2':
+            case 'custom3':
+            case 'custom4':     return (m.customFields && m.customFields[tag]) || '';
+            default: return '';
+        }
+    };
+
+    const MULTILINE_TAGS = ['direction', 'memo'];
+
+    for (const tagKey in extTpl.bboxes) {
+        const bbox = extTpl.bboxes[tagKey];
+        if (!bbox || !bbox.enabled) continue;
+
+        // 1ページ目限定のタグは、2ページ目以降スキップ
+        if (PAGE1_ONLY_TAGS.has(tagKey) && !isFirstPage) continue;
+
+        const tagDef = tagDefs[tagKey];
+        if (!tagDef) continue;
+        if (tagDef.category !== 'meta' && tagDef.category !== 'staff' && tagDef.category !== 'custom') continue;
+
+        let value = getMetaValue(tagKey);
+        if (!value) continue;
+
+        if (tagDef.prefixable && bbox.prefix) {
+            value = bbox.prefix + value;
+        }
+
+        const rect = bboxToCanvas(bbox);
+
+        ctx.save();
+        ctx.fillStyle = '#000000';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+
+        const isMultiline = MULTILINE_TAGS.includes(tagKey) ||
+            (tagDef.category === 'custom' && bbox.type === 'multiline');
+        const userMm = (() => {
+            if (typeof bbox.fontSize === 'number' && bbox.fontSize > 0) return bbox.fontSize;
+            if (tagKey === 'direction') return (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.direction) || 3.5;
+            return (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.metaValue) || 4.5;
+        })();
+        if (isMultiline) {
+            drawMultilineInBBox(ctx, value, rect, scale, userMm);
+        } else {
+            const padding = Math.max(1, rect.w * 0.04);
+            const usableW = Math.max(1, rect.w - padding * 2);
+            const usableH = Math.max(1, rect.h - padding * 2);
+            const fontSize = fitTextSize(ctx, value, usableW, usableH, Math.min(usableH * 0.85, userMm * scale));
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.fillText(value, rect.x + rect.w / 2, rect.y + rect.h / 2);
+        }
+        ctx.restore();
+    }
+}
+
+function drawMultilineInBBox(ctx, text, rect, scale, fontMm) {
+    const padding = Math.max(2, rect.w * 0.02);
+    const usableW = Math.max(1, rect.w - padding * 2);
+    const usableH = Math.max(1, rect.h - padding * 2);
+
+    const rawLines = text.split(/\r?\n/);
+    // フォントサイズ: 呼び出し元から fontMm を受け取る（未指定時は metaValue or 4.5mm）
+    const userMm = fontMm != null ? fontMm : ((typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.metaValue) || 4.5);
+    const baseFontSize = Math.min(userMm * scale, usableH / Math.max(rawLines.length, 1) * 0.7);
+    ctx.font = `${baseFontSize}px sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+
+    const wrappedLines = [];
+    rawLines.forEach(line => {
+        if (!line) { wrappedLines.push(''); return; }
+        let buf = '';
+        for (const ch of line) {
+            const test = buf + ch;
+            if (ctx.measureText(test).width > usableW && buf.length > 0) {
+                wrappedLines.push(buf);
+                buf = ch;
+            } else {
+                buf = test;
+            }
+        }
+        if (buf) wrappedLines.push(buf);
+    });
+
+    const lineHeight = baseFontSize * 1.2;
+    let y = rect.y + padding;
+    for (const line of wrappedLines) {
+        if (y + lineHeight > rect.y + rect.h) break;
+        ctx.fillText(line, rect.x + padding, y);
+        y += lineHeight;
     }
 }
 
@@ -2745,3 +2911,202 @@ function sanitizeImageExportFilename(name) {
 async function exportTemplateImage(format, dpi) {
     openImageExportDialog(format, dpi);
 }
+
+// BBoxエディタから参照できるよう公開
+window.drawExternalTemplateMetaBoxes = drawExternalTemplateMetaBoxes;
+
+// ─── Phase 3c: タイムライン系 BBox 描画 ───────────────────────────────────────
+
+// === TODO (Phase 3c.5以降で対応) ===
+// - BOOKラベル描画（※ direction と同じく1ページ目のみ描画ルールを適用すること）
+// - 棒線/波線（cell連続時）
+// - 止メ / Rep / ブレ / ランダムブレ
+// - fontColorId によるセル文字色
+// - camera kindの完全描画（FI/WI三角形、O.L砂時計、CAM SHAKE波線等）
+// - セルのオプションマーク（OPTION_KEYFRAME 円 / OPTION_REFERENCEFRAME 三角）
+// - セリフブロックの話者色（getSpeakerColor相当のパステル背景）
+// - 列跨ぎ時のブロック内容重複対策（sound/camera）
+//   現状: action1/sound1等のframes1を超えるブロックが action2/sound2 等にも
+//   そのまま描画されるため、話者名やkind名が両側で重複する。
+//   標準A3で実装済みのクリッピング+真の始終点判定方式を移植する想定。
+// =====================================
+
+function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset) {
+    if (!extTpl.bboxes || typeof cellData === 'undefined') return;
+    pageOffset = pageOffset || 0;
+
+    const groups = [
+        { type: 'action', tag1: 'action1', tag2: 'action2' },
+        { type: 'cell',   tag1: 'cell1',   tag2: 'cell2'   },
+        { type: 'sound',  tag1: 'sound1',  tag2: 'sound2'  },
+        { type: 'camera', tag1: 'camera1', tag2: 'camera2' }
+    ];
+
+    groups.forEach(grp => {
+        const b1 = extTpl.bboxes[grp.tag1];
+        const b2 = extTpl.bboxes[grp.tag2];
+        if (!b1 || !b1.enabled) return;
+
+        const frames1 = b1.frames || 72;
+        const cols1   = b1.columns || 5;
+
+        // ページオフセットを加算したフレーム範囲
+        drawTimelineBBox(ctx, grp.type, b1, bboxToCanvas, scale, pageOffset, pageOffset + frames1, cols1);
+
+        if (b2 && b2.enabled) {
+            const frames2 = b2.frames || 72;
+            const cols2   = b2.columns || 5;
+            drawTimelineBBox(ctx, grp.type, b2, bboxToCanvas, scale, pageOffset + frames1, pageOffset + frames1 + frames2, cols2);
+        }
+    });
+}
+
+function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, frameEnd, columns) {
+    const rect = bboxToCanvas(bbox);
+    if (rect.w <= 0 || rect.h <= 0) return;
+
+    const cellW = rect.w / columns;
+    const totalFrames = frameEnd - frameStart;
+    if (totalFrames <= 0) return;
+    const cellH = rect.h / totalFrames;
+
+    ctx.save();
+
+    if (type === 'action' || type === 'cell') {
+        drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
+    } else if (type === 'sound') {
+        drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
+    } else if (type === 'camera') {
+        drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
+    }
+
+    ctx.restore();
+}
+
+function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale) {
+    const upperType = type.toUpperCase();
+    const userMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.cell) || 2.7;
+    const fontSize = Math.min(cellH * 0.7, userMm * scale);
+    ctx.font = `${fontSize}px sans-serif`;
+    ctx.fillStyle = '#000';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let ci = 0; ci < columns; ci++) {
+        for (let f = frameStart; f < frameEnd; f++) {
+            const key  = `${upperType}-${ci}-${f}`;
+            const data = cellData[key];
+            if (!data || !data.value) continue;
+
+            if (['SYMBOL_HYPHEN', 'SYMBOL_TICK', 'SYMBOL_NULL'].includes(data.value)) continue;
+
+            const cx = rect.x + ci * cellW + cellW / 2;
+            const cy = rect.y + (f - frameStart) * cellH + cellH / 2;
+
+            if (data.value === '●') {
+                ctx.beginPath();
+                ctx.arc(cx, cy, fontSize * 0.25, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (data.value === '○') {
+                ctx.beginPath();
+                ctx.arc(cx, cy, fontSize * 0.25, 0, Math.PI * 2);
+                ctx.stroke();
+            } else if (data.value === '×') {
+                const s = fontSize * 0.3;
+                ctx.beginPath();
+                ctx.moveTo(cx - s, cy - s); ctx.lineTo(cx + s, cy + s);
+                ctx.moveTo(cx + s, cy - s); ctx.lineTo(cx - s, cy + s);
+                ctx.stroke();
+            } else if (data.value === '―') {
+                ctx.beginPath();
+                ctx.moveTo(cx - fontSize * 0.3, cy);
+                ctx.lineTo(cx + fontSize * 0.3, cy);
+                ctx.stroke();
+            } else {
+                ctx.fillText(data.value, cx, cy);
+            }
+        }
+    }
+}
+
+function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale) {
+    if (typeof dialogueBlocks === 'undefined') return;
+    const userMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.dialogue) || 3.5;
+    const fontSize = Math.min(cellH * 0.7, userMm * scale);
+
+    dialogueBlocks.forEach(block => {
+        if (block.startFrame >= frameEnd || block.endFrame < frameStart) return;
+        if (block.colIndex >= columns) return;
+
+        const sF = Math.max(block.startFrame, frameStart);
+        const eF = Math.min(block.endFrame, frameEnd - 1);
+        const bx = rect.x + block.colIndex * cellW;
+        const by = rect.y + (sF - frameStart) * cellH;
+        const bh = (eF - sF + 1) * cellH;
+
+        ctx.fillStyle = 'rgba(200,200,200,0.3)';
+        ctx.fillRect(bx, by, cellW, bh);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);           ctx.lineTo(bx + cellW, by);
+        ctx.moveTo(bx, by + bh);      ctx.lineTo(bx + cellW, by + bh);
+        ctx.stroke();
+
+        ctx.fillStyle = '#000';
+        ctx.font = `bold ${fontSize * 0.8}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        if (block.speakerName) {
+            ctx.fillText(block.speakerName, bx + cellW / 2, by + 2);
+        }
+
+        if (block.text) {
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.textBaseline = 'middle';
+            const chars = block.text.split('');
+            const textStartY  = by + fontSize * 1.5;
+            const availableH  = bh - fontSize * 1.5;
+            const spacing     = Math.max(fontSize * 0.9, Math.min(fontSize * 1.2, availableH / Math.max(chars.length, 1)));
+            chars.forEach((ch, i) => {
+                const y = textStartY + i * spacing + spacing / 2;
+                if (y > by + bh) return;
+                ctx.fillText(ch === 'ー' ? '丨' : ch, bx + cellW / 2, y);
+            });
+        }
+    });
+}
+
+function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale) {
+    if (typeof cameraBlocks === 'undefined') return;
+    const userMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.camera) || 2.7;
+    const fontSize = Math.min(cellH * 0.7, userMm * scale);
+
+    cameraBlocks.forEach(block => {
+        if (block.startFrame >= frameEnd || block.endFrame < frameStart) return;
+        if (block.colIndex >= columns) return;
+
+        const sF      = Math.max(block.startFrame, frameStart);
+        const eF      = Math.min(block.endFrame, frameEnd - 1);
+        const colspan = block.colspan || 1;
+        const bx = rect.x + block.colIndex * cellW;
+        const by = rect.y + (sF - frameStart) * cellH;
+        const bw = cellW * colspan;
+        const bh = (eF - sF + 1) * cellH;
+
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, by, bw, bh);
+
+        const label = block.kind || '';
+        if (label) {
+            ctx.fillStyle = '#000';
+            ctx.font = `bold ${fontSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, bx + bw / 2, by + bh / 2);
+        }
+    });
+}
+
+window.drawExternalTemplateTimelineBoxes = drawExternalTemplateTimelineBoxes;

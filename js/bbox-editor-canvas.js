@@ -211,6 +211,26 @@ window.bboxEditorRenderCanvas = function() {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // メタ/staff BBox プレビュー描画（drawAllBBoxes の前に薄く重ねる）
+    const previewToggle = document.getElementById('bbox-preview-toggle');
+    const previewEnabled = previewToggle ? previewToggle.checked : true;
+    if (previewEnabled && typeof window.drawExternalTemplateMetaBoxes === 'function') {
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        const bboxToCanvas = (b) => ({
+            x: b.x * canvas.width,
+            y: b.y * canvas.height,
+            w: b.w * canvas.width,
+            h: b.h * canvas.height
+        });
+        // BBoxエディタの canvas 幅を画像の実寸幅(mm)で割ってmm→px係数を算出
+        // imageWidth が px 単位で格納されている場合は A3縦(210mm)相当と仮定
+        const approxScale = canvas.width / 210;
+        window.drawExternalTemplateMetaBoxes(ctx, tpl, bboxToCanvas, approxScale);
+        ctx.restore();
+    }
+
     drawAllBBoxes(ctx, canvas.width, canvas.height);
 };
 
@@ -487,7 +507,21 @@ window.addEventListener('resize', function() {
 
 // DOM 準備完了後にイベントを設定
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupBBoxCanvasEvents);
+    document.addEventListener('DOMContentLoaded', () => {
+        setupBBoxCanvasEvents();
+        const previewToggle = document.getElementById('bbox-preview-toggle');
+        if (previewToggle) {
+            previewToggle.addEventListener('change', () => {
+                if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
+            });
+        }
+    });
 } else {
     setupBBoxCanvasEvents();
+    const previewToggle = document.getElementById('bbox-preview-toggle');
+    if (previewToggle) {
+        previewToggle.addEventListener('change', () => {
+            if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
+        });
+    }
 }

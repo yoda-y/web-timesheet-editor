@@ -34,9 +34,13 @@ function openBBoxEditor(templateId) {
         if (!tpl) { alert(_bi18n('bbox.alert.notFound', 'テンプレートが見つかりません')); return; }
         bboxEditorTemplate = JSON.parse(JSON.stringify(tpl));
         if (!bboxEditorTemplate.bboxes) bboxEditorTemplate.bboxes = {};
+        // 廃止タグのクリーンアップ（sheet → currentPage/totalPages へ分割済み）
+        if (bboxEditorTemplate.bboxes.sheet) {
+            delete bboxEditorTemplate.bboxes.sheet;
+        }
         // 初回（bboxes が空）の場合、基本タグをデフォルトON
         if (Object.keys(bboxEditorTemplate.bboxes).length === 0) {
-            const defaults = ['title', 'episode', 'scene', 'cut', 'sheet', 'name', 'direction',
+            const defaults = ['title', 'episode', 'scene', 'cut', 'currentPage', 'totalPages', 'name', 'direction',
                               'lengthSec', 'lengthFrame',
                               'action1', 'action2', 'sound1', 'sound2', 'cell1', 'cell2', 'camera1', 'camera2'];
             defaults.forEach(tag => {
@@ -176,6 +180,10 @@ function renderBBoxEditorPropsForm() {
     document.getElementById('bbox-prop-y').value = bbox.y.toFixed(3);
     document.getElementById('bbox-prop-w').value = bbox.w.toFixed(3);
     document.getElementById('bbox-prop-h').value = bbox.h.toFixed(3);
+    const fontSizeInput = document.getElementById('bbox-prop-fontsize');
+    if (fontSizeInput) {
+        fontSizeInput.value = (typeof bbox.fontSize === 'number' && bbox.fontSize > 0) ? bbox.fontSize : '';
+    }
     // 接頭辞
     const prefRow = document.getElementById('bbox-prop-prefix-row');
     if (tagDef.prefixable) {
@@ -284,6 +292,27 @@ document.addEventListener('DOMContentLoaded', () => {
     bindBBoxPropInput('bbox-prop-type', 'type');
     bindBBoxPropInput('bbox-prop-frames', 'frames', v => parseInt(v, 10));
     bindBBoxPropInput('bbox-prop-columns', 'columns', v => parseInt(v, 10));
+
+    // fontSize は特殊扱い: 空文字なら undefined にする
+    document.getElementById('bbox-prop-fontsize').addEventListener('focus', () => {
+        if (typeof pushBBoxHistory === 'function') pushBBoxHistory();
+    });
+    document.getElementById('bbox-prop-fontsize').addEventListener('input', (e) => {
+        if (!bboxEditorSelectedTag) return;
+        const bbox = bboxEditorTemplate.bboxes[bboxEditorSelectedTag];
+        if (!bbox) return;
+        const raw = e.target.value.trim();
+        if (raw === '') {
+            delete bbox.fontSize;
+        } else {
+            let v = parseFloat(raw);
+            if (isNaN(v)) return;
+            if (v < 1.0) v = 1.0;
+            if (v > 20.0) v = 20.0;
+            bbox.fontSize = v;
+        }
+        if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
+    });
 
     // 保存
     document.getElementById('bbox-editor-save-btn').addEventListener('click', async () => {

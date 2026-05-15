@@ -86,6 +86,16 @@
     </div>
   </div>
 
+  <div class="sidebar-section" data-section="custom-fields" id="sidebar-custom-fields" style="display:none;">
+    <div class="sidebar-header" onclick="toggleSidebarSection('custom-fields')">
+      <span class="sidebar-label" data-i18n="sidebar.customFields">カスタム</span>
+      <span class="sidebar-toggle">▼</span>
+    </div>
+    <div class="sidebar-content" id="sidebar-custom-fields-content">
+      <!-- JSが動的生成 -->
+    </div>
+  </div>
+
   <div class="sidebar-section" data-section="tools">
     <div class="sidebar-header" onclick="toggleSidebarSection('tools')">
       <span class="sidebar-label" data-i18n="sidebar.tools">ツール</span>
@@ -432,6 +442,10 @@
         <div class="bbox-editor-canvas-toolbar">
           <span id="bbox-editor-image-info" class="bbox-editor-image-info" data-i18n="bbox.alert.noImageInfo">画像なし</span>
           <span class="bbox-editor-canvas-hint" data-i18n="bbox.canvas.hint">Space+ドラッグ: パン / Space+Ctrl+ドラッグ: ズーム / クリック: 選択 / ドラッグ: 移動・ハンドルでリサイズ</span>
+          <label style="display:flex; align-items:center; gap:4px; font-size:11px; cursor:pointer; margin-left:auto; margin-right:12px;">
+            <input type="checkbox" id="bbox-preview-toggle" checked>
+            <span data-i18n="bbox.previewToggle">プレビュー表示</span>
+          </label>
         </div>
         <div id="bbox-editor-canvas-container" class="bbox-editor-canvas-container">
           <canvas id="bbox-editor-canvas"></canvas>
@@ -452,6 +466,10 @@
           <div class="settings-row"><label data-i18n="bbox.prop.y">Y (0-1):</label><input type="number" id="bbox-prop-y" min="0" max="1" step="0.001"></div>
           <div class="settings-row"><label data-i18n="bbox.prop.w">W (0-1):</label><input type="number" id="bbox-prop-w" min="0" max="1" step="0.001"></div>
           <div class="settings-row"><label data-i18n="bbox.prop.h">H (0-1):</label><input type="number" id="bbox-prop-h" min="0" max="1" step="0.001"></div>
+          <div class="settings-row" id="bbox-prop-fontsize-row">
+            <label data-i18n="bbox.prop.fontSize">文字サイズ (mm):</label>
+            <input type="number" id="bbox-prop-fontsize" min="1.0" max="20.0" step="0.1" placeholder="自動">
+          </div>
           <div class="settings-row" id="bbox-prop-prefix-row" style="display:none;">
             <label data-i18n="bbox.prop.prefix">接頭辞:</label><input type="text" id="bbox-prop-prefix" placeholder="#/S- 等" data-i18n-placeholder="bbox.prop.prefixPlaceholder">
           </div>
@@ -698,6 +716,10 @@
     <div class="settings-row">
       <label style="width:140px;">カメララベル (mm):</label>
       <input type="number" id="drawFontCameraScale" min="1.0" max="10.0" step="0.1" value="2.7" style="width:70px;">
+    </div>
+    <div class="settings-row">
+      <label style="width:140px;" data-i18n="font.directionLabel">Direction (mm):</label>
+      <input type="number" id="drawFontDirectionScale" min="1.0" max="10.0" step="0.1" value="3.5" style="width:70px;">
     </div>
     <div class="settings-row">
       <label style="width:140px;">メタ情報 (mm):</label>

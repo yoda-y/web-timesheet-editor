@@ -511,6 +511,7 @@ function openFontSettings() {
     document.getElementById('drawFontCellScale').value = fs.cell != null ? fs.cell : 2.7;
     document.getElementById('drawFontDialogueScale').value = fs.dialogue != null ? fs.dialogue : 3.5;
     document.getElementById('drawFontCameraScale').value = fs.camera != null ? fs.camera : 2.7;
+    document.getElementById('drawFontDirectionScale').value = fs.direction != null ? fs.direction : 3.5;
     document.getElementById('drawFontMetaScale').value = fs.metaValue != null ? fs.metaValue : 8.0;
     document.getElementById('settings-font-modal').style.display = 'flex';
 }
@@ -527,6 +528,7 @@ document.getElementById('settings-font-ok').addEventListener('click', () => {
     settings.draw.fontSize.cell = parseFS('drawFontCellScale', 2.7);
     settings.draw.fontSize.dialogue = parseFS('drawFontDialogueScale', 3.5);
     settings.draw.fontSize.camera = parseFS('drawFontCameraScale', 2.7);
+    settings.draw.fontSize.direction = parseFS('drawFontDirectionScale', 3.5);
     settings.draw.fontSize.metaValue = parseFS('drawFontMetaScale', 8.0);
     saveSettings();
     closeFontSettings();

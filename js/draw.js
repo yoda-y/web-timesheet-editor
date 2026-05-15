@@ -651,6 +651,11 @@ function getNormalPageCount() {
 }
 
 function getTotalPages() {
+    // 外部テンプレート使用中は専用計算
+    if (typeof getCurrentExternalTemplate === 'function' && getCurrentExternalTemplate() &&
+        typeof getExternalTemplateTotalPages === 'function') {
+        return getExternalTemplateTotalPages();
+    }
     const normalPages = getNormalPageCount();
     // 先頭マージンON: 0ページ + 通常ページ
     // 先頭マージンOFF: 通常ページのみ
@@ -658,6 +663,11 @@ function getTotalPages() {
 }
 
 function getPageStartFrame(pageIndex) {
+    // 外部テンプレート使用中は専用計算
+    if (typeof getCurrentExternalTemplate === 'function' && getCurrentExternalTemplate() &&
+        typeof getExternalTemplatePageStartFrame === 'function') {
+        return getExternalTemplatePageStartFrame(pageIndex);
+    }
     const framesPerPage = (typeof TEMPLATE !== 'undefined' && TEMPLATE.FRAMES_PER_PAGE) ? TEMPLATE.FRAMES_PER_PAGE : 144;
     const headMargin = getHeadMarginForPage();
 

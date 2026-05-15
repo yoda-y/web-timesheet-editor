@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS = {
             cell: 2.7,              // mm
             dialogue: 3.5,          // mm
             camera: 2.7,            // mm
+            direction: 3.5,         // mm
             metaValue: 8.0          // mm
         }
     },

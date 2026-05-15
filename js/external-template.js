@@ -11,7 +11,8 @@ const EXTERNAL_TEMPLATE_TAGS = {
     episode:      { label: '話数',          category: 'meta',      prefixable: true },
     scene:        { label: 'シーン',        category: 'meta',      prefixable: true },
     cut:          { label: 'カット',        category: 'meta',      prefixable: true },
-    sheet:        { label: 'ページ番号',    category: 'meta' },
+    currentPage:  { label: '現在ページ番号', category: 'meta' },
+    totalPages:   { label: '総ページ数',     category: 'meta' },
     date:         { label: '日付',          category: 'meta' },
     studio:       { label: 'スタジオ',      category: 'meta' },
     memo:         { label: '備考',          category: 'meta' },
@@ -58,7 +59,8 @@ const DEFAULT_BBOX_POSITIONS = {
     lengthSec:   { x: 0.52, y: 0.020, w: 0.05, h: 0.030 },
     lengthFrame: { x: 0.58, y: 0.020, w: 0.05, h: 0.030 },
     name:        { x: 0.64, y: 0.020, w: 0.18, h: 0.030 },
-    sheet:       { x: 0.85, y: 0.020, w: 0.10, h: 0.030 },
+    currentPage: { x: 0.80, y: 0.020, w: 0.05, h: 0.030 },
+    totalPages:  { x: 0.86, y: 0.020, w: 0.05, h: 0.030 },
     date:        { x: 0.83, y: 0.055, w: 0.13, h: 0.020 },
     studio:      { x: 0.04, y: 0.055, w: 0.18, h: 0.020 },
     // direction/memo (上部広め)
@@ -223,6 +225,122 @@ async function importExternalTemplateFromJSON(jsonText) {
     return template;
 }
 
+// ─── 現在使用中の外部テンプレート State ──────────────────────────────────────
+
+let currentExternalTemplate = null;
+let currentExternalTemplateImage = null;
+
+function getCurrentExternalTemplate() {
+    return currentExternalTemplate;
+}
+function getCurrentExternalTemplateImage() {
+    return currentExternalTemplateImage;
+}
+async function setCurrentExternalTemplate(id) {
+    if (!id) {
+        currentExternalTemplate = null;
+        currentExternalTemplateImage = null;
+        if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
+        return;
+    }
+    const tpl = await window.externalTemplate.get(id);
+    if (!tpl) {
+        currentExternalTemplate = null;
+        currentExternalTemplateImage = null;
+        if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
+        return;
+    }
+    currentExternalTemplate = tpl;
+    if (tpl.image) {
+        currentExternalTemplateImage = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = tpl.image;
+        });
+    } else {
+        currentExternalTemplateImage = null;
+    }
+    if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
+}
+window.getCurrentExternalTemplate = getCurrentExternalTemplate;
+window.getCurrentExternalTemplateImage = getCurrentExternalTemplateImage;
+window.setCurrentExternalTemplate = setCurrentExternalTemplate;
+
+// ─── Phase 3d: カスタムフィールド サイドバー更新 ──────────────────────────────
+
+function refreshCustomFieldsSidebar() {
+    const section = document.getElementById('sidebar-custom-fields');
+    const content = document.getElementById('sidebar-custom-fields-content');
+    if (!section || !content) return;
+
+    const tpl = currentExternalTemplate;
+    if (!tpl || !tpl.bboxes) {
+        section.style.display = 'none';
+        content.innerHTML = '';
+        return;
+    }
+
+    // enabled の custom1-4 を抽出
+    const customs = [];
+    ['custom1', 'custom2', 'custom3', 'custom4'].forEach(key => {
+        const b = tpl.bboxes[key];
+        if (b && b.enabled) {
+            customs.push({ key, label: b.label || key, type: b.type || 'text' });
+        }
+    });
+
+    if (customs.length === 0) {
+        section.style.display = 'none';
+        content.innerHTML = '';
+        return;
+    }
+
+    section.style.display = '';
+    if (typeof metaData !== 'undefined' && !metaData.customFields) metaData.customFields = {};
+
+    content.innerHTML = customs.map(c => {
+        const escLabel = String(c.label).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const val = (typeof metaData !== 'undefined' && metaData.customFields) ? (metaData.customFields[c.key] || '') : '';
+        const escValue = String(val).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const inputHtml = c.type === 'multiline'
+            ? `<textarea data-custom-key="${c.key}" rows="3" style="width:100%; box-sizing:border-box; font-size:11px; padding:2px;">${escValue}</textarea>`
+            : `<input type="text" data-custom-key="${c.key}" value="${escValue}" style="width:100%; box-sizing:border-box; font-size:11px; padding:2px;">`;
+        return `<div class="custom-field-row" style="margin-bottom:8px;">
+            <label style="display:block; font-size:11px; margin-bottom:2px;">${escLabel}</label>
+            ${inputHtml}
+        </div>`;
+    }).join('');
+
+    // 入力イベント（テキスト）
+    content.querySelectorAll('[data-custom-key]').forEach(el => {
+        el.addEventListener('input', () => {
+            const key = el.dataset.customKey;
+            if (typeof metaData !== 'undefined') {
+                if (!metaData.customFields) metaData.customFields = {};
+                metaData.customFields[key] = el.value;
+            }
+            if (typeof markDirty === 'function') markDirty();
+            // プレビュー再描画はデバウンス
+            scheduleCustomPreviewRefresh();
+        });
+    });
+
+}
+
+
+// デバウンス用タイマー
+let _customPreviewTimer = null;
+function scheduleCustomPreviewRefresh() {
+    if (_customPreviewTimer) clearTimeout(_customPreviewTimer);
+    _customPreviewTimer = setTimeout(() => {
+        _customPreviewTimer = null;
+        if (typeof updateTemplatePreview === 'function') updateTemplatePreview();
+    }, 250);
+}
+
+window.refreshCustomFieldsSidebar = refreshCustomFieldsSidebar;
+
 // ─── グローバル公開 ──────────────────────────────────────────────────────────
 
 window.externalTemplate = {
@@ -268,7 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 起動時に外部テンプレート一覧を読み込む
     refreshTemplateSelectExternalOptions();
 
-    templateSelect.addEventListener('change', (e) => {
+    templateSelect.addEventListener('change', async (e) => {
         const v = e.target.value;
         if (v === '__new_external__') {
             e.target.selectedIndex = 0;
@@ -276,10 +394,53 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         if (v.startsWith('ext:')) {
-            if (typeof showToast === 'function') showToast('外部テンプレートの描画は次フェーズで実装されます', 3000);
-            e.target.selectedIndex = 0;
+            const id = v.substring(4);
+            await setCurrentExternalTemplate(id);
+            if (typeof updateTemplatePreview === 'function') updateTemplatePreview();
             return;
         }
+        // 標準テンプレート選択時は外部テンプレートを解除
+        await setCurrentExternalTemplate(null);
+        if (typeof updateTemplatePreview === 'function') updateTemplatePreview();
         // 既存の標準テンプレート処理はここでは何もしない（他の箇所で処理）
     });
 });
+
+// ─── ページング計算（外部テンプレート用） ───────────────────────────────────
+
+// 1ページあたりフレーム数: enabled な timeline BBox の frames を合算
+// 1側 = action1/cell1/sound1/camera1 のうち最大frames
+// 2側 = action2/cell2/sound2/camera2 のうち最大frames（enabled時のみ）
+function getExternalTemplateSheetCapacity() {
+    const tpl = currentExternalTemplate;
+    if (!tpl || !tpl.bboxes) return 0;
+    const getMaxFrames = (suffix) => {
+        let max = 0;
+        ['action', 'cell', 'sound', 'camera'].forEach(t => {
+            const key = t + suffix;
+            const b = tpl.bboxes[key];
+            if (b && b.enabled && typeof b.frames === 'number' && b.frames > 0) {
+                if (b.frames > max) max = b.frames;
+            }
+        });
+        return max;
+    };
+    return getMaxFrames('1') + getMaxFrames('2');
+}
+window.getExternalTemplateSheetCapacity = getExternalTemplateSheetCapacity;
+
+function getExternalTemplateTotalPages() {
+    if (!currentExternalTemplate) return 0;
+    const capacity = getExternalTemplateSheetCapacity();
+    if (capacity <= 0) return 1;
+    if (typeof targetFrames === 'undefined' || !targetFrames || targetFrames <= 0) return 1;
+    return Math.max(1, Math.ceil(targetFrames / capacity));
+}
+window.getExternalTemplateTotalPages = getExternalTemplateTotalPages;
+
+function getExternalTemplatePageStartFrame(pageIndex) {
+    const capacity = getExternalTemplateSheetCapacity();
+    if (capacity <= 0) return 0;
+    return pageIndex * capacity;
+}
+window.getExternalTemplatePageStartFrame = getExternalTemplatePageStartFrame;

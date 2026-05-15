@@ -176,6 +176,7 @@ const I18N = {
         'bbox.prop.y': 'Y (0-1):',
         'bbox.prop.w': 'W (0-1):',
         'bbox.prop.h': 'H (0-1):',
+        'bbox.prop.fontSize': '文字サイズ (mm):',
         'bbox.prop.prefix': '接頭辞:',
         'bbox.prop.prefixPlaceholder': '#/S- 等',
         'bbox.prop.label': 'ラベル:',
@@ -188,7 +189,9 @@ const I18N = {
         'bbox.alert.savedToast': 'BBox設定を保存しました',
         'bbox.alert.imageInfo': '画像: {w} × {h} px',
         'bbox.alert.noImageInfo': '画像なし',
+        'bbox.previewToggle': 'プレビュー表示',
         'bbox.template.untitled': '無名',
+        'font.directionLabel': 'Direction (mm):',
         'btn.save': '保存',
         // インラインラベル
         'label.zoom': 'Zoom:',
@@ -431,6 +434,7 @@ const I18N = {
         'sidebar.importHandwriting': '手書きPNG読込',
         'sidebar.saveTdts': 'TDTS保存',
         'sidebar.collapse': '≪',
+        'sidebar.customFields': 'カスタム',
         'preview.refresh': '更新',
         // サイドバー設定モーダル
         'modal.sidebar': 'サイドバー設定',
@@ -634,6 +638,7 @@ const I18N = {
         'bbox.prop.y': 'Y (0-1):',
         'bbox.prop.w': 'W (0-1):',
         'bbox.prop.h': 'H (0-1):',
+        'bbox.prop.fontSize': 'Font size (mm):',
         'bbox.prop.prefix': 'Prefix:',
         'bbox.prop.prefixPlaceholder': '# / S- etc.',
         'bbox.prop.label': 'Label:',
@@ -646,7 +651,9 @@ const I18N = {
         'bbox.alert.savedToast': 'BBox settings saved',
         'bbox.alert.imageInfo': 'Image: {w} × {h} px',
         'bbox.alert.noImageInfo': 'No image',
+        'bbox.previewToggle': 'Preview',
         'bbox.template.untitled': 'Untitled',
+        'font.directionLabel': 'Direction (mm):',
         'btn.save': 'Save',
         // Inline labels
         'label.zoom': 'Zoom:',
@@ -889,6 +896,7 @@ const I18N = {
         'sidebar.importHandwriting': 'Import Handwriting PNG',
         'sidebar.saveTdts': 'Save TDTS',
         'sidebar.collapse': '<<',
+        'sidebar.customFields': 'Custom',
         // Sidebar settings modal
         'modal.sidebar': 'Sidebar Settings',
         'settings.sidebar': 'Sidebar Settings...',

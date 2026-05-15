@@ -18,7 +18,7 @@ let sections = [
   {type:"CAMERA", x:0, cols:3, cw:58, chars:["CAM1","CAM2","CAM3"]}
 ];
 
-let metaData = { title:"", subTitle:"", scene:"", cut:"", sharedCuts: [], lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"" };
+let metaData = { title:"", subTitle:"", scene:"", cut:"", sharedCuts: [], lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"", customFields: {} };
 let isMemoExpanded = true;
 let memoScrollLine = 0;
 let booksData = { "ACTION": {}, "SOUND": {}, "CELL": {}, "CAMERA": {} };
