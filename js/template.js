@@ -348,7 +348,9 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
             case 'cut':         return m.cut || '';
             case 'sheet':       return '';  // 廃止タグ（後方互換: 空文字を返す）
             case 'currentPage': {
-                const cp = (typeof currentPage !== 'undefined') ? (currentPage + 1) : 1;
+                // 描画対象ページのインデックスを使用（グローバル currentPage ではない）。
+                // サムネイル生成や複数ページ書き出しで、全ページに同じ番号が出ないようにするため。
+                const cp = (typeof pageIndex === 'number' ? pageIndex : 0) + 1;
                 return String(cp);
             }
             case 'totalPages': {
