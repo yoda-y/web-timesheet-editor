@@ -107,7 +107,11 @@ function saveInput() {
                 }
             }
         }
-        trimCustomRepeatsForRange(inputBounds);
+        // ユーザーが実際に入力した場合のみcustomRepeatsをtrim
+        // (空クリックでフォーカス移動しただけでrep/ブレ/Rブレが消えるのを防ぐ)
+        if (cellInputDirty) {
+            trimCustomRepeatsForRange(inputBounds);
+        }
     }
     if (oldVal !== JSON.stringify(cellData[key] || {}) || rangeCleared) {
         if (beforeSnapshot && typeof undoStack !== 'undefined' && typeof redoStack !== 'undefined') {

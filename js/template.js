@@ -1720,6 +1720,31 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
     if (typeof cellData === 'undefined') return;
     if (typeof checkRepeatColumns !== 'function') return;
 
+    // 下地なしテキスト (rep/firstVal用)
+    const drawPlainText = (text, px, py, font) => {
+        ctx.save();
+        ctx.font = font;
+        ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(text), px, py);
+        ctx.restore();
+    };
+    // 縦書き 1セル1文字 (ブレ/ランダムブレ用)。ランダムブレ→Rブレ略記。
+    const drawVerticalLabelPerCell = (text, px, startY, font) => {
+        let label = String(text || '');
+        if (label === 'ランダムブレ') label = 'Rブレ';
+        const chars = label.split('');
+        ctx.save();
+        ctx.font = font;
+        ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        chars.forEach((c, i) => ctx.fillText(c, px, startY + rowH * (i + 0.5)));
+        ctx.restore();
+        return { top: startY, bottom: startY + rowH * chars.length, charCount: chars.length };
+    };
+
     const targetFrames = (parseInt(metaData.lengthSec) || 0) * 24 + (parseInt(metaData.lengthFrame) || 0);
     const endFrame = absoluteStart + TEMPLATE.FRAMES_PER_COL;
     const drawFrameLimit = Math.max(targetFrames, endFrame);
@@ -1764,15 +1789,15 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
                 const firstVal = firstData?.value || '';
                 const repY = y + (chunkStartFrame - absoluteStart) * rowH;
 
-                // 先頭セル番号
-                drawRepeatTextWithBg(ctx, firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`, scale);
+                // 先頭セル番号 (下地なし)
+                drawPlainText(firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`);
                 drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale);
 
-                // "rep"
+                // "rep" (下地なし)
                 const repTextFrame = chunkStartFrame + 1;
                 if (repTextFrame >= absoluteStart && repTextFrame < endFrame && repTextFrame < drawFrameLimit) {
                     const repTextY = y + (repTextFrame - absoluteStart) * rowH;
-                    drawRepeatTextWithBg(ctx, 'rep', tx, repTextY + rowH / 2, `bold ${m(2)}px sans-serif`, scale);
+                    drawPlainText('rep', tx, repTextY + rowH / 2, `bold ${m(2)}px sans-serif`);
                 }
 
                 // 点線
@@ -1808,7 +1833,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
 
             if (chunkStartFrame >= absoluteStart && chunkStartFrame < endFrame) {
                 const repY = y + (chunkStartFrame - absoluteStart) * rowH;
-                drawRepeatTextWithBg(ctx, firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`, scale);
+                drawPlainText(firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`);
                 drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale);
             }
 
@@ -1817,11 +1842,14 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
             if (repTextFrame >= absoluteStart && repTextFrame < endFrame && repTextFrame < drawFrameLimit) {
                 const repTextY = y + (repTextFrame - absoluteStart) * rowH;
                 const label = typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep';
-                if (label === 'rep') {
-                    drawRepeatTextWithBg(ctx, label, tx, repTextY + rowH / 2, `bold ${m(2)}px sans-serif`, scale);
-                } else {
-                    labelBox = drawVerticalRepeatTextWithBg(ctx, label, tx, repTextY + rowH * 0.25, `bold ${m(1.7)}px sans-serif`, scale, { direction: 'down' });
-                }
+                // ブレ/ランダムブレも横書き。ランダムブレ→Rブレ略記。
+                let displayLabel = label;
+                if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
+                const labelFont = (displayLabel === 'rep')
+                    ? `bold ${m(2)}px sans-serif`
+                    : `${m(1.8)}px "Yu Gothic UI", "Meiryo", sans-serif`;
+                drawPlainText(displayLabel, tx, repTextY + rowH / 2, labelFont);
+                labelBox = { bottom: repTextY + rowH };
             }
 
             const lineStartF = repTextFrame + 1;
@@ -3091,6 +3119,175 @@ function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pag
     });
 }
 
+// 外部テンプレ ACTION列のRep省略フレームを収集 (止メ範囲は3aでは省略しない)
+function computeActionRepeatSkipSet(columns, frameStart, frameEnd) {
+    const skip = new Set();
+    if (typeof checkRepeatColumns !== 'function' || typeof cellData === 'undefined') return skip;
+    const targetF = (parseInt(metaData?.lengthSec) || 0) * 24 + (parseInt(metaData?.lengthFrame) || 0);
+    const totalF = Math.max(targetF, frameEnd);
+    if (totalF <= 0) return skip;
+    for (let ci = 0; ci < columns; ci++) {
+        const colData = [];
+        for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
+        const reps = checkRepeatColumns(colData, totalF, ci);
+        reps.forEach(r => {
+            if (r.isHold) return;  // 3aでは止メ範囲はスキップしない (3b で対応)
+            for (let f = r.startF + r.chunkLen; f < r.endF; f++) skip.add(`${ci}-${f}`);
+        });
+    }
+    if (typeof customRepeats !== 'undefined' && Array.isArray(customRepeats)) {
+        customRepeats.forEach(rep => {
+            if (rep.colType !== 'ACTION') return;
+            if (rep.colIndex < 0 || rep.colIndex >= columns) return;
+            for (let f = rep.startF; f <= rep.endF; f++) skip.add(`${rep.colIndex}-${f}`);
+        });
+    }
+    return skip;
+}
+
+// 外部テンプレ ACTION列のRep/ブレ/ランダムブレ描画 (BBox範囲にクリップ)
+// 止メは含まず (3b で対応)
+function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale) {
+    if (typeof checkRepeatColumns !== 'function' || typeof cellData === 'undefined') return;
+    const m = (mm) => mm * scale;
+    const targetF = (parseInt(metaData?.lengthSec) || 0) * 24 + (parseInt(metaData?.lengthFrame) || 0);
+    const totalF = Math.max(targetF, frameEnd);
+    if (totalF <= 0) return;
+
+    const yOfFrame = (f) => rect.y + (f - frameStart) * cellH;
+    const inRange = (f) => f >= frameStart && f < frameEnd;
+    const dashColor = (typeof settings !== 'undefined' && settings.draw && settings.draw.repeatDashColor) || 'rgba(66, 133, 244, 0.8)';
+
+    // 下地なしのテキスト描画 (rep/firstVal用)
+    const drawPlainText = (text, x, y, font) => {
+        ctx.save();
+        ctx.font = font;
+        ctx.fillStyle = '#000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(text), x, y);
+        ctx.restore();
+    };
+    // 縦書きテキスト (1セル1文字、下地なし)
+    // ランダムブレは「Rブレ」に略記
+    const drawVerticalLabelPerCell = (text, x, startY, font) => {
+        let label = String(text || '');
+        if (label === 'ランダムブレ') label = 'Rブレ';
+        const chars = label.split('');
+        ctx.save();
+        ctx.font = font;
+        ctx.fillStyle = '#000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        chars.forEach((c, i) => ctx.fillText(c, x, startY + cellH * (i + 0.5)));
+        ctx.restore();
+        return { top: startY, bottom: startY + cellH * chars.length, charCount: chars.length };
+    };
+
+    const drawDashedLine = (tx, lineStartF, lineEndF) => {
+        if (lineEndF < lineStartF) return;
+        const sf = Math.max(lineStartF, frameStart);
+        const ef = Math.min(lineEndF, frameEnd - 1);
+        if (ef < sf) return;
+        const lineStartY = rect.y + (sf - frameStart) * cellH;
+        const lineEndY = rect.y + (ef - frameStart + 1) * cellH;
+        ctx.strokeStyle = dashColor;
+        ctx.lineWidth = Math.max(0.5, scale * 0.15);
+        ctx.setLineDash([m(1), m(1)]);
+        ctx.beginPath();
+        ctx.moveTo(tx, lineStartY);
+        ctx.lineTo(tx, lineEndY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    };
+
+    for (let ci = 0; ci < columns; ci++) {
+        const colData = [];
+        for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
+        const reps = checkRepeatColumns(colData, totalF, ci);
+        const tx = rect.x + ci * cellW + cellW / 2;
+
+        reps.forEach(r => {
+            if (r.isHold) return;  // 止メは3b で対応
+            const chunkStartFrame = r.startF + r.chunkLen;
+            const firstData = colData[r.startF] || null;
+            const firstVal = firstData?.value || '';
+
+            // 先頭セル番号 (下地なし)
+            if (inRange(chunkStartFrame)) {
+                const repY = yOfFrame(chunkStartFrame);
+                drawPlainText(firstVal, tx, repY + cellH / 2, `bold ${m(2.2)}px sans-serif`);
+                drawTemplateOptionMark(ctx, tx, repY + cellH / 2, firstData, scale);
+            }
+            // "rep" ラベル (下地なし)
+            const repTextFrame = chunkStartFrame + 1;
+            if (inRange(repTextFrame) && repTextFrame < totalF) {
+                const repTextY = yOfFrame(repTextFrame);
+                drawPlainText('rep', tx, repTextY + cellH / 2, `bold ${m(2)}px sans-serif`);
+            }
+            // 点線
+            const lineStartF = repTextFrame + 1;
+            const lineEndF = Math.min(r.endF - 1, chunkStartFrame + 6, totalF - 1);
+            drawDashedLine(tx, lineStartF, lineEndF);
+        });
+    }
+
+    // customRepeats (ACTION のみ, ブレ/ランダムブレ含む)
+    if (typeof customRepeats !== 'undefined' && Array.isArray(customRepeats)) {
+        customRepeats.forEach(rep => {
+            if (rep.colType !== 'ACTION') return;
+            if (rep.colIndex < 0 || rep.colIndex >= columns) return;
+            if (rep.endF < frameStart || rep.startF >= frameEnd) return;
+            const tx = rect.x + rep.colIndex * cellW + cellW / 2;
+            const chunkStartFrame = rep.startF;
+            const firstData = rep.pattern?.[0] || null;
+            const firstVal = firstData?.value || '';
+
+            if (inRange(chunkStartFrame)) {
+                const repY = yOfFrame(chunkStartFrame);
+                drawPlainText(firstVal, tx, repY + cellH / 2, `bold ${m(2.2)}px sans-serif`);
+                drawTemplateOptionMark(ctx, tx, repY + cellH / 2, firstData, scale);
+            }
+
+            const repTextFrame = chunkStartFrame + 1;
+            let labelBox = null;
+            if (inRange(repTextFrame) && repTextFrame < totalF) {
+                const repTextY = yOfFrame(repTextFrame);
+                const label = typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep';
+                // ブレ/ランダムブレも横書き。ランダムブレ→Rブレ略記。
+                let displayLabel = label;
+                if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
+                const labelFont = (displayLabel === 'rep')
+                    ? `bold ${m(2)}px sans-serif`
+                    : `${Math.min(cellH * 0.7, m(1.8))}px "Yu Gothic UI", "Meiryo", sans-serif`;
+                drawPlainText(displayLabel, tx, repTextY + cellH / 2, labelFont);
+                labelBox = { bottom: repTextY + cellH };
+            }
+
+            const lineStartF = repTextFrame + 1;
+            const lineEndF = Math.min(rep.endF, chunkStartFrame + 6, totalF - 1);
+            // labelBox 下端より下から線を引く
+            if (lineEndF >= lineStartF) {
+                const sf = Math.max(lineStartF, frameStart);
+                const ef = Math.min(lineEndF, frameEnd - 1);
+                if (ef >= sf) {
+                    const baseStartY = rect.y + (sf - frameStart) * cellH;
+                    const lineStartY = labelBox ? Math.max(baseStartY, labelBox.bottom + m(0.4)) : baseStartY;
+                    const lineEndY = rect.y + (ef - frameStart + 1) * cellH;
+                    ctx.strokeStyle = dashColor;
+                    ctx.lineWidth = Math.max(0.5, scale * 0.15);
+                    ctx.setLineDash([m(1), m(1)]);
+                    ctx.beginPath();
+                    ctx.moveTo(tx, lineStartY);
+                    ctx.lineTo(tx, lineEndY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+        });
+    }
+}
+
 function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, frameEnd, columns) {
     const rect = bboxToCanvas(bbox);
     if (rect.w <= 0 || rect.h <= 0) return;
@@ -3106,7 +3303,14 @@ function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, fram
     const bboxFontMm = (typeof bbox.fontSize === 'number' && bbox.fontSize > 0) ? bbox.fontSize : null;
 
     if (type === 'action' || type === 'cell') {
-        drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm);
+        // ACTION列のみ Rep省略を有効化
+        const skipSet = (type === 'action')
+            ? computeActionRepeatSkipSet(columns, frameStart, frameEnd)
+            : null;
+        drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm, skipSet);
+        if (type === 'action') {
+            drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
+        }
     } else if (type === 'sound') {
         drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm);
     } else if (type === 'camera') {
@@ -3116,7 +3320,7 @@ function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, fram
     ctx.restore();
 }
 
-function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm) {
+function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm, skipSet) {
     const upperType = type.toUpperCase();
     const defaultMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.cell) || 2.7;
     const isExplicit = (typeof bboxFontMm === 'number' && bboxFontMm > 0);
@@ -3131,6 +3335,9 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
             const key  = `${upperType}-${ci}-${f}`;
             const data = cellData[key];
             if (!data || !data.value) continue;
+
+            // Rep範囲内のセルはスキップ (ACTION のみ skipSet 適用)
+            if (skipSet && skipSet.has(`${ci}-${f}`)) continue;
 
             // raw SYMBOL値の防御: 標準表示記号へ正規化
             // （SYMBOL_STOP/SYMBOL_START はrepeatマーカーなので非表示）
@@ -3153,8 +3360,10 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
             ctx.strokeStyle = cellColor;
 
             if (value === '●') {
+                // 標準A3と同じ比率: max(0.35mm, cellH * 2.5/18)
+                const dotR = Math.max(scale * 0.35, cellH * (2.5 / 18));
                 ctx.beginPath();
-                ctx.arc(cx, cy, fontSize * 0.25, 0, Math.PI * 2);
+                ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
                 ctx.fill();
             } else if (value === '○') {
                 ctx.beginPath();
@@ -3162,10 +3371,13 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
                 ctx.stroke();
             } else if (value === '×') {
                 const s = fontSize * 0.3;
+                ctx.save();
+                ctx.lineWidth = Math.max(1.5, scale * 0.3) * 1.5;
                 ctx.beginPath();
                 ctx.moveTo(cx - s, cy - s); ctx.lineTo(cx + s, cy + s);
                 ctx.moveTo(cx + s, cy - s); ctx.lineTo(cx - s, cy + s);
                 ctx.stroke();
+                ctx.restore();
             } else if (value === '―') {
                 ctx.beginPath();
                 ctx.moveTo(cx - fontSize * 0.3, cy);

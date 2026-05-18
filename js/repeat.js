@@ -177,14 +177,17 @@ function drawRepMark(ctx, sec, colIndex, chunkStartFrame, endF, firstVal, firstD
     const ty = frameY(chunkStartFrame) + 16;
     ctx.fillText(firstVal, tx, ty);
     drawRepOptionMark(ctx, tx, ty, firstData);
-    let repFrame = label === 'rep' ? chunkStartFrame + 1 : chunkStartFrame + 1;
-    let labelBottomY = null;
+    let repFrame = chunkStartFrame + 1;
     if (repFrame < drawFrameLimit) {
-        if (label === 'rep') {
-            ctx.fillText(label, tx, frameY(repFrame) + 16);
-        } else {
-            labelBottomY = drawVerticalRepeatLabel(ctx, tx, frameY(repFrame), label);
+        // ブレ/ランダムブレも横書き表示。ランダムブレは Rブレ に略記。
+        let displayLabel = label;
+        if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
+        // フォントサイズ調整（多文字ラベルは少し小さく）
+        if (displayLabel !== 'rep') {
+            ctx.font = "bold 10px sans-serif";
         }
+        ctx.fillText(displayLabel, tx, frameY(repFrame) + 16);
+        ctx.font = "bold 12px sans-serif";
     }
     let lineStartF = repFrame + 1;
     let lineEndF = Math.min(endF - 1, repFrame + 6, drawFrameLimit - 1);
@@ -193,7 +196,8 @@ function drawRepMark(ctx, sec, colIndex, chunkStartFrame, endF, firstVal, firstD
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
-        ctx.moveTo(tx, labelBottomY ? Math.max(frameY(lineStartF), labelBottomY + 4) : frameY(lineStartF));
+        // 文字と被らないよう少し下に逃がす (+4px)
+        ctx.moveTo(tx, frameY(lineStartF) + 4);
         ctx.lineTo(tx, frameY(lineEndF + 1));
         ctx.stroke();
         ctx.setLineDash([]);
