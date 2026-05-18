@@ -118,6 +118,7 @@ function renderTemplate(dpi, pageIndex = 0) {
                 : 0;
             drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex);
             drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset);
+            drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex);
         }
         return canvas;
     }
@@ -2938,6 +2939,128 @@ window.drawExternalTemplateMetaBoxes = drawExternalTemplateMetaBoxes;
 //   標準A3で実装済みのクリッピング+真の始終点判定方式を移植する想定。
 // =====================================
 
+// 外部テンプレ用 BOOKラベル描画
+// - action1 BBox がある場合のみ
+// - 1ページ目のみ (pageIndex === 0)
+// - action1 の上側にボックスを並べ、各列位置に分岐ライン
+function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex) {
+    if (pageIndex !== 0) return;
+    if (typeof booksData === 'undefined' || !booksData || !booksData['ACTION']) return;
+    if (!extTpl.bboxes) return;
+    const b1 = extTpl.bboxes['action1'];
+    if (!b1 || !b1.enabled) return;
+
+    const rect = bboxToCanvas(b1);
+    const columns = b1.columns || 5;
+    const colW = rect.w / columns;
+    const m = (mm) => mm * scale;
+
+    // 全BOOKを収集
+    const allBooks = [];
+    for (const lineIdx in booksData['ACTION']) {
+        const books = booksData['ACTION'][lineIdx];
+        const colIndex = parseInt(lineIdx);
+        if (colIndex >= columns) continue;
+        books.forEach((bookName, bookIdx) => {
+            const colX = rect.x + colIndex * colW;
+            allBooks.push({ text: bookName, colIndex, x: colX, seq: bookIdx });
+        });
+    }
+    if (allBooks.length === 0) return;
+
+    const bookBoxW = m(11);
+    const bookBoxH = m(4.5);
+    const bookRowH = m(6);
+
+    // 文字幅で自動拡張
+    ctx.font = `bold ${m(2.2)}px sans-serif`;
+    allBooks.forEach(book => {
+        const tw = ctx.measureText(book.text || '').width;
+        book.boxW = Math.max(bookBoxW, tw + m(3));
+    });
+
+    allBooks.sort((a, b) => a.x !== b.x ? a.x - b.x : a.seq - b.seq);
+
+    // 重なり回避: 行番号割当
+    allBooks.forEach(book => {
+        let rowIndex = book.seq;
+        while (true) {
+            let conflict = false;
+            for (const placed of allBooks) {
+                if (placed === book) break;
+                if (placed.row === rowIndex) {
+                    const bL = book.x + m(3);
+                    const bR = bL + book.boxW;
+                    const pL = placed.x + m(3);
+                    const pR = pL + placed.boxW;
+                    if (!(bR + m(2) < pL || bL > pR + m(2))) {
+                        conflict = true;
+                        break;
+                    }
+                }
+            }
+            if (!conflict) { book.row = rowIndex; break; }
+            rowIndex++;
+        }
+    });
+
+    // 基準Y (action1の上端から 2コマ分 上)
+    const frames1 = b1.frames || 72;
+    const cellH = rect.h / frames1;
+    const baseBookY = rect.y - cellH * 2;
+    const gridY = rect.y;
+
+    // ライン
+    allBooks.forEach(book => {
+        const colX = book.x;
+        const boxX = colX + m(3);
+        const boxY = baseBookY - bookBoxH - book.row * bookRowH;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = Math.max(1.4, scale * 0.28);
+        ctx.beginPath();
+        ctx.moveTo(boxX, boxY + bookBoxH / 2);
+        ctx.lineTo(colX, boxY + bookBoxH / 2);
+        ctx.lineTo(colX, gridY);
+        ctx.stroke();
+
+        // 先端の下向き三角で強調
+        ctx.fillStyle = '#000';
+        const th = Math.max(m(1.2), scale * 0.6);  // 高さ
+        const tw = th * 0.9;                        // 幅
+        ctx.beginPath();
+        ctx.moveTo(colX, gridY);
+        ctx.lineTo(colX - tw / 2, gridY - th);
+        ctx.lineTo(colX + tw / 2, gridY - th);
+        ctx.closePath();
+        ctx.fill();
+    });
+
+    // ボックス & テキスト
+    allBooks.forEach(book => {
+        const colX = book.x;
+        const boxX = colX + m(3);
+        const boxY = baseBookY - bookBoxH - book.row * bookRowH;
+        const bw = book.boxW;
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = Math.max(1, scale * 0.3);
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(boxX, boxY, bw, bookBoxH, m(1));
+        else ctx.rect(boxX, boxY, bw, bookBoxH);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#000';
+        ctx.font = `bold ${m(2.2)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(book.text, boxX + bw / 2, boxY + bookBoxH / 2);
+    });
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+}
+
 function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset) {
     if (!extTpl.bboxes || typeof cellData === 'undefined') return;
     pageOffset = pageOffset || 0;
@@ -3009,7 +3132,14 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
             const data = cellData[key];
             if (!data || !data.value) continue;
 
-            if (['SYMBOL_HYPHEN', 'SYMBOL_TICK', 'SYMBOL_NULL'].includes(data.value)) continue;
+            // raw SYMBOL値の防御: 標準表示記号へ正規化
+            // （SYMBOL_STOP/SYMBOL_START はrepeatマーカーなので非表示）
+            let value = data.value;
+            if (value === 'SYMBOL_HYPHEN') value = '―';
+            else if (value === 'SYMBOL_TICK_1' || value === 'SYMBOL_TICK') value = '●';
+            else if (value === 'SYMBOL_TICK_2') value = '○';
+            else if (value === 'SYMBOL_NULL_CELL' || value === 'SYMBOL_NULL') value = '×';
+            else if (value === 'SYMBOL_STOP' || value === 'SYMBOL_START') continue;
 
             const cx = rect.x + ci * cellW + cellW / 2;
             const cy = rect.y + (f - frameStart) * cellH + cellH / 2;
@@ -3022,21 +3152,21 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
             ctx.fillStyle = cellColor;
             ctx.strokeStyle = cellColor;
 
-            if (data.value === '●') {
+            if (value === '●') {
                 ctx.beginPath();
                 ctx.arc(cx, cy, fontSize * 0.25, 0, Math.PI * 2);
                 ctx.fill();
-            } else if (data.value === '○') {
+            } else if (value === '○') {
                 ctx.beginPath();
                 ctx.arc(cx, cy, fontSize * 0.25, 0, Math.PI * 2);
                 ctx.stroke();
-            } else if (data.value === '×') {
+            } else if (value === '×') {
                 const s = fontSize * 0.3;
                 ctx.beginPath();
                 ctx.moveTo(cx - s, cy - s); ctx.lineTo(cx + s, cy + s);
                 ctx.moveTo(cx + s, cy - s); ctx.lineTo(cx - s, cy + s);
                 ctx.stroke();
-            } else if (data.value === '―') {
+            } else if (value === '―') {
                 ctx.beginPath();
                 ctx.moveTo(cx - fontSize * 0.3, cy);
                 ctx.lineTo(cx + fontSize * 0.3, cy);
@@ -3048,7 +3178,7 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
                     const actKey = `ACTION-${ci}-${f}`;
                     if (cellData[actKey] && cellData[actKey].option) dispOpt = cellData[actKey].option;
                 }
-                if (dispOpt && !['●','○','×','―'].includes(data.value)) {
+                if (dispOpt && !['●','○','×','―'].includes(value)) {
                     ctx.save();
                     ctx.globalAlpha = 0.5;
                     ctx.strokeStyle = cellColor;
@@ -3069,7 +3199,7 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
                     ctx.restore();
                 }
                 // 数字を囲いの上に描画
-                ctx.fillText(data.value, cx, cy);
+                ctx.fillText(value, cx, cy);
             }
         }
     }
@@ -3164,3 +3294,4 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
 }
 
 window.drawExternalTemplateTimelineBoxes = drawExternalTemplateTimelineBoxes;
+window.drawExternalTemplateBooks = drawExternalTemplateBooks;
