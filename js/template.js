@@ -1763,23 +1763,24 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
 
         repeats.forEach(r => {
             if (r.isHold) {
-                // 止め描画
+                // 止め描画 (外部テンプレと同じ方針: 下地なし・セル中央・2セル分割)
                 const holdFrame = 1;
-                if (holdFrame < absoluteStart || holdFrame >= endFrame) return;
+                if (holdFrame >= endFrame) return;
 
-                const holdY = y + (holdFrame - absoluteStart) * rowH;
-
-                // 背景
-                ctx.fillStyle = TEMPLATE.BG_COLOR;
-                ctx.fillRect(tx - m(2), holdY + m(0.5), m(4), m(6));
-
-                // 止/メ
+                ctx.save();
                 ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-                ctx.font = `bold ${m(2.2)}px sans-serif`;
+                ctx.font = `bold ${Math.min(rowH * 0.8, m(2.2))}px "Yu Gothic UI", "Meiryo", sans-serif`;
                 ctx.textAlign = 'center';
-                ctx.textBaseline = 'top';
-                ctx.fillText('止', tx, holdY + m(0.8));
-                ctx.fillText('メ', tx, holdY + m(3.2));
+                ctx.textBaseline = 'middle';
+                if (holdFrame >= absoluteStart && holdFrame < endFrame) {
+                    const y1 = y + (holdFrame - absoluteStart) * rowH;
+                    ctx.fillText('止', tx, y1 + rowH * 0.5);
+                }
+                if (holdFrame + 1 >= absoluteStart && holdFrame + 1 < endFrame) {
+                    const y2 = y + (holdFrame + 1 - absoluteStart) * rowH;
+                    ctx.fillText('メ', tx, y2 + rowH * 0.5);
+                }
+                ctx.restore();
             } else {
                 // Rep描画
                 const chunkStartFrame = r.startF + r.chunkLen;
