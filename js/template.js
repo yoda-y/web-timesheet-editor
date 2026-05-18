@@ -3131,8 +3131,12 @@ function computeActionRepeatSkipSet(columns, frameStart, frameEnd) {
         for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
         const reps = checkRepeatColumns(colData, totalF, ci);
         reps.forEach(r => {
-            if (r.isHold) return;  // 3aでは止メ範囲はスキップしない (3b で対応)
-            for (let f = r.startF + r.chunkLen; f < r.endF; f++) skip.add(`${ci}-${f}`);
+            if (r.isHold) {
+                // 止メ: 1コマ目以外を省略
+                for (let f = 1; f < r.endF; f++) skip.add(`${ci}-${f}`);
+            } else {
+                for (let f = r.startF + r.chunkLen; f < r.endF; f++) skip.add(`${ci}-${f}`);
+            }
         });
     }
     if (typeof customRepeats !== 'undefined' && Array.isArray(customRepeats)) {
@@ -3208,7 +3212,23 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
         const tx = rect.x + ci * cellW + cellW / 2;
 
         reps.forEach(r => {
-            if (r.isHold) return;  // 止メは3b で対応
+            if (r.isHold) {
+                // 止メ: 1コマ目に縦書き「止/メ」を描画
+                const holdFrame = 1;
+                if (!inRange(holdFrame)) return;
+                const holdY = yOfFrame(holdFrame);
+                ctx.save();
+                ctx.fillStyle = '#000';
+                ctx.font = `bold ${Math.min(cellH * 0.8, m(2.2))}px "Yu Gothic UI", "Meiryo", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('止', tx, holdY + cellH * 0.5);
+                if (inRange(holdFrame + 1)) {
+                    ctx.fillText('メ', tx, yOfFrame(holdFrame + 1) + cellH * 0.5);
+                }
+                ctx.restore();
+                return;
+            }
             const chunkStartFrame = r.startF + r.chunkLen;
             const firstData = colData[r.startF] || null;
             const firstVal = firstData?.value || '';
