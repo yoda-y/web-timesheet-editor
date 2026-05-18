@@ -3500,7 +3500,10 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
     const userMm = isExplicit ? bboxFontMm : defaultMm;
     const baseFontPx = isExplicit ? (userMm * scale) : Math.min(cellH * 0.7, userMm * scale);
     const tgtFontPx = Math.max(baseFontPx * 0.7, m(1.5));
-    const lineW = Math.max(0.8, scale * 0.2);
+    // 線幅: I/H/J は外部テンプレ画像の罫線に負けない太さ、その他は控えめ
+    const lineW = Math.max(0.8, scale * 0.2);         // G / B/B' / C / D / その他 用 (元の細い線)
+    const rangeLineW = Math.max(1.6, scale * 0.35);   // I / H / J の主要範囲線用
+    const inlineLineW = Math.max(1.3, scale * 0.28);  // A インライン用 (やや控えめ)
     const fontFamily = '"Yu Gothic UI", "Meiryo", sans-serif';
 
     // ─ 共通ヘルパー ─
@@ -3511,7 +3514,7 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
     };
     const drawRangeLine = (cx, topY, botY, hasStart, hasEnd) => {
         ctx.strokeStyle = '#000';
-        ctx.lineWidth = lineW;
+        ctx.lineWidth = rangeLineW;
         ctx.beginPath();
         ctx.moveTo(cx, topY); ctx.lineTo(cx, botY);
         ctx.stroke();
@@ -3600,7 +3603,113 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
         const tgtList = block.targetLayers || [];
         const isFill = pKind === 'BL K' || pKind === '黒コマ' || pKind === 'W K' || pKind === '白コマ';
 
-        if (pKind === 'FI' || pKind === 'WI') {
+        if (block.isInlineEdit) {
+            // A: インライン (Rolling等) — 黒線 + 上端にkindラベル + セル毎入力値+option
+            const lineX = bx + m(1);
+            const valueX = lineX + m(2.5);
+            ctx.strokeStyle = '#000';
+            ctx.fillStyle = '#000';
+            ctx.lineWidth = inlineLineW;
+            ctx.beginPath();
+            ctx.moveTo(lineX, drawStartY); ctx.lineTo(lineX, drawEndY);
+            ctx.stroke();
+            if (hasStart) {
+                ctx.beginPath();
+                ctx.moveTo(lineX - m(0.5), trueStartY); ctx.lineTo(lineX + m(2), trueStartY);
+                ctx.stroke();
+            }
+            if (hasEnd) {
+                ctx.beginPath();
+                ctx.moveTo(lineX - m(0.5), trueEndY); ctx.lineTo(lineX + m(2), trueEndY);
+                ctx.stroke();
+            }
+            // kind/targets は範囲開始の少し上に逃がす (横書き、補助情報として軽く)
+            ctx.lineWidth = lineW;
+            if (hasStart) {
+                ctx.save();
+                ctx.fillStyle = '#000';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'bottom';
+                // kind (上段)
+                ctx.font = `bold ${Math.max(baseFontPx, m(2))}px ${fontFamily}`;
+                const tgtY = trueStartY - m(0.5);
+                ctx.fillText(pKind, valueX, tgtY - (tgtList.length ? tgtFontPx * 1.25 : 0));
+                // targets (kind の下、小さめ)
+                if (tgtList.length) {
+                    ctx.font = `${tgtFontPx}px ${fontFamily}`;
+                    ctx.fillText(tgtList.map(l => `[${l}]`).join(' '), valueX, tgtY);
+                }
+                ctx.restore();
+            }
+            // セル毎の入力値 + option mark
+            const valueFontPx = Math.max(baseFontPx, m(2));
+            ctx.save();
+            ctx.font = `bold ${valueFontPx}px ${fontFamily}`;
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            for (let f = sF; f <= eF; f++) {
+                const key = `CAMERA-${block.colIndex}-${f}`;
+                const data = cellData[key];
+                if (!data || !data.value) continue;
+                if (['SYMBOL_HYPHEN', 'SYMBOL_TICK', 'SYMBOL_NULL'].includes(data.value)) continue;
+                const fy = rect.y + (f - frameStart) * cellH + cellH / 2;
+                // option mark を先 (50%透過、KEYFRAME円 / REFERENCEFRAME三角)
+                if (data.option && !['●','○','×','―'].includes(data.value)) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.5;
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = Math.max(1.0, scale * 0.25);
+                    // 値テキストの幅に合わせた中心
+                    const tw = ctx.measureText(String(data.value)).width;
+                    const ocx = valueX + tw / 2;
+                    const r = Math.min(scale * 2.2, valueFontPx * 0.85, cellH * 0.42);
+                    if (data.option === 'OPTION_KEYFRAME') {
+                        ctx.beginPath();
+                        ctx.arc(ocx, fy, r, 0, Math.PI * 2);
+                        ctx.stroke();
+                    } else if (data.option === 'OPTION_REFERENCEFRAME') {
+                        ctx.beginPath();
+                        ctx.moveTo(ocx, fy - r * 1.2);
+                        ctx.lineTo(ocx + r, fy + r * 0.6);
+                        ctx.lineTo(ocx - r, fy + r * 0.6);
+                        ctx.closePath();
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+                ctx.fillText(data.value, valueX, fy);
+            }
+            ctx.restore();
+        } else if (pKind === 'IrisIN' || pKind === 'IrisOut') {
+            // D: Iris (台形)
+            const inset = Math.max(m(1.2), bw * 0.18);
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = lineW;
+            ctx.fillStyle = 'rgba(100,100,100,0.22)';
+            ctx.beginPath();
+            if (pKind === 'IrisIN') {
+                ctx.moveTo(bx + inset, trueStartY);
+                ctx.lineTo(bx + bw - inset, trueStartY);
+                ctx.lineTo(bx + bw, trueEndY);
+                ctx.lineTo(bx, trueEndY);
+            } else {
+                ctx.moveTo(bx, trueStartY);
+                ctx.lineTo(bx + bw, trueStartY);
+                ctx.lineTo(bx + bw - inset, trueEndY);
+                ctx.lineTo(bx + inset, trueEndY);
+            }
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            ctx.save();
+            ctx.font = `bold ${Math.max(baseFontPx, m(2.2))}px ${fontFamily}`;
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(pKind, cx, midY);
+            ctx.restore();
+            if (tgtList.length) drawTargetsSmall(cx, midY + m(2), tgtList);
+        } else if (pKind === 'FI' || pKind === 'WI') {
             // B: 下向き三角 (FI/WI) — kind優先のため先に判定
             ctx.strokeStyle = '#000';
             ctx.lineWidth = lineW;
@@ -3652,13 +3761,159 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
             ctx.fillText(pKind, cx, midY);
             ctx.restore();
             if (tgtList.length) drawTargetsSmall(cx, midY + m(2), tgtList, txtColor);
+        } else if (pKind.includes('CAM SHAKE') || pKind.includes('Handy') || pKind.includes('カメラぶれ') || pKind.includes('ハンディ')) {
+            // E: SHAKE 系 (波線 + 縦書きラベル)
+            const lineX = bx + bw / 2;
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = lineW;
+            // 上下クロス
+            if (hasStart) {
+                ctx.beginPath();
+                ctx.moveTo(lineX - m(2), trueStartY); ctx.lineTo(lineX + m(2), trueStartY);
+                ctx.stroke();
+            }
+            if (hasEnd) {
+                ctx.beginPath();
+                ctx.moveTo(lineX - m(2), trueEndY); ctx.lineTo(lineX + m(2), trueEndY);
+                ctx.stroke();
+            }
+            // sin波線
+            ctx.beginPath();
+            const startWY = drawStartY;
+            const endWY = drawEndY;
+            const stepY = m(0.5);
+            let first = true;
+            for (let py = startWY; py <= endWY; py += stepY) {
+                const phase = (py - trueStartY) * 0.3;
+                const px = lineX + Math.sin(phase) * m(1);
+                if (first) { ctx.moveTo(px, py); first = false; }
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+            // kind 縦書き (中央)
+            const kindFontPx = Math.max(baseFontPx, m(2.2));
+            const kindCharH = kindFontPx * 1.15;
+            const tgtCharH = tgtFontPx * 1.2;
+            const tgtSegments = tgtList.map(l => `[${l}]`.split(''));
+            const totalTgtH = tgtSegments.reduce((s, seg) => s + seg.length * tgtCharH + m(0.6), 0);
+            const totalH = pKind.length * kindCharH + totalTgtH;
+            const topY = chooseOpenLabelTop(midY, totalH, [], drawStartY, drawEndY);
+            // kind を上、targets を下
+            const kindCenterY = topY + (pKind.length * kindCharH) / 2;
+            drawVerticalLabel(pKind, lineX + m(2.5), kindCenterY, kindFontPx);
+            if (tgtList.length) {
+                ctx.save();
+                ctx.font = `${tgtFontPx}px ${fontFamily}`;
+                ctx.fillStyle = '#000';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                let curY = topY + pKind.length * kindCharH + tgtCharH / 2 + m(0.4);
+                tgtSegments.forEach(seg => {
+                    seg.forEach(c => { ctx.fillText(c === 'ー' ? '丨' : c, lineX + m(2.5), curY); curY += tgtCharH; });
+                    curY += m(0.6);
+                });
+                ctx.restore();
+            }
+        } else if (vt === 'numericFr' || pKind === 'Strobo' || pKind === 'Strobo2' || pKind === 'ストロボ' || pKind === 'ストロボ2') {
+            // F: Strobo (砂時計+菱形 セグメント連結)
+            const frGap = block.numericFr || 4;
+            const stepY = frGap * cellH;
+            const isType2 = pKind === 'Strobo2' || pKind === 'ストロボ2';
+            const lx = bx, rx = bx + bw, cxLocal = bx + bw / 2;
+            const halfW = bw / 2;
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = lineW;
+            ctx.fillStyle = 'rgba(100,100,100,0.22)';
+            const totalFrames = block.endFrame - block.startFrame + 1;
+            const segments = Math.ceil(totalFrames / frGap);
+            for (let seg = 0; seg < segments; seg++) {
+                const segStartY = trueStartY + seg * stepY;
+                const segEndY = Math.min(segStartY + stepY, trueEndY);
+                if (segEndY <= drawStartY || segStartY >= drawEndY) continue;
+                const segMidY = segStartY + (segEndY - segStartY) / 2;
+                // 左半分
+                ctx.beginPath();
+                if (!isType2) {
+                    // hourglass left
+                    ctx.moveTo(lx, segStartY); ctx.lineTo(cxLocal, segStartY); ctx.lineTo(lx + halfW / 2, segMidY);
+                    ctx.lineTo(cxLocal, segEndY); ctx.lineTo(lx, segEndY); ctx.lineTo(lx + halfW / 2, segMidY);
+                } else {
+                    // diamond left
+                    ctx.moveTo(lx + halfW / 2, segStartY); ctx.lineTo(cxLocal, segMidY);
+                    ctx.lineTo(lx + halfW / 2, segEndY); ctx.lineTo(lx, segMidY);
+                }
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+                // 右半分
+                ctx.beginPath();
+                if (isType2) {
+                    // hourglass right
+                    ctx.moveTo(cxLocal, segStartY); ctx.lineTo(rx, segStartY); ctx.lineTo(cxLocal + halfW / 2, segMidY);
+                    ctx.lineTo(rx, segEndY); ctx.lineTo(cxLocal, segEndY); ctx.lineTo(cxLocal + halfW / 2, segMidY);
+                } else {
+                    // diamond right
+                    ctx.moveTo(cxLocal + halfW / 2, segStartY); ctx.lineTo(rx, segMidY);
+                    ctx.lineTo(cxLocal + halfW / 2, segEndY); ctx.lineTo(cxLocal, segMidY);
+                }
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+            }
+            // 開始点の上に kind/targets を逃がす (インラインと同方針)
+            if (hasStart) {
+                ctx.save();
+                ctx.fillStyle = '#000';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                const tgtY = trueStartY - m(0.5);
+                // kind (上段)
+                ctx.font = `bold ${Math.max(baseFontPx, m(2.2))}px ${fontFamily}`;
+                ctx.fillText(pKind, cx, tgtY - (tgtList.length ? tgtFontPx * 1.25 : 0));
+                // targets (kind の下、小さめ)
+                if (tgtList.length) {
+                    ctx.font = `${tgtFontPx}px ${fontFamily}`;
+                    ctx.fillText(tgtList.map(l => `[${l}]`).join(' '), cx, tgtY);
+                }
+                ctx.restore();
+            }
+        } else if (vt === 'instructionText') {
+            // H: 処理・効果系 (範囲線 + ライン横[右寄せ]に縦書き [layer]→kind 積み上げ)
+            drawRangeLine(cx, drawStartY, drawEndY, hasStart, hasEnd);
+            // ライン中心からラベル中心を少し右にオフセット (ラインと被らない)
+            const labelX = cx + m(2.5);
+            const kindFontPx = Math.max(baseFontPx, m(2.1));
+            const kindCharH = kindFontPx * 1.15;
+            const tgtCharH = tgtFontPx * 1.2;
+            const pKindChars = pKind.split('');
+            const tgtSegments = tgtList.map(l => `[${l}]`.split(''));
+            const totalH = tgtSegments.reduce((s, seg) => s + seg.length * tgtCharH + m(0.6), 0)
+                + pKindChars.length * kindCharH;
+            const avoidRanges = [];
+            if (block.waypoints && block.waypoints.length > 0) {
+                block.waypoints.forEach(wp => {
+                    if (wp.frame < sF || wp.frame > eF) return;
+                    const wpY = rect.y + (wp.frame - frameStart) * cellH + cellH / 2;
+                    avoidRanges.push({ top: wpY - m(2.5), bottom: wpY + m(2.5) });
+                });
+            }
+            const topY = chooseOpenLabelTop(midY, totalH, avoidRanges, drawStartY, drawEndY);
+            ctx.save();
+            ctx.font = `${tgtFontPx}px ${fontFamily}`;
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            let curY = topY + tgtCharH / 2;
+            tgtSegments.forEach(seg => {
+                seg.forEach(c => { ctx.fillText(c === 'ー' ? '丨' : c, labelX, curY); curY += tgtCharH; });
+                curY += m(0.6);
+            });
+            ctx.restore();
+            const kindCenterY = curY + (pKindChars.length * kindCharH) / 2 - kindCharH / 2;
+            drawVerticalLabel(pKind, labelX, kindCenterY, kindFontPx);
         } else if (vt === 'fromTo' || vt === 'multiLayerDirection') {
             // I: fromTo矢印型
             const lineX = bx + m(2.2);
             const labelX = lineX + m(3.6);
             ctx.strokeStyle = '#000';
             ctx.fillStyle = '#000';
-            ctx.lineWidth = lineW;
+            ctx.lineWidth = rangeLineW;
             if (hasStart) {
                 ctx.beginPath();
                 ctx.moveTo(lineX - m(1), trueStartY); ctx.lineTo(lineX + m(1), trueStartY);
@@ -3694,7 +3949,7 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
                         ctx.restore();
                     }
                 });
-                ctx.lineWidth = lineW;
+                ctx.lineWidth = rangeLineW;
             }
             // from/to text
             ctx.save();
