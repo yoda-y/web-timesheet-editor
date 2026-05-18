@@ -3494,35 +3494,318 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
 
 function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm) {
     if (typeof cameraBlocks === 'undefined') return;
+    const m = (mm) => mm * scale;
     const defaultMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.camera) || 2.7;
     const isExplicit = (typeof bboxFontMm === 'number' && bboxFontMm > 0);
     const userMm = isExplicit ? bboxFontMm : defaultMm;
-    const fontSize = isExplicit ? (userMm * scale) : Math.min(cellH * 0.7, userMm * scale);
+    const baseFontPx = isExplicit ? (userMm * scale) : Math.min(cellH * 0.7, userMm * scale);
+    const tgtFontPx = Math.max(baseFontPx * 0.7, m(1.5));
+    const lineW = Math.max(0.8, scale * 0.2);
+    const fontFamily = '"Yu Gothic UI", "Meiryo", sans-serif';
+
+    // ─ 共通ヘルパー ─
+    const drawCrossTick = (cx, y) => {
+        ctx.beginPath();
+        ctx.moveTo(cx - m(2), y); ctx.lineTo(cx + m(2), y);
+        ctx.stroke();
+    };
+    const drawRangeLine = (cx, topY, botY, hasStart, hasEnd) => {
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = lineW;
+        ctx.beginPath();
+        ctx.moveTo(cx, topY); ctx.lineTo(cx, botY);
+        ctx.stroke();
+        if (hasStart) drawCrossTick(cx, topY);
+        if (hasEnd) drawCrossTick(cx, botY);
+    };
+    const drawVerticalLabel = (text, cx, cy, fontPx, color = '#000') => {
+        const chars = String(text || '').split('');
+        if (!chars.length) return { top: cy, bottom: cy, charH: 0 };
+        const charH = fontPx * 1.1;
+        const startY = cy - (chars.length - 1) * charH / 2;
+        ctx.save();
+        ctx.font = `bold ${fontPx}px ${fontFamily}`;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        chars.forEach((c, i) => ctx.fillText(c === 'ー' ? '丨' : c, cx, startY + i * charH));
+        ctx.restore();
+        return { top: startY - charH / 2, bottom: startY + (chars.length - 1) * charH + charH / 2, charH };
+    };
+    // ラベル位置選定 (標準A3 chooseOpenLabelTop の移植: 衝突範囲を避けて空き領域から選ぶ)
+    const chooseOpenLabelTop = (desiredCenter, labelH, avoidRanges, topLimit, bottomLimit) => {
+        const safeTop = topLimit + m(1);
+        const safeBottom = bottomLimit - m(1);
+        const blocked = avoidRanges
+            .map(r => ({ top: Math.max(safeTop, r.top), bottom: Math.min(safeBottom, r.bottom) }))
+            .filter(r => r.bottom > r.top)
+            .sort((a, b) => a.top - b.top);
+        const free = [];
+        let cur = safeTop;
+        blocked.forEach(r => {
+            if (r.top > cur) free.push({ top: cur, bottom: r.top });
+            cur = Math.max(cur, r.bottom);
+        });
+        if (cur < safeBottom) free.push({ top: cur, bottom: safeBottom });
+        if (!free.length) return Math.max(safeTop, Math.min(safeBottom - labelH, desiredCenter - labelH / 2));
+        const scored = free.map(r => {
+            const canFit = (r.bottom - r.top) >= labelH;
+            const top = canFit
+                ? Math.max(r.top, Math.min(r.bottom - labelH, desiredCenter - labelH / 2))
+                : r.top + (r.bottom - r.top - labelH) / 2;
+            return { top, canFit, distance: Math.abs((top + labelH / 2) - desiredCenter), size: r.bottom - r.top };
+        }).sort((a, b) => (b.canFit - a.canFit) || (a.distance - b.distance) || (b.size - a.size));
+        return scored[0].top;
+    };
+    const drawTargetsSmall = (cx, topY, tgtList, color = '#000') => {
+        if (!tgtList || !tgtList.length) return topY;
+        ctx.save();
+        ctx.font = `${tgtFontPx}px ${fontFamily}`;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const lineH = tgtFontPx * 1.25;
+        let curY = topY;
+        tgtList.forEach(l => { ctx.fillText(`[${l}]`, cx, curY); curY += lineH; });
+        ctx.restore();
+        return curY;
+    };
 
     cameraBlocks.forEach(block => {
         if (block.startFrame >= frameEnd || block.endFrame < frameStart) return;
         if (block.colIndex >= columns) return;
 
-        const sF      = Math.max(block.startFrame, frameStart);
-        const eF      = Math.min(block.endFrame, frameEnd - 1);
+        const sF = Math.max(block.startFrame, frameStart);
+        const eF = Math.min(block.endFrame, frameEnd - 1);
         const colspan = block.colspan || 1;
         const bx = rect.x + block.colIndex * cellW;
-        const by = rect.y + (sF - frameStart) * cellH;
         const bw = cellW * colspan;
-        const bh = (eF - sF + 1) * cellH;
+        const trueStartY = rect.y + (block.startFrame - frameStart) * cellH;
+        const trueEndY = rect.y + (block.endFrame - frameStart + 1) * cellH;
+        const drawStartY = Math.max(trueStartY, rect.y);
+        const drawEndY = Math.min(trueEndY, rect.y + rect.h);
+        const midY = (drawStartY + drawEndY) / 2;
+        const cx = bx + bw / 2;
+        const hasStart = block.startFrame >= frameStart;
+        const hasEnd = block.endFrame < frameEnd;
 
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(bx, by, bw, bh);
+        // BBox内クリップ
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(rect.x, rect.y, rect.w, rect.h);
+        ctx.clip();
 
-        const label = block.kind || '';
-        if (label) {
+        const vt = block.valueType;
+        const pKind = (block.kind || '').split(' (')[0].trim();
+        const tgtList = block.targetLayers || [];
+        const isFill = pKind === 'BL K' || pKind === '黒コマ' || pKind === 'W K' || pKind === '白コマ';
+
+        if (pKind === 'FI' || pKind === 'WI') {
+            // B: 下向き三角 (FI/WI) — kind優先のため先に判定
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = lineW;
+            ctx.fillStyle = pKind === 'FI' ? 'rgba(100,100,100,0.25)' : 'rgba(255,255,255,0.25)';
+            ctx.beginPath();
+            ctx.moveTo(bx + bw / 2, trueStartY);
+            ctx.lineTo(bx + bw, trueEndY);
+            ctx.lineTo(bx, trueEndY);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            ctx.save();
+            ctx.font = `bold ${Math.max(baseFontPx, m(2.5))}px ${fontFamily}`;
             ctx.fillStyle = '#000';
-            ctx.font = `bold ${fontSize}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(label, bx + bw / 2, by + bh / 2);
+            ctx.fillText(pKind, cx, midY);
+            ctx.restore();
+            if (tgtList.length) drawTargetsSmall(cx, midY + m(2), tgtList);
+        } else if (pKind === 'FO' || pKind === 'WO') {
+            // B': 上向き三角 (FO/WO)
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = lineW;
+            ctx.fillStyle = pKind === 'FO' ? 'rgba(100,100,100,0.25)' : 'rgba(255,255,255,0.25)';
+            ctx.beginPath();
+            ctx.moveTo(bx, trueStartY);
+            ctx.lineTo(bx + bw, trueStartY);
+            ctx.lineTo(bx + bw / 2, trueEndY);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            ctx.save();
+            ctx.font = `bold ${Math.max(baseFontPx, m(2.5))}px ${fontFamily}`;
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(pKind, cx, midY);
+            ctx.restore();
+            if (tgtList.length) drawTargetsSmall(cx, midY + m(2), tgtList);
+        } else if (isFill) {
+            // C: BL K / W K / 黒コマ / 白コマ
+            const isBlack = pKind === 'BL K' || pKind === '黒コマ';
+            ctx.fillStyle = isBlack ? '#333' : '#ddd';
+            ctx.fillRect(bx + m(0.4), drawStartY, bw - m(0.8), drawEndY - drawStartY);
+            const txtColor = isBlack ? '#fff' : '#111';
+            ctx.save();
+            ctx.font = `bold ${Math.max(baseFontPx, m(2.2))}px ${fontFamily}`;
+            ctx.fillStyle = txtColor;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(pKind, cx, midY);
+            ctx.restore();
+            if (tgtList.length) drawTargetsSmall(cx, midY + m(2), tgtList, txtColor);
+        } else if (vt === 'fromTo' || vt === 'multiLayerDirection') {
+            // I: fromTo矢印型
+            const lineX = bx + m(2.2);
+            const labelX = lineX + m(3.6);
+            ctx.strokeStyle = '#000';
+            ctx.fillStyle = '#000';
+            ctx.lineWidth = lineW;
+            if (hasStart) {
+                ctx.beginPath();
+                ctx.moveTo(lineX - m(1), trueStartY); ctx.lineTo(lineX + m(1), trueStartY);
+                ctx.lineTo(lineX, trueStartY + m(1.5));
+                ctx.closePath(); ctx.fill();
+            }
+            if (hasEnd) {
+                ctx.beginPath();
+                ctx.moveTo(lineX - m(1), trueEndY); ctx.lineTo(lineX + m(1), trueEndY);
+                ctx.lineTo(lineX, trueEndY - m(1.5));
+                ctx.closePath(); ctx.fill();
+            }
+            ctx.beginPath();
+            ctx.moveTo(lineX, hasStart ? trueStartY + m(1.5) : drawStartY);
+            ctx.lineTo(lineX, hasEnd ? trueEndY - m(1.5) : drawEndY);
+            ctx.stroke();
+            // waypoints
+            if (block.waypoints && block.waypoints.length > 0) {
+                ctx.lineWidth = Math.max(1, scale * 0.3);
+                block.waypoints.forEach(wp => {
+                    if (wp.frame < sF || wp.frame > eF) return;
+                    const wpY = rect.y + (wp.frame - frameStart) * cellH + cellH / 2;
+                    ctx.beginPath();
+                    ctx.moveTo(lineX - m(1.5), wpY); ctx.lineTo(lineX + m(1.5), wpY);
+                    ctx.stroke();
+                    if (wp.label) {
+                        ctx.save();
+                        ctx.font = `${tgtFontPx}px ${fontFamily}`;
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = '#000';
+                        ctx.fillText(wp.label, lineX + m(2), wpY);
+                        ctx.restore();
+                    }
+                });
+                ctx.lineWidth = lineW;
+            }
+            // from/to text
+            ctx.save();
+            ctx.font = `${Math.max(baseFontPx * 0.85, m(2))}px ${fontFamily}`;
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'left';
+            if (block.fromText && hasStart) {
+                ctx.textBaseline = 'top';
+                ctx.fillText(block.fromText, lineX + m(2), trueStartY + m(2));
+            }
+            if (block.toText && hasEnd) {
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(block.toText, lineX + m(2), trueEndY - m(1));
+            }
+            ctx.restore();
+            // フェアリング描画 (標準A3と同ルール: bracket + 縦書き「フェアリング」)
+            if (block.hasFairing && block.waypoints && block.waypoints.length > 0) {
+                const fMode = block.fairingMode;
+                const wpYs = block.waypoints
+                    .filter(wp => wp.frame >= sF && wp.frame <= eF)
+                    .map(wp => rect.y + (wp.frame - frameStart) * cellH + cellH / 2)
+                    .sort((a, b) => a - b);
+                if (wpYs.length > 0) {
+                    const drawFairingLabel = (yStart, yEnd) => {
+                        const bracketX = bx + bw - m(0.5);
+                        const bW = m(1);
+                        ctx.save();
+                        ctx.strokeStyle = '#000';
+                        ctx.lineWidth = Math.max(0.6, scale * 0.15);
+                        ctx.beginPath();
+                        ctx.moveTo(bracketX - bW, yStart); ctx.lineTo(bracketX, yStart);
+                        ctx.lineTo(bracketX, yEnd); ctx.lineTo(bracketX - bW, yEnd);
+                        ctx.stroke();
+                        ctx.font = `${m(1.5)}px ${fontFamily}`;
+                        ctx.fillStyle = '#000';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        const fairChars = 'フェアリング'.split('');
+                        const fairMidY = (yStart + yEnd) / 2;
+                        const fCharH = m(2);
+                        const fStartY = fairMidY - (fairChars.length - 1) * fCharH / 2;
+                        fairChars.forEach((c, i) => ctx.fillText(c, bracketX - m(2), fStartY + i * fCharH));
+                        ctx.restore();
+                    };
+                    if (fMode === 'in' || fMode === 'both') drawFairingLabel(trueStartY, wpYs[0]);
+                    if (fMode === 'out' || fMode === 'both') drawFairingLabel(wpYs[wpYs.length - 1], trueEndY);
+                }
+            }
+            // kind 縦書き (waypoint/from/to/フェアリングを避ける)
+            const kindFontPx = Math.max(baseFontPx * 1.1, m(2.5));
+            const kindCharH = kindFontPx * 1.1;
+            const tgtLineH = tgtFontPx * 1.25;
+            const targetBlockH = tgtList.length ? tgtList.length * tgtLineH + m(0.5) : 0;
+            const labelTotalH = targetBlockH + pKind.length * kindCharH;
+            const avoidRanges = [];
+            if (block.fromText && hasStart) avoidRanges.push({ top: trueStartY, bottom: trueStartY + m(5) });
+            if (block.toText && hasEnd) avoidRanges.push({ top: trueEndY - m(5), bottom: trueEndY });
+            if (block.waypoints && block.waypoints.length > 0) {
+                block.waypoints.forEach(wp => {
+                    if (wp.frame < sF || wp.frame > eF) return;
+                    const wpY = rect.y + (wp.frame - frameStart) * cellH + cellH / 2;
+                    avoidRanges.push({ top: wpY - m(3.4), bottom: wpY + m(3.4) });
+                });
+            }
+            const labelTopY = chooseOpenLabelTop(midY, labelTotalH, avoidRanges, drawStartY, drawEndY);
+            // targets を上、kind を下 (kindの中心はラベルブロック内のkind部分中央)
+            if (tgtList.length) {
+                drawTargetsSmall(labelX, labelTopY, tgtList);
+            }
+            const kindCenterY = labelTopY + targetBlockH + (pKind.length * kindCharH) / 2;
+            drawVerticalLabel(pKind, labelX, kindCenterY, kindFontPx);
+        } else if (vt === 'fromToLayers') {
+            // G: O.L / Wipe (砂時計)
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = lineW;
+            ctx.fillStyle = 'rgba(100,100,100,0.18)';
+            ctx.beginPath();
+            ctx.moveTo(bx, trueStartY);
+            ctx.lineTo(bx + bw, trueStartY);
+            ctx.lineTo(bx + bw / 2, (trueStartY + trueEndY) / 2);
+            ctx.lineTo(bx + bw, trueEndY);
+            ctx.lineTo(bx, trueEndY);
+            ctx.lineTo(bx + bw / 2, (trueStartY + trueEndY) / 2);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            const olLabel = pKind === 'Wipe' ? 'Wipe' : 'O.L';
+            ctx.save();
+            ctx.font = `bold ${Math.max(baseFontPx * 1.1, m(2.5))}px ${fontFamily}`;
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(olLabel, cx, midY);
+            // from / to layers
+            const fromL = (block.layersFrom || []).join(',');
+            const toL = (block.layersTo || []).join(',');
+            ctx.font = `${tgtFontPx}px ${fontFamily}`;
+            if (fromL && hasStart) ctx.fillText(fromL, cx, trueStartY + m(3));
+            if (toL && hasEnd) ctx.fillText(toL, cx, trueEndY - m(2));
+            ctx.restore();
+        } else {
+            // J: フォールバック (縦範囲線 + kind縦ラベル + targets小)
+            drawRangeLine(cx, drawStartY, drawEndY, hasStart, hasEnd);
+            const kindFontPx = Math.max(baseFontPx, m(2.2));
+            const kindInfo = drawVerticalLabel(pKind, cx + m(3), midY, kindFontPx);
+            if (tgtList.length) {
+                const tgtTopY = kindInfo.top - tgtFontPx * 1.25 * tgtList.length - m(0.5);
+                drawTargetsSmall(cx + m(3), tgtTopY, tgtList);
+            }
         }
+
+        ctx.restore();
     });
 }
 
