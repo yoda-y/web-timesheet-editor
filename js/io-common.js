@@ -456,7 +456,7 @@ function applyImportData(raw, checks, mode) {
         customRepeats = [];
         dialogueBlocks = [];
         cameraBlocks = [];
-        metaData = { title: "", subTitle: "", scene: "", cut: "", sharedCuts: [], lengthSec: "6", lengthFrame: "00", creator: "", sheetName: "sheet1", page: "1/1", memo: "" };
+        metaData = { title: "", subTitle: "", scene: "", cut: "", sharedCuts: [], lengthSec: "6", lengthFrame: "00", creator: "", sheetName: "sheet1", page: "1/1", memo: "", customFields: {} };
         if (raw.sectionsMeta) {
             sections = raw.sectionsMeta;
             ensureMinimumSectionCols(sections);

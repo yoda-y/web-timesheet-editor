@@ -147,6 +147,7 @@ function applySession(snap) {
     }
     // 旧形式: 単一シート
     metaData = snap.metaData || metaData;
+    ensureMetaDataDefaults(metaData);
     cellData = snap.cellData || {};
     booksData = snap.booksData || { ACTION: {}, SOUND: {}, CELL: {}, CAMERA: {} };
     customRepeats = snap.customRepeats || [];

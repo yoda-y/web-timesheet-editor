@@ -1325,7 +1325,12 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
 
         ctx.save();
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+        // fontColorId が設定されていればそのパレット色を使用
+        const colorId = data.fontColorId || 0;
+        const cellColor = (colorId > 0 && typeof getFontColorById === 'function')
+            ? getFontColorById(colorId)
+            : TEMPLATE.TEXT_COLOR;
+        ctx.fillStyle = cellColor;
         const fontSize = ((colType === 'ACTION' || colType === 'CELL') ? m(2.5) : m(2)) * getFontScale('cell');
         if (data.value === '●') {
             const dotRadius = Math.max(m(0.35), rowH * (2.5 / 18));
@@ -1343,7 +1348,7 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
         }
 
         if (dispOpt && data.value !== '' && !['●', '○', '×', '―'].includes(data.value)) {
-            ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
+            ctx.strokeStyle = (colorId > 0) ? cellColor : TEMPLATE.TEXT_COLOR;
             ctx.lineWidth = TEMPLATE.LINE_FINE;
             const radius = m(2.5);
 
@@ -2974,23 +2979,27 @@ function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, fram
 
     ctx.save();
 
+    // BBox個別の文字サイズ (mm)。未設定なら null を渡す（呼出先がデフォルト適用）
+    const bboxFontMm = (typeof bbox.fontSize === 'number' && bbox.fontSize > 0) ? bbox.fontSize : null;
+
     if (type === 'action' || type === 'cell') {
-        drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
+        drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm);
     } else if (type === 'sound') {
-        drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
+        drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm);
     } else if (type === 'camera') {
-        drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
+        drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm);
     }
 
     ctx.restore();
 }
 
-function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale) {
+function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm) {
     const upperType = type.toUpperCase();
-    const userMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.cell) || 2.7;
-    const fontSize = Math.min(cellH * 0.7, userMm * scale);
+    const defaultMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.cell) || 2.7;
+    const isExplicit = (typeof bboxFontMm === 'number' && bboxFontMm > 0);
+    const userMm = isExplicit ? bboxFontMm : defaultMm;
+    const fontSize = isExplicit ? (userMm * scale) : Math.min(cellH * 0.7, userMm * scale);
     ctx.font = `${fontSize}px sans-serif`;
-    ctx.fillStyle = '#000';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -3004,6 +3013,14 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
 
             const cx = rect.x + ci * cellW + cellW / 2;
             const cy = rect.y + (f - frameStart) * cellH + cellH / 2;
+
+            // fontColorId によるセル色
+            const colorId = data.fontColorId || 0;
+            const cellColor = (colorId > 0 && typeof getFontColorById === 'function')
+                ? getFontColorById(colorId)
+                : '#000';
+            ctx.fillStyle = cellColor;
+            ctx.strokeStyle = cellColor;
 
             if (data.value === '●') {
                 ctx.beginPath();
@@ -3025,16 +3042,45 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
                 ctx.lineTo(cx + fontSize * 0.3, cy);
                 ctx.stroke();
             } else {
+                // option装飾（KEYFRAME円 / REFERENCEFRAME三角）を先に描画
+                let dispOpt = data.option;
+                if (type === 'cell') {
+                    const actKey = `ACTION-${ci}-${f}`;
+                    if (cellData[actKey] && cellData[actKey].option) dispOpt = cellData[actKey].option;
+                }
+                if (dispOpt && !['●','○','×','―'].includes(data.value)) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.5;
+                    ctx.strokeStyle = cellColor;
+                    ctx.lineWidth = Math.max(1.0, scale * 0.25);
+                    const r = Math.min(scale * 2.5, cellW * 0.42, cellH * 0.42);
+                    if (dispOpt === 'OPTION_KEYFRAME') {
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                        ctx.stroke();
+                    } else if (dispOpt === 'OPTION_REFERENCEFRAME') {
+                        ctx.beginPath();
+                        ctx.moveTo(cx, cy - r * 1.2);
+                        ctx.lineTo(cx + r, cy + r * 0.6);
+                        ctx.lineTo(cx - r, cy + r * 0.6);
+                        ctx.closePath();
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+                // 数字を囲いの上に描画
                 ctx.fillText(data.value, cx, cy);
             }
         }
     }
 }
 
-function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale) {
+function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm) {
     if (typeof dialogueBlocks === 'undefined') return;
-    const userMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.dialogue) || 3.5;
-    const fontSize = Math.min(cellH * 0.7, userMm * scale);
+    const defaultMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.dialogue) || 3.5;
+    const isExplicit = (typeof bboxFontMm === 'number' && bboxFontMm > 0);
+    const userMm = isExplicit ? bboxFontMm : defaultMm;
+    const fontSize = isExplicit ? (userMm * scale) : Math.min(cellH * 0.7, userMm * scale);
 
     dialogueBlocks.forEach(block => {
         if (block.startFrame >= frameEnd || block.endFrame < frameStart) return;
@@ -3046,7 +3092,11 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
         const by = rect.y + (sF - frameStart) * cellH;
         const bh = (eF - sF + 1) * cellH;
 
-        ctx.fillStyle = 'rgba(200,200,200,0.3)';
+        // 話者色を取得（標準A3と統一）
+        const fillColor = (typeof getSpeakerColor === 'function')
+            ? getSpeakerColor(block.speakerName)
+            : 'rgba(200,200,200,0.3)';
+        ctx.fillStyle = fillColor;
         ctx.fillRect(bx, by, cellW, bh);
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 1;
@@ -3079,10 +3129,12 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
     });
 }
 
-function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale) {
+function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm) {
     if (typeof cameraBlocks === 'undefined') return;
-    const userMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.camera) || 2.7;
-    const fontSize = Math.min(cellH * 0.7, userMm * scale);
+    const defaultMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.camera) || 2.7;
+    const isExplicit = (typeof bboxFontMm === 'number' && bboxFontMm > 0);
+    const userMm = isExplicit ? bboxFontMm : defaultMm;
+    const fontSize = isExplicit ? (userMm * scale) : Math.min(cellH * 0.7, userMm * scale);
 
     cameraBlocks.forEach(block => {
         if (block.startFrame >= frameEnd || block.endFrame < frameStart) return;

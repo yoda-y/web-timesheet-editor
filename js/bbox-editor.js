@@ -311,6 +311,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (v > 20.0) v = 20.0;
             bbox.fontSize = v;
         }
+        // timeline 1/2 ペアに fontSize を同期
+        const pair = TIMELINE_PAIRS[bboxEditorSelectedTag];
+        if (pair && bboxEditorTemplate.bboxes[pair]) {
+            if (raw === '') {
+                delete bboxEditorTemplate.bboxes[pair].fontSize;
+            } else {
+                bboxEditorTemplate.bboxes[pair].fontSize = bbox.fontSize;
+            }
+        }
         if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
     });
 

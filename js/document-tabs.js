@@ -155,7 +155,7 @@ function resetWorkspaceToBlankDocument() {
     customRepeats = [];
     dialogueBlocks = [];
     cameraBlocks = [];
-    metaData = { title:"", subTitle:"", scene:"", cut:"", sharedCuts: [], lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"" };
+    metaData = { title:"", subTitle:"", scene:"", cut:"", sharedCuts: [], lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"", customFields: {} };
     undoStack = [];
     redoStack = [];
     selectionStart = null;

@@ -458,7 +458,9 @@ function drawGrid() {
         let dispOpt = data.option;
         if (ct === "CELL") { const actKey = `ACTION-${ci}-${f}`; if (cellData[actKey]?.option) dispOpt = cellData[actKey].option; }
         if (dispOpt && data.value !== "" && !["●", "○", "×", "―"].includes(data.value)) {
-            ctx.strokeStyle = "rgba(180, 180, 180, 0.4)"; ctx.lineWidth = 1.0;
+            // セルが色付き(fontColorId>0)なら囲いも同色、そうでなければ従来の灰色
+            ctx.strokeStyle = (colorId > 0) ? useColor : "rgba(180, 180, 180, 0.4)";
+            ctx.lineWidth = 1.0;
             if (dispOpt === "OPTION_KEYFRAME") { ctx.beginPath(); ctx.arc(tx, ty - 4, 10, 0, Math.PI * 2); ctx.stroke(); }
             else if (dispOpt === "OPTION_REFERENCEFRAME") {
                 ctx.beginPath(); ctx.moveTo(tx, ty - 14); ctx.lineTo(tx + 10, ty + 4); ctx.lineTo(tx - 10, ty + 4); ctx.closePath(); ctx.stroke();

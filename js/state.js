@@ -121,3 +121,11 @@ const TDTS_CAMERA_ID_MAP = {
 };
 const TDTS_ID_TO_CAMERA_MAP = {};
 for (let k in TDTS_CAMERA_ID_MAP) TDTS_ID_TO_CAMERA_MAP[TDTS_CAMERA_ID_MAP[k]] = k;
+
+// metaData の必須プロパティを補完（customFields など後追加フィールド対応）
+function ensureMetaDataDefaults(md) {
+    if (!md) return md;
+    if (!md.customFields || typeof md.customFields !== 'object') md.customFields = {};
+    return md;
+}
+window.ensureMetaDataDefaults = ensureMetaDataDefaults;
