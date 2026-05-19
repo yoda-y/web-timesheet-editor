@@ -380,22 +380,16 @@ async function refreshTemplateSelectExternalOptions() {
 }
 window.refreshTemplateSelectExternalOptions = refreshTemplateSelectExternalOptions;
 
-// サイドバー: 現在テンプレ状態表示・追加/設定/BBox編集 ボタンの状態同期
+// サイドバー: 設定/BBox編集 ボタンの有効/表示状態をテンプレ選択に同期
+// (現在テンプレの表示は <select> 自体が担うので独立ステータスは設けない)
 function updateSidebarTemplateStatus() {
-    const statusEl = document.getElementById('sidebar-template-status');
-    const statusName = document.getElementById('sidebar-template-status-name');
     const settingsBtn = document.getElementById('sidebar-template-settings-btn');
     const bboxBtn = document.getElementById('sidebar-template-bbox-btn');
     const tpl = currentExternalTemplate;
-    const i18n = (key, fallback) => (typeof t === 'function' ? t(key) : null) || fallback;
     if (tpl) {
-        if (statusEl) statusEl.dataset.state = 'external';
-        if (statusName) statusName.textContent = `${i18n('sidebar.template.external', '外部テンプレ')}: ${tpl.name || i18n('extTpl.unnamed', '(無名)')}`;
         if (settingsBtn) settingsBtn.classList.remove('disabled');
         if (bboxBtn) bboxBtn.style.display = '';
     } else {
-        if (statusEl) statusEl.dataset.state = 'standard';
-        if (statusName) statusName.textContent = i18n('sidebar.template.standard', '標準A3');
         if (settingsBtn) settingsBtn.classList.add('disabled');
         if (bboxBtn) bboxBtn.style.display = 'none';
     }
