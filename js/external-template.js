@@ -363,6 +363,9 @@ window.externalTemplate = {
 async function refreshTemplateSelectExternalOptions() {
     const group = document.getElementById('template-select-external-group');
     if (!group) return;
+    // 再構築前の選択値を保持 (optgroup innerHTML 差替でselect.valueが失われるのを防ぐ)
+    const sel = document.getElementById('template-select');
+    const prevValue = sel ? sel.value : '';
     if (!window.externalTemplate || typeof window.externalTemplate.list !== 'function') {
         group.innerHTML = '';
         return;
@@ -373,6 +376,11 @@ async function refreshTemplateSelectExternalOptions() {
             const esc = (t.name || '無名').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             return `<option value="ext:${t.id}">${esc}</option>`;
         }).join('');
+        // 選択値の復元: 直前が ext:id でその id がまだ存在するなら復元
+        if (sel && prevValue && prevValue.startsWith('ext:')) {
+            const stillExists = items.some(t => `ext:${t.id}` === prevValue);
+            if (stillExists) sel.value = prevValue;
+        }
     } catch (err) {
         console.error('外部テンプレート一覧取得失敗:', err);
         group.innerHTML = '';
