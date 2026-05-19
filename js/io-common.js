@@ -367,7 +367,7 @@ function applyImportData(raw, checks, mode, extraOpts) {
     if (mode === 'new' && raw.sheets && raw.sheets.length > 1 && typeof loadAllSheetsData === 'function') {
         const sheetArr = raw.sheets.map(rs => {
             const meta = rs.meta || {};
-            const md = { title: meta.title || "", subTitle: meta.subTitle || "", scene: meta.scene || "", cut: meta.cut || "", sharedCuts: Array.isArray(meta.sharedCuts) ? meta.sharedCuts : [], lengthSec: meta.lengthSec || "6", lengthFrame: meta.lengthFrame || "00", creator: meta.creator || "", sheetName: rs.name || meta.sheetName || "sheet1", page: "1/1", memo: rs.direction || "" };
+            const md = { title: meta.title || "", subTitle: meta.subTitle || "", scene: meta.scene || "", cut: meta.cut || "", sharedCuts: Array.isArray(meta.sharedCuts) ? meta.sharedCuts : [], lengthSec: meta.lengthSec || "6", lengthFrame: meta.lengthFrame || "00", creator: meta.creator || "", sheetName: rs.name || meta.sheetName || "sheet1", page: "1/1", memo: rs.direction || "", customFields: (meta.customFields && typeof meta.customFields === 'object') ? Object.assign({}, meta.customFields) : {} };
             // フィールドフィルタ反映
             const cells = {};
             if (rs.cellData) {

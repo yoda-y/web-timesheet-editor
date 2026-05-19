@@ -14,6 +14,10 @@ function _parseTDTSSingleTable(header, table, opts) {
     meta.lengthSec = Math.floor(d / 24).toString();
     meta.lengthFrame = String(d % 24).padStart(2, '0');
     meta.sheetName = table.name || "sheet1";
+    // _webEditor.customFields の復元 (TDTS仕様外、本家には無視される)
+    if (table._webEditor && table._webEditor.customFields && typeof table._webEditor.customFields === 'object') {
+        meta.customFields = Object.assign({}, table._webEditor.customFields);
+    }
     const direction = table.direction || "";
     // headDummykomas/footDummykomas をマージン設定として記録
     if (typeof settings !== 'undefined' && settings.draw) {
@@ -764,7 +768,7 @@ function _buildTDTSTimeTable(sheetData, checks) {
     const exportDirection = checks.direction ? (md.memo || "") : "";
     const headDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.headMargin === 'number') ? settings.draw.headMargin : 24;
     const footDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.tailMargin === 'number') ? settings.draw.tailMargin : 24;
-    return {
+    const out = {
         "duration": duration || 144,
         "direction": exportDirection,
         "operatorName": exportCreator,
@@ -778,6 +782,16 @@ function _buildTDTSTimeTable(sheetData, checks) {
         "cameraBlocks": exportCameraBlocks,
         "fields": fields
     };
+    // customFields は本家 TDTS 仕様外なので _webEditor 名前空間に格納 (読込時に復元)
+    if (md && md.customFields && typeof md.customFields === 'object') {
+        const keys = Object.keys(md.customFields).filter(k => md.customFields[k] !== '' && md.customFields[k] != null);
+        if (keys.length > 0) {
+            const cf = {};
+            keys.forEach(k => { cf[k] = md.customFields[k]; });
+            out._webEditor = Object.assign(out._webEditor || {}, { customFields: cf });
+        }
+    }
+    return out;
 }
 
 function _buildTDTSTimeSheetHeader(md, checks) {

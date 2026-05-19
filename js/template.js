@@ -82,6 +82,55 @@ function createTemplateCanvas(dpi) {
 }
 
 // メインテンプレート描画
+// 外部テンプレ専用: image-only (背景白+画像のみ。BBox描画なし) — PSDのtemplate層用
+function renderExternalTemplateImageOnly(dpi, pageIndex) {
+    const canvas = createTemplateCanvas(dpi);
+    const ctx = canvas.getContext('2d');
+    const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage() : null;
+    if (!extImg) return canvas;
+    const cw = canvas.width, ch = canvas.height;
+    const iw = extImg.naturalWidth || extImg.width;
+    const ih = extImg.naturalHeight || extImg.height;
+    if (iw > 0 && ih > 0) {
+        const ratio = Math.min(cw / iw, ch / ih);
+        const dw = iw * ratio;
+        const dh = ih * ratio;
+        const dx = (cw - dw) / 2;
+        const dy = (ch - dh) / 2;
+        ctx.drawImage(extImg, dx, dy, dw, dh);
+    }
+    return canvas;
+}
+window.renderExternalTemplateImageOnly = renderExternalTemplateImageOnly;
+
+// 外部テンプレ専用: data-only (透明背景にBBox描画のみ) — PSDのdata層用
+function renderExternalTemplateDataOnly(dpi, pageIndex) {
+    const canvas = createTemplateCanvas(dpi);
+    const ctx = canvas.getContext('2d');
+    const scale = dpi / 25.4;
+    const extTpl = (typeof getCurrentExternalTemplate === 'function') ? getCurrentExternalTemplate() : null;
+    const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage() : null;
+    if (!extTpl || !extImg) return canvas;
+    const cw = canvas.width, ch = canvas.height;
+    const iw = extImg.naturalWidth || extImg.width;
+    const ih = extImg.naturalHeight || extImg.height;
+    if (iw <= 0 || ih <= 0) return canvas;
+    const ratio = Math.min(cw / iw, ch / ih);
+    const dw = iw * ratio;
+    const dh = ih * ratio;
+    const dx = (cw - dw) / 2;
+    const dy = (ch - dh) / 2;
+    const bboxToCanvas = (b) => ({ x: dx + b.x * dw, y: dy + b.y * dh, w: b.w * dw, h: b.h * dh });
+    const pageOffset = (typeof getExternalTemplatePageStartFrame === 'function')
+        ? getExternalTemplatePageStartFrame(pageIndex)
+        : 0;
+    drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex);
+    drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset);
+    drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex);
+    return canvas;
+}
+window.renderExternalTemplateDataOnly = renderExternalTemplateDataOnly;
+
 function renderTemplate(dpi, pageIndex = 0) {
     const canvas = createTemplateCanvas(dpi);
     const ctx = canvas.getContext('2d');

@@ -31,7 +31,15 @@ async function buildTemplateMultiPagePsdBlob(pageIndexes, dpi, includeHandwritin
 }
 
 async function buildPsdPageLayers(pageIndex, dpi, includeHandwriting) {
-    const blank = renderBlankTemplateForPsd(dpi, pageIndex);
+    const isExternal = (typeof getCurrentExternalTemplate === 'function')
+        && !!getCurrentExternalTemplate()
+        && (typeof getCurrentExternalTemplateImage === 'function')
+        && !!getCurrentExternalTemplateImage();
+
+    // template 層: 外部テンプレは画像のみ、標準A3 は従来通り空メタの再render
+    const blank = isExternal && typeof renderExternalTemplateImageOnly === 'function'
+        ? renderExternalTemplateImageOnly(dpi, pageIndex)
+        : renderBlankTemplateForPsd(dpi, pageIndex);
     const full = renderTemplate(dpi, pageIndex);
     const handwriting = includeHandwriting && typeof renderHandwritingPageToCanvas === 'function'
         ? await renderHandwritingPageToCanvas(pageIndex, dpi)
@@ -39,13 +47,21 @@ async function buildPsdPageLayers(pageIndex, dpi, includeHandwriting) {
     const composite = typeof renderImageExportPageCanvas === 'function'
         ? await renderImageExportPageCanvas(pageIndex, dpi, includeHandwriting)
         : full;
+    // data 層: 外部テンプレ専用パスかどうかで分岐
+    const dataCanvas = isExternal && typeof renderExternalTemplateDataOnly === 'function'
+        ? renderExternalTemplateDataOnly(dpi, pageIndex)
+        : renderDataOnlyForPsd(dpi, pageIndex);
+    // template 層の白背景を透明化 (外部テンプレ画像内の白も対象になるが、layered composite として違和感は少ない)
+    const templateImageData = isExternal
+        ? blank.getContext('2d').getImageData(0, 0, blank.width, blank.height)
+        : makeWhiteTransparentPsdImageData(blank);
     return {
         pageIndex,
         width: full.width,
         height: full.height,
         background: createSolidPsdImageData(full.width, full.height, 255, 255, 255, 255),
-        template: makeWhiteTransparentPsdImageData(blank),
-        data: renderDataOnlyForPsd(dpi, pageIndex).getContext('2d').getImageData(0, 0, full.width, full.height),
+        template: templateImageData,
+        data: dataCanvas.getContext('2d').getImageData(0, 0, full.width, full.height),
         memo: handwriting.getContext('2d').getImageData(0, 0, handwriting.width, handwriting.height),
         composite
     };
