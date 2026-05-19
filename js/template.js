@@ -3522,8 +3522,22 @@ function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, fram
     // BBox容量より使用フレーム数が少ない場合 (主に0ページ) 残り領域を半透明グレー
     if (usedFrames < capacity) {
         const usedH = usedFrames * cellH;
+        const grayTop = rect.y + usedH;
+        const grayH = rect.h - usedH;
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.fillRect(rect.x, rect.y + usedH, rect.w, rect.h - usedH);
+        ctx.fillRect(rect.x, grayTop, rect.w, grayH);
+        // 0ページ表記 (先頭余白の明示、入力セル下に配置)
+        const m = (mm) => mm * scale;
+        const labelFontPx = Math.max(m(1.8), scale * 0.5);
+        if (grayH > labelFontPx * 1.5) {
+            ctx.save();
+            ctx.fillStyle = '#000';
+            ctx.font = `bold ${labelFontPx}px "Yu Gothic UI", "Meiryo", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('0ページ（先頭余白）', rect.x + rect.w / 2, grayTop + m(0.8));
+            ctx.restore();
+        }
     }
 
     ctx.restore();
