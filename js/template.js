@@ -3614,17 +3614,28 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
         }).sort((a, b) => (b.canFit - a.canFit) || (a.distance - b.distance) || (b.size - a.size));
         return scored[0].top;
     };
-    // ラベル位置の自動左右逃がし: BBox右端に近いと左へ反転
-    // cx: ライン中心X, offset: 通常時の右オフセット, estLabelW: ラベル推定幅
+    // ラベル位置の自動逃がし:
+    // - 原則ラインの右側にラベル
+    // - BBox外への一定量(overflowAllowance)のはみ出しは許可 (外部テンプレ画像の余白も活用)
+    // - それでも右に置けない場合のみ左へ反転 (同じ許容量で判定)
+    // - 最終的にページ(canvas)外に出ないようクランプ
+    const overflowAllowance = m(6);
+    const pageW = (ctx.canvas && ctx.canvas.width) || (rect.x + rect.w);
     const pickLabelXSide = (cxArg, offset, estLabelW) => {
-        const halfW = estLabelW / 2 + m(0.5);
-        const right = cxArg + offset;
-        const left = cxArg - offset;
-        const rightSpace = (rect.x + rect.w) - (right + halfW);
-        const leftSpace = (left - halfW) - rect.x;
-        if (rightSpace >= 0) return right;          // 右が収まればそのまま
-        if (leftSpace > rightSpace) return left;    // 左の方が余裕があれば反転
-        return right;                                // どちらも不足なら右のまま (clipで切れる)
+        const margin = m(0.5);
+        const halfW = estLabelW / 2;
+        const rightX = cxArg + offset;
+        const leftX = cxArg - offset;
+        // 1. 右が収まる (BBox右端 + overflowAllowance まで許容)
+        const rightBoundary = rect.x + rect.w + overflowAllowance;
+        if (rightX + halfW <= rightBoundary) return rightX;
+        // 2. 左が収まる (BBox左端 - overflowAllowance まで許容)
+        const leftBoundary = rect.x - overflowAllowance;
+        if (leftX - halfW >= leftBoundary) return leftX;
+        // 3. 両方溢れる場合は最終的にページ内に収まる範囲でクランプ
+        const minX = margin + halfW;
+        const maxX = pageW - margin - halfW;
+        return Math.min(Math.max(rightX, minX), maxX);
     };
     const drawTargetsSmall = (cx, topY, tgtList, color = '#000') => {
         if (!tgtList || !tgtList.length) return topY;
@@ -3660,10 +3671,10 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
         // ブロックの主たるBBox = 開始フレームを含むBBox。継続側はラベル省略
         const isPrimary = hasStart;
 
-        // BBox内クリップ
+        // BBox内クリップ (横方向はラベル逃がしの overflowAllowance 分だけ広げる)
         ctx.save();
         ctx.beginPath();
-        ctx.rect(rect.x, rect.y, rect.w, rect.h);
+        ctx.rect(rect.x - overflowAllowance, rect.y, rect.w + overflowAllowance * 2, rect.h);
         ctx.clip();
 
         const vt = block.valueType;
