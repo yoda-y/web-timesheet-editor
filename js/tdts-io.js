@@ -301,6 +301,8 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
                     syncActiveDocumentTabAfterLoad(fileName, fmt, null, null);
                 }
                 if (typeof markClean === 'function') markClean();
+            } else {
+                if (typeof markDirty === 'function') markDirty();
             }
             // UI 状態リセット（undoStack は維持）
             redoStack = [];
@@ -420,7 +422,12 @@ async function openTimesheetFromFolder() {
         updateSectionPositions();
         drawAll();
         if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
-        if (typeof markClean === 'function') markClean();
+        // 完全新規(new)のみ markClean。それ以外は既存ドキュメントへの追加/変更なので未保存扱い。
+        if (opts.merge === 'new') {
+            if (typeof markClean === 'function') markClean();
+        } else {
+            if (typeof markDirty === 'function') markDirty();
+        }
     } catch (err) {
         if (err && err.name === 'AbortError') return;
         console.error(err);

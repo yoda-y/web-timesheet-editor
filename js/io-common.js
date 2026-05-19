@@ -207,6 +207,8 @@ let _ioModalResolve = null;
 
 function openIOModal(opts) {
     // opts: { title, mode: 'import'|'export', format: 'tdts'|'xdts', source?: 'file'|'folder', warning?: string }
+    // 毎回フォーマットをリセット (前回のモーダル状態が残らないように)
+    window._ioModalFormat = opts.format;
     const modal = document.getElementById('io-modal');
     document.getElementById('io-modal-title').innerText = opts.title;
     const warnEl = document.getElementById('io-modal-warn');
@@ -267,11 +269,8 @@ function openIOModal(opts) {
             if (actionCb) actionCb.closest('label').style.display = 'none';
             if (cellCb) cellCb.closest('label').style.display = 'none';
             // XDTS時は meta チェックを merge モードに連動 (見た目と実処理を一致させる)
-            // モーダル開く度に呼ばれるが、リスナはモジュール初期化時に一度だけ付ける (下部参照)
-            window._ioModalFormat = 'xdts';
+            // リスナはモジュール初期化時に一度だけ付ける (下部参照)
             syncMetaCheckboxToMergeMode();
-        } else {
-            window._ioModalFormat = opts.format;
         }
     } else {
         // TDTS時はACTION/CELLチェックボックスを表示
@@ -802,6 +801,9 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
             if (typeof setCurrentFileName === 'function') setCurrentFileName(file.name, fmt);
             if (typeof syncActiveDocumentTabAfterLoad === 'function') syncActiveDocumentTabAfterLoad(file.name, fmt, null, null);
             if (typeof markClean === 'function') markClean();
+        } else {
+            // 既存ドキュメントへの追加/変更なので未保存扱い
+            if (typeof markDirty === 'function') markDirty();
         }
 
         redoStack = [];
