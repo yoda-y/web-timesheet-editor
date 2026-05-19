@@ -3614,6 +3614,18 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
         }).sort((a, b) => (b.canFit - a.canFit) || (a.distance - b.distance) || (b.size - a.size));
         return scored[0].top;
     };
+    // ラベル位置の自動左右逃がし: BBox右端に近いと左へ反転
+    // cx: ライン中心X, offset: 通常時の右オフセット, estLabelW: ラベル推定幅
+    const pickLabelXSide = (cxArg, offset, estLabelW) => {
+        const halfW = estLabelW / 2 + m(0.5);
+        const right = cxArg + offset;
+        const left = cxArg - offset;
+        const rightSpace = (rect.x + rect.w) - (right + halfW);
+        const leftSpace = (left - halfW) - rect.x;
+        if (rightSpace >= 0) return right;          // 右が収まればそのまま
+        if (leftSpace > rightSpace) return left;    // 左の方が余裕があれば反転
+        return right;                                // どちらも不足なら右のまま (clipで切れる)
+    };
     const drawTargetsSmall = (cx, topY, tgtList, color = '#000') => {
         if (!tgtList || !tgtList.length) return topY;
         ctx.save();
@@ -3708,16 +3720,25 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
                 const key = `CAMERA-${block.colIndex}-${f}`;
                 const data = cellData[key];
                 if (!data || !data.value) continue;
-                if (['SYMBOL_HYPHEN', 'SYMBOL_TICK', 'SYMBOL_NULL'].includes(data.value)) continue;
+                // raw SYMBOL値の防御
+                // - SYMBOL_HYPHEN: インライン内では非表示 (継続マーカー扱い)
+                // - SYMBOL_STOP/START: repeatマーカーなので非表示
+                // - SYMBOL_TICK_1/_2 / SYMBOL_NULL_CELL: ●/○/× に正規化して表示
+                let displayValue = data.value;
+                if (displayValue === 'SYMBOL_HYPHEN') continue;
+                if (displayValue === 'SYMBOL_STOP' || displayValue === 'SYMBOL_START') continue;
+                if (displayValue === 'SYMBOL_TICK_1' || displayValue === 'SYMBOL_TICK') displayValue = '●';
+                else if (displayValue === 'SYMBOL_TICK_2') displayValue = '○';
+                else if (displayValue === 'SYMBOL_NULL_CELL' || displayValue === 'SYMBOL_NULL') displayValue = '×';
                 const fy = rect.y + (f - frameStart) * cellH + cellH / 2;
                 // option mark を先 (50%透過、KEYFRAME円 / REFERENCEFRAME三角)
-                if (data.option && !['●','○','×','―'].includes(data.value)) {
+                if (data.option && !['●','○','×','―'].includes(displayValue)) {
                     ctx.save();
                     ctx.globalAlpha = 0.5;
                     ctx.strokeStyle = '#000';
                     ctx.lineWidth = Math.max(1.0, scale * 0.25);
                     // 値テキストの幅に合わせた中心
-                    const tw = ctx.measureText(String(data.value)).width;
+                    const tw = ctx.measureText(String(displayValue)).width;
                     const ocx = valueX + tw / 2;
                     const r = Math.min(scale * 2.2, valueFontPx * 0.85, cellH * 0.42);
                     if (data.option === 'OPTION_KEYFRAME') {
@@ -3734,7 +3755,7 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
                     }
                     ctx.restore();
                 }
-                ctx.fillText(data.value, valueX, fy);
+                ctx.fillText(displayValue, valueX, fy);
             }
             ctx.restore();
         } else if (pKind === 'IrisIN' || pKind === 'IrisOut') {
@@ -3942,9 +3963,9 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
             // H: 処理・効果系 (範囲線 + ライン横[右寄せ]に縦書き [layer]→kind 積み上げ)
             drawRangeLine(cx, drawStartY, drawEndY, hasStart, hasEnd);
             if (isPrimary) {
-            // ライン中心からラベル中心を少し右にオフセット (ラインと被らない)
-            const labelX = cx + m(2.5);
             const kindFontPx = Math.max(baseFontPx, m(2.1));
+            // ラベル中心: ライン右側がBBoxからはみ出すなら左側に逃がす
+            const labelX = pickLabelXSide(cx, m(2.5), kindFontPx + m(1));
             const kindCharH = kindFontPx * 1.15;
             const tgtCharH = tgtFontPx * 1.2;
             const pKindChars = pKind.split('');
@@ -4132,10 +4153,12 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
             drawRangeLine(cx, drawStartY, drawEndY, hasStart, hasEnd);
             if (isPrimary) {
                 const kindFontPx = Math.max(baseFontPx, m(2.2));
-                const kindInfo = drawVerticalLabel(pKind, cx + m(3), midY, kindFontPx);
+                // ラベル中心: ライン右側がBBoxからはみ出すなら左側に逃がす
+                const labelX = pickLabelXSide(cx, m(3), kindFontPx + m(1));
+                const kindInfo = drawVerticalLabel(pKind, labelX, midY, kindFontPx);
                 if (tgtList.length) {
                     const tgtTopY = kindInfo.top - tgtFontPx * 1.25 * tgtList.length - m(0.5);
-                    drawTargetsSmall(cx + m(3), tgtTopY, tgtList);
+                    drawTargetsSmall(labelX, tgtTopY, tgtList);
                 }
             }
         }
