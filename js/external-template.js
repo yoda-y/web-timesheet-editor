@@ -434,13 +434,26 @@ function getExternalTemplateTotalPages() {
     const capacity = getExternalTemplateSheetCapacity();
     if (capacity <= 0) return 1;
     if (typeof targetFrames === 'undefined' || !targetFrames || targetFrames <= 0) return 1;
-    return Math.max(1, Math.ceil(targetFrames / capacity));
+    const normalPages = Math.max(1, Math.ceil(targetFrames / capacity));
+    // headMargin有効時は 0ページ目を追加
+    const hasZero = (typeof hasPage0 === 'function') && hasPage0();
+    return hasZero ? normalPages + 1 : normalPages;
 }
 window.getExternalTemplateTotalPages = getExternalTemplateTotalPages;
 
 function getExternalTemplatePageStartFrame(pageIndex) {
     const capacity = getExternalTemplateSheetCapacity();
     if (capacity <= 0) return 0;
+    const hasZero = (typeof hasPage0 === 'function') && hasPage0();
+    if (hasZero) {
+        if (pageIndex === 0) {
+            // 0ページ: -headMargin から開始
+            const headMargin = (typeof getHeadMarginForPage === 'function') ? getHeadMarginForPage() : 0;
+            return -headMargin;
+        }
+        // 通常ページ: 1ページ目以降は 0, capacity, 2*capacity, ...
+        return (pageIndex - 1) * capacity;
+    }
     return pageIndex * capacity;
 }
 window.getExternalTemplatePageStartFrame = getExternalTemplatePageStartFrame;

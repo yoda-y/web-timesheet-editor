@@ -336,7 +336,10 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
     // 1ページ目限定で描画するタグ（標準A3のDirection欄ルールに準拠）
     // 将来BOOKラベルを実装する際も同じルールを適用する
     const PAGE1_ONLY_TAGS = new Set(['direction']);
-    const isFirstPage = (typeof pageIndex !== 'number') || pageIndex === 0;
+    // hasPage0() の場合は 0ページ(headMargin) があるので、最初の通常ページは pageIndex === 1
+    const hasZeroPage = (typeof hasPage0 === 'function') && hasPage0();
+    const isFirstPage = (typeof pageIndex !== 'number')
+        || (hasZeroPage ? pageIndex === 1 : pageIndex === 0);
 
     const tagDefs = (window.externalTemplate && window.externalTemplate.tags) || {};
 
@@ -349,14 +352,18 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
             case 'cut':         return m.cut || '';
             case 'sheet':       return '';  // 廃止タグ（後方互換: 空文字を返す）
             case 'currentPage': {
-                // 描画対象ページのインデックスを使用（グローバル currentPage ではない）。
-                // サムネイル生成や複数ページ書き出しで、全ページに同じ番号が出ないようにするため。
-                const cp = (typeof pageIndex === 'number' ? pageIndex : 0) + 1;
+                // hasPage0時: pageIndex 0 → 0(headMargin), pageIndex 1 → 1, ...
+                // 通常: pageIndex 0 → 1
+                const hasZero = (typeof hasPage0 === 'function') && hasPage0();
+                const pi = (typeof pageIndex === 'number') ? pageIndex : 0;
+                const cp = hasZero ? pi : pi + 1;
                 return String(cp);
             }
             case 'totalPages': {
+                // 通常ページ数を返す (0ページは含めない)
                 const tp = (typeof getTotalPages === 'function') ? getTotalPages() : 1;
-                return String(tp);
+                const hasZero = (typeof hasPage0 === 'function') && hasPage0();
+                return String(hasZero ? Math.max(1, tp - 1) : tp);
             }
             case 'date':        return '';
             case 'studio':      return '';
@@ -2973,7 +2980,10 @@ window.drawExternalTemplateMetaBoxes = drawExternalTemplateMetaBoxes;
 // - 1ページ目のみ (pageIndex === 0)
 // - action1 の上側にボックスを並べ、各列位置に分岐ライン
 function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex) {
-    if (pageIndex !== 0) return;
+    // 0ページ存在時は最初の通常ページ (pageIndex === 1) で描画
+    const hasZeroPage = (typeof hasPage0 === 'function') && hasPage0();
+    const firstNormalIdx = hasZeroPage ? 1 : 0;
+    if (pageIndex !== firstNormalIdx) return;
     if (typeof booksData === 'undefined' || !booksData || !booksData['ACTION']) return;
     if (!extTpl.bboxes) return;
     const b1 = extTpl.bboxes['action1'];
@@ -3092,7 +3102,7 @@ function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex) 
 
 function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset) {
     if (!extTpl.bboxes || typeof cellData === 'undefined') return;
-    pageOffset = pageOffset || 0;
+    if (typeof pageOffset !== 'number') pageOffset = 0;
 
     const groups = [
         { type: 'action', tag1: 'action1', tag2: 'action2' },
@@ -3101,21 +3111,30 @@ function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pag
         { type: 'camera', tag1: 'camera1', tag2: 'camera2' }
     ];
 
+    // 0ページ判定: pageOffset < 0 のとき headMargin 分だけ描画
+    const isPage0 = pageOffset < 0;
+    const totalToRender = isPage0 ? (-pageOffset) : null;  // null = 通常 (BBox容量分すべて)
+
     groups.forEach(grp => {
         const b1 = extTpl.bboxes[grp.tag1];
         const b2 = extTpl.bboxes[grp.tag2];
         if (!b1 || !b1.enabled) return;
 
-        const frames1 = b1.frames || 72;
+        const frames1Cap = b1.frames || 72;
         const cols1   = b1.columns || 5;
 
-        // ページオフセットを加算したフレーム範囲
-        drawTimelineBBox(ctx, grp.type, b1, bboxToCanvas, scale, pageOffset, pageOffset + frames1, cols1);
+        // BBox1 で使うフレーム数: 通常は容量分、0ページなら残量と容量の小さい方
+        const use1 = isPage0 ? Math.min(totalToRender, frames1Cap) : frames1Cap;
+        drawTimelineBBox(ctx, grp.type, b1, bboxToCanvas, scale, pageOffset, pageOffset + use1, cols1, frames1Cap);
 
+        // BBox2: 0ページで残量がなければスキップ
         if (b2 && b2.enabled) {
-            const frames2 = b2.frames || 72;
+            const frames2Cap = b2.frames || 72;
             const cols2   = b2.columns || 5;
-            drawTimelineBBox(ctx, grp.type, b2, bboxToCanvas, scale, pageOffset + frames1, pageOffset + frames1 + frames2, cols2);
+            const remaining2 = isPage0 ? Math.max(0, totalToRender - use1) : frames2Cap;
+            if (remaining2 > 0) {
+                drawTimelineBBox(ctx, grp.type, b2, bboxToCanvas, scale, pageOffset + use1, pageOffset + use1 + remaining2, cols2, frames2Cap);
+            }
         }
     });
 }
@@ -3463,14 +3482,17 @@ function drawCutLengthInBBox(ctx, rect, cellH, frameStart, frameEnd, scale) {
     ctx.restore();
 }
 
-function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, frameEnd, columns) {
+function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, frameEnd, columns, bboxCapacity) {
     const rect = bboxToCanvas(bbox);
     if (rect.w <= 0 || rect.h <= 0) return;
 
     const cellW = rect.w / columns;
-    const totalFrames = frameEnd - frameStart;
-    if (totalFrames <= 0) return;
-    const cellH = rect.h / totalFrames;
+    const usedFrames = frameEnd - frameStart;
+    if (usedFrames <= 0) return;
+    // cellH は BBox容量基準 (bboxCapacity未指定なら usedFrames で互換)
+    // → 0ページで一部しか使わない時でもセル高が変わらない
+    const capacity = (typeof bboxCapacity === 'number' && bboxCapacity > 0) ? bboxCapacity : usedFrames;
+    const cellH = rect.h / capacity;
 
     ctx.save();
 
@@ -3496,6 +3518,13 @@ function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, fram
 
     // カット尺ライン + 尺以降グレー (action/cell/sound/camera 全タイムラインに適用)
     drawCutLengthInBBox(ctx, rect, cellH, frameStart, frameEnd, scale);
+
+    // BBox容量より使用フレーム数が少ない場合 (主に0ページ) 残り領域を半透明グレー
+    if (usedFrames < capacity) {
+        const usedH = usedFrames * cellH;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(rect.x, rect.y + usedH, rect.w, rect.h - usedH);
+    }
 
     ctx.restore();
 }
