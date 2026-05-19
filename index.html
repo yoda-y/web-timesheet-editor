@@ -79,16 +79,23 @@
         </optgroup>
         <option value="__new_external__" data-i18n="extTpl.newOption">+ 新規テンプレート追加...</option>
       </select>
+      <div id="sidebar-template-status" class="sidebar-template-status" data-state="standard">
+        <span class="sidebar-template-status-label" data-i18n="sidebar.template.status">使用中:</span>
+        <span id="sidebar-template-status-name">標準A3</span>
+      </div>
       <div class="sidebar-row" style="margin-top:4px;">
-        <button class="sidebar-btn small disabled" data-i18n="sidebar.add">追加</button>
-        <button class="sidebar-btn small disabled" data-i18n="sidebar.settings">設定</button>
+        <button id="sidebar-template-add-btn" class="sidebar-btn small" data-i18n="sidebar.add">追加</button>
+        <button id="sidebar-template-settings-btn" class="sidebar-btn small disabled" data-i18n="sidebar.settings">設定</button>
+      </div>
+      <div class="sidebar-row" style="margin-top:4px;">
+        <button id="sidebar-template-bbox-btn" class="sidebar-btn small full-width" data-i18n="sidebar.bboxEdit" style="display:none;">BBox編集</button>
       </div>
     </div>
   </div>
 
   <div class="sidebar-section" data-section="custom-fields" id="sidebar-custom-fields" style="display:none;">
     <div class="sidebar-header" onclick="toggleSidebarSection('custom-fields')">
-      <span class="sidebar-label" data-i18n="sidebar.customFields">カスタム</span>
+      <span class="sidebar-label" data-i18n="sidebar.customFields">カスタム項目（外部テンプレ）</span>
       <span class="sidebar-toggle">▼</span>
     </div>
     <div class="sidebar-content" id="sidebar-custom-fields-content">

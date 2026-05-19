@@ -270,6 +270,8 @@ window.setCurrentExternalTemplate = setCurrentExternalTemplate;
 // ─── Phase 3d: カスタムフィールド サイドバー更新 ──────────────────────────────
 
 function refreshCustomFieldsSidebar() {
+    // テンプレ状態表示も同期 (テンプレ切替/ロード時に呼ばれる)
+    if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
     const section = document.getElementById('sidebar-custom-fields');
     const content = document.getElementById('sidebar-custom-fields-content');
     if (!section || !content) return;
@@ -378,13 +380,35 @@ async function refreshTemplateSelectExternalOptions() {
 }
 window.refreshTemplateSelectExternalOptions = refreshTemplateSelectExternalOptions;
 
+// サイドバー: 現在テンプレ状態表示・追加/設定/BBox編集 ボタンの状態同期
+function updateSidebarTemplateStatus() {
+    const statusEl = document.getElementById('sidebar-template-status');
+    const statusName = document.getElementById('sidebar-template-status-name');
+    const settingsBtn = document.getElementById('sidebar-template-settings-btn');
+    const bboxBtn = document.getElementById('sidebar-template-bbox-btn');
+    const tpl = currentExternalTemplate;
+    const i18n = (key, fallback) => (typeof t === 'function' ? t(key) : null) || fallback;
+    if (tpl) {
+        if (statusEl) statusEl.dataset.state = 'external';
+        if (statusName) statusName.textContent = `${i18n('sidebar.template.external', '外部テンプレ')}: ${tpl.name || i18n('extTpl.unnamed', '(無名)')}`;
+        if (settingsBtn) settingsBtn.classList.remove('disabled');
+        if (bboxBtn) bboxBtn.style.display = '';
+    } else {
+        if (statusEl) statusEl.dataset.state = 'standard';
+        if (statusName) statusName.textContent = i18n('sidebar.template.standard', '標準A3');
+        if (settingsBtn) settingsBtn.classList.add('disabled');
+        if (bboxBtn) bboxBtn.style.display = 'none';
+    }
+}
+window.updateSidebarTemplateStatus = updateSidebarTemplateStatus;
+
 // changeイベント: __new_external__ と ext: プレフィックスを処理
 document.addEventListener('DOMContentLoaded', () => {
     const templateSelect = document.getElementById('template-select');
     if (!templateSelect) return;
 
     // 起動時に外部テンプレート一覧を読み込む
-    refreshTemplateSelectExternalOptions();
+    refreshTemplateSelectExternalOptions().then(() => updateSidebarTemplateStatus());
 
     templateSelect.addEventListener('change', async (e) => {
         const v = e.target.value;
@@ -396,14 +420,41 @@ document.addEventListener('DOMContentLoaded', () => {
         if (v.startsWith('ext:')) {
             const id = v.substring(4);
             await setCurrentExternalTemplate(id);
+            updateSidebarTemplateStatus();
             if (typeof updateTemplatePreview === 'function') updateTemplatePreview();
             return;
         }
         // 標準テンプレート選択時は外部テンプレートを解除
         await setCurrentExternalTemplate(null);
+        updateSidebarTemplateStatus();
         if (typeof updateTemplatePreview === 'function') updateTemplatePreview();
         // 既存の標準テンプレート処理はここでは何もしない（他の箇所で処理）
     });
+
+    // 追加ボタン: 常に有効、外部テンプレ管理モーダルを開く
+    const addBtn = document.getElementById('sidebar-template-add-btn');
+    if (addBtn) {
+        addBtn.addEventListener('click', () => {
+            if (typeof openExternalTemplateModal === 'function') openExternalTemplateModal();
+        });
+    }
+    // 設定ボタン: 外部テンプレ選択時のみ有効、管理モーダルを開く
+    const settingsBtn = document.getElementById('sidebar-template-settings-btn');
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+            if (settingsBtn.classList.contains('disabled')) return;
+            if (typeof openExternalTemplateModal === 'function') openExternalTemplateModal();
+        });
+    }
+    // BBox編集ボタン: 外部テンプレ選択時のみ表示、現在テンプレで直接エディタを開く
+    const bboxBtn = document.getElementById('sidebar-template-bbox-btn');
+    if (bboxBtn) {
+        bboxBtn.addEventListener('click', () => {
+            const tpl = currentExternalTemplate;
+            if (!tpl) return;
+            if (typeof openBBoxEditor === 'function') openBBoxEditor(tpl.id);
+        });
+    }
 });
 
 // ─── ページング計算（外部テンプレート用） ───────────────────────────────────
