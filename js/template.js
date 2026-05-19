@@ -3425,6 +3425,44 @@ function drawBarLinesInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, 
     ctx.restore();
 }
 
+// 外部テンプレ用: BBox 内のカット尺終わりライン + 尺以降グレー塗り
+// 標準A3 drawCutLengthOverlay の BBox 移植版
+function drawCutLengthInBBox(ctx, rect, cellH, frameStart, frameEnd, scale) {
+    if (typeof metaData === 'undefined') return;
+    const lengthSec = parseInt(metaData.lengthSec) || 0;
+    const lengthFrame = parseInt(metaData.lengthFrame) || 0;
+    const targetFrames = lengthSec * 24 + lengthFrame;
+    if (targetFrames <= 0) return;
+
+    const cutFrameInBBox = targetFrames - frameStart;
+    const bboxFrames = frameEnd - frameStart;
+    const m = (mm) => mm * scale;
+
+    ctx.save();
+    if (cutFrameInBBox <= 0) {
+        // BBox 全体が尺以降 → 全面グレー
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    } else if (cutFrameInBBox <= bboxFrames) {
+        // 尺終わりが BBox 内 (途中 or 末尾ぴったり)
+        const cutY = rect.y + cutFrameInBBox * cellH;
+        // 尺以降グレーは BBox 途中の場合のみ (末尾ぴったりは塗らない)
+        if (cutFrameInBBox < bboxFrames) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(rect.x, cutY, rect.w, (rect.y + rect.h) - cutY);
+        }
+        // カット尺ライン (太め黒) は末尾ぴったり含めて常に描く
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = Math.max(1.5, scale * 0.35);
+        ctx.beginPath();
+        ctx.moveTo(rect.x, cutY);
+        ctx.lineTo(rect.x + rect.w, cutY);
+        ctx.stroke();
+    }
+    // cutFrameInBBox > bboxFrames: BBox 全体が尺内 → 何もしない
+    ctx.restore();
+}
+
 function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, frameEnd, columns) {
     const rect = bboxToCanvas(bbox);
     if (rect.w <= 0 || rect.h <= 0) return;
@@ -3455,6 +3493,9 @@ function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, fram
     } else if (type === 'camera') {
         drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm);
     }
+
+    // カット尺ライン + 尺以降グレー (action/cell/sound/camera 全タイムラインに適用)
+    drawCutLengthInBBox(ctx, rect, cellH, frameStart, frameEnd, scale);
 
     ctx.restore();
 }
