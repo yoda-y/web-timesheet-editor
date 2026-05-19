@@ -266,8 +266,12 @@ function openIOModal(opts) {
             const cellCb = document.querySelector('#io-modal input[type=checkbox][data-io="cell"]');
             if (actionCb) actionCb.closest('label').style.display = 'none';
             if (cellCb) cellCb.closest('label').style.display = 'none';
-            // XDTSはタイムライン中心。meta は merge モードに応じて自動切替（既定はnewなのでON）
-            // newSheet/overwrite/addSharedCut に切替時は meta を OFF にする (下のリスナで連動)
+            // XDTS時は meta チェックを merge モードに連動 (見た目と実処理を一致させる)
+            // モーダル開く度に呼ばれるが、リスナはモジュール初期化時に一度だけ付ける (下部参照)
+            window._ioModalFormat = 'xdts';
+            syncMetaCheckboxToMergeMode();
+        } else {
+            window._ioModalFormat = opts.format;
         }
     } else {
         // TDTS時はACTION/CELLチェックボックスを表示
@@ -298,6 +302,25 @@ function readIOOptions() {
     const xdtsCut = xdtsCutInput ? xdtsCutInput.value.trim() : '';
     return { checks, xdtsCellTarget, xdtsExportSource, merge, xdtsCut };
 }
+
+// XDTS インポート時: merge モードに応じて meta チェック表示を連動 (実処理と一致させる)
+function syncMetaCheckboxToMergeMode() {
+    if (window._ioModalFormat !== 'xdts') return;
+    const metaCb = document.querySelector('#io-modal input[type=checkbox][data-io="meta"]');
+    if (!metaCb) return;
+    const merge = (document.querySelector('input[name="ioMerge"]:checked') || {}).value || 'new';
+    if (merge === 'new') {
+        metaCb.disabled = false;
+        metaCb.checked = true;
+    } else {
+        metaCb.checked = false;
+        metaCb.disabled = true;
+    }
+}
+// 初期化時に1回だけリスナ登録 (モーダル開閉ごとに重複登録されない)
+document.querySelectorAll('input[name="ioMerge"]').forEach(r => {
+    r.addEventListener('change', syncMetaCheckboxToMergeMode);
+});
 
 document.getElementById('io-modal-ok').addEventListener('click', () => {
     closeIOModal(readIOOptions());
@@ -772,11 +795,14 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
         }
 
         applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength });
-        currentFileHandle = null;
-        currentDirectoryHandle = null;
-        if (typeof setCurrentFileName === 'function') setCurrentFileName(file.name, fmt);
-        if (typeof syncActiveDocumentTabAfterLoad === 'function') syncActiveDocumentTabAfterLoad(file.name, fmt, null, null);
-        if (opts.merge === 'new' && typeof markClean === 'function') markClean();
+        // 完全新規(new)のときだけ現在ファイル名/ハンドルを切替。それ以外は既存ドキュメント名を維持。
+        if (opts.merge === 'new') {
+            currentFileHandle = null;
+            currentDirectoryHandle = null;
+            if (typeof setCurrentFileName === 'function') setCurrentFileName(file.name, fmt);
+            if (typeof syncActiveDocumentTabAfterLoad === 'function') syncActiveDocumentTabAfterLoad(file.name, fmt, null, null);
+            if (typeof markClean === 'function') markClean();
+        }
 
         redoStack = [];
         selectionStart = null; selectionEnd = null; selectedMeta = null;

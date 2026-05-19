@@ -292,13 +292,16 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
                 pushHistory();
             }
             applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength });
-            currentFileHandle = null;
-            currentDirectoryHandle = null;
-            setCurrentFileName(fileName, fmt);
-            if (typeof syncActiveDocumentTabAfterLoad === 'function') {
-                syncActiveDocumentTabAfterLoad(fileName, fmt, null, null);
+            // 完全新規(new)のときだけ現在ファイル名/ハンドルを切替。それ以外は既存ドキュメント名を維持。
+            if (opts.merge === 'new') {
+                currentFileHandle = null;
+                currentDirectoryHandle = null;
+                setCurrentFileName(fileName, fmt);
+                if (typeof syncActiveDocumentTabAfterLoad === 'function') {
+                    syncActiveDocumentTabAfterLoad(fileName, fmt, null, null);
+                }
+                if (typeof markClean === 'function') markClean();
             }
-            if (opts.merge === 'new' && typeof markClean === 'function') markClean();
             // UI 状態リセット（undoStack は維持）
             redoStack = [];
             selectionStart = null; selectionEnd = null; selectedMeta = null;
@@ -403,14 +406,17 @@ async function openTimesheetFromFolder() {
                 showToast && showToast(`手書きデータを自動読み込みしました (${hwCount}件)`);
             }
         }
-        currentFileHandle = selected.handle;
-        currentFileFormat = fmt;
-        currentDirectoryHandle = directoryHandle;
-        setCurrentFileName(selected.name, fmt);
-        if (typeof syncActiveDocumentTabAfterLoad === 'function') {
-            syncActiveDocumentTabAfterLoad(selected.name, fmt, selected.handle, directoryHandle);
+        // 完全新規(new)のときだけ現在ファイル名/ハンドルを切替。それ以外は既存ドキュメント名を維持。
+        if (opts.merge === 'new') {
+            currentFileHandle = selected.handle;
+            currentFileFormat = fmt;
+            currentDirectoryHandle = directoryHandle;
+            setCurrentFileName(selected.name, fmt);
+            if (typeof syncActiveDocumentTabAfterLoad === 'function') {
+                syncActiveDocumentTabAfterLoad(selected.name, fmt, selected.handle, directoryHandle);
+            }
+            await saveLastFileHandle(fmt, selected.handle);
         }
-        await saveLastFileHandle(fmt, selected.handle);
         updateSectionPositions();
         drawAll();
         if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
