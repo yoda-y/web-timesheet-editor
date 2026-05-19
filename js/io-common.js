@@ -258,14 +258,16 @@ function openIOModal(opts) {
         if (direction) { direction.checked = false; direction.disabled = true; }
         // インポート時: ACTION/CELLチェックは「取込先」オプションに連動
         if (opts.mode === 'import') {
-            // デフォルトは「CELLのみ」
-            const cellOnly = document.querySelector('input[name="xdtsCellTarget"][value="cell"]');
-            if (cellOnly) cellOnly.checked = true;
+            // デフォルトは「ACTIONのみ」(現場で原画番号をACTIONに取り込むケースを想定)
+            const actionOnly = document.querySelector('input[name="xdtsCellTarget"][value="action"]');
+            if (actionOnly) actionOnly.checked = true;
             // ACTION/CELLチェックボックスは取込先選択UIで代替するため非表示
             const actionCb = document.querySelector('#io-modal input[type=checkbox][data-io="action"]');
             const cellCb = document.querySelector('#io-modal input[type=checkbox][data-io="cell"]');
             if (actionCb) actionCb.closest('label').style.display = 'none';
             if (cellCb) cellCb.closest('label').style.display = 'none';
+            // XDTSはタイムライン中心。meta は merge モードに応じて自動切替（既定はnewなのでON）
+            // newSheet/overwrite/addSharedCut に切替時は meta を OFF にする (下のリスナで連動)
         }
     } else {
         // TDTS時はACTION/CELLチェックボックスを表示
@@ -325,7 +327,18 @@ function detectFileFormat(text) {
 // mode: 'new' | 'overwrite'
 //   new      = 新規タイムシートとして開く（全リセット → チェック項目を取込）
 //   overwrite = チェックした項目だけ既存データを破棄 → 取込で差し替え（その他は維持）
-function applyImportData(raw, checks, mode) {
+// sheetName 重複時の自動採番ヘルパー (sheet2, sheet3, ...)
+function makeUniqueSheetName(rawName) {
+    const existingNames = (typeof sheets !== 'undefined' && Array.isArray(sheets)) ? sheets.map(s => s.name) : [];
+    const candidate = String(rawName || '').trim();
+    if (candidate && !existingNames.includes(candidate)) return candidate;
+    let n = (existingNames.length || 0) + 1;
+    while (existingNames.includes(`sheet${n}`)) n++;
+    return `sheet${n}`;
+}
+
+function applyImportData(raw, checks, mode, extraOpts) {
+    extraOpts = extraOpts || {};
     const fieldFlags = { ACTION: checks.action, SOUND: checks.sound, CELL: checks.cell, CAMERA: checks.camera };
 
     // 複数シートが含まれており「新規」なら、シート配列ごと差し替え
@@ -372,7 +385,10 @@ function applyImportData(raw, checks, mode) {
 
     if (mode === 'addSharedCut') {
         // 兼用カットとして追加: 現在のシートを保持しつつ新カットを追加
+        // カット番号: XDTS入力欄/raw.meta.cut から取得
         const newCut = String(raw.meta?.cut || '').trim() || 'cut' + (sheets.length + 1);
+        // シート名: XDTS の sheetName を優先、無ければ自動採番 (カット番号とは独立)
+        const newSheetName = makeUniqueSheetName(raw.meta?.sheetName);
         const currentCut = String(metaData?.cut || '').trim() || 'cut1';
 
         // 現在のシートを先に保存（重要: raw適用前に行う）
@@ -397,12 +413,12 @@ function applyImportData(raw, checks, mode) {
             title: baseMeta.title || "",
             subTitle: baseMeta.subTitle || "",
             scene: baseMeta.scene || "",
-            cut: newCut,  // 新カット番号を設定
+            cut: newCut,  // カット番号は別管理
             sharedCuts: cuts,
             lengthSec: raw.meta?.lengthSec || baseMeta.lengthSec || "6",
             lengthFrame: raw.meta?.lengthFrame || baseMeta.lengthFrame || "00",
             creator: baseMeta.creator || "",
-            sheetName: `cut ${newCut}`,
+            sheetName: newSheetName,  // シート名は別管理（XDTS由来 or 自動採番）
             page: "1/1",
             memo: raw.direction || raw.meta?.memo || ""
         };
@@ -421,7 +437,7 @@ function applyImportData(raw, checks, mode) {
         const newSections = raw.sectionsMeta || JSON.parse(JSON.stringify(sections));
         ensureMinimumSectionCols(newSections);
         const newSheet = {
-            name: `cut ${newCut}`,
+            name: newSheetName,  // タブ名はシート名（カット番号と分離）
             color: 0,
             isSharedCut: true,
             metaData: newMeta,
@@ -441,6 +457,66 @@ function applyImportData(raw, checks, mode) {
             if (typeof applySheetToGlobal === 'function') applySheetToGlobal(newSheet);
         }
 
+        if (checks.sound && typeof window.normalizeAllDialogueBlockCells === 'function') window.normalizeAllDialogueBlockCells();
+        if (checks.camera && typeof window.normalizeAllCameraBlockCells === 'function') window.normalizeAllCameraBlockCells();
+        if (typeof updateSectionPositions === 'function') updateSectionPositions();
+        if (typeof drawAll === 'function') drawAll();
+        if (typeof markDirty === 'function') markDirty();
+        return;
+    }
+
+    if (mode === 'newSheet') {
+        // 現ドキュメントに新しいシートとして追加 (既存シート保持)
+        // ヘッダー情報は既存シート(共通)を継承、カット尺とタイムラインはXDTS側から取込
+        if (typeof sheets !== 'undefined' && typeof captureCurrentSheet === 'function') {
+            sheets[currentSheetIndex] = captureCurrentSheet();
+        }
+        const newSheetName = makeUniqueSheetName(raw.meta?.sheetName);
+        const baseMeta = (typeof sheets !== 'undefined' && sheets[0]?.metaData) || metaData;
+        const newMeta = {
+            title: baseMeta.title || "",
+            subTitle: baseMeta.subTitle || "",
+            scene: baseMeta.scene || "",
+            cut: baseMeta.cut || "",
+            sharedCuts: Array.isArray(baseMeta.sharedCuts) ? baseMeta.sharedCuts.slice() : [],
+            // カット尺は読み込んだXDTSから (常に取込)
+            lengthSec: raw.meta?.lengthSec || baseMeta.lengthSec || "6",
+            lengthFrame: raw.meta?.lengthFrame || baseMeta.lengthFrame || "00",
+            creator: baseMeta.creator || "",
+            sheetName: newSheetName,
+            page: "1/1",
+            memo: "",
+            customFields: {}
+        };
+        const newCells = {};
+        if (raw.cellData) {
+            for (const k in raw.cellData) {
+                const colType = k.split('-')[0];
+                if (!fieldFlags[colType]) continue;
+                newCells[k] = raw.cellData[k];
+            }
+        }
+        const newBooks = { ACTION: {}, SOUND: {}, CELL: {}, CAMERA: {} };
+        const newSections = raw.sectionsMeta || JSON.parse(JSON.stringify(sections));
+        ensureMinimumSectionCols(newSections);
+        const newSheet = {
+            name: newSheetName,
+            color: 0,
+            isSharedCut: false,
+            metaData: newMeta,
+            cellData: newCells,
+            booksData: newBooks,
+            customRepeats: raw.customRepeats || [],
+            dialogueBlocks: checks.sound ? (raw.dialogueBlocks || []) : [],
+            cameraBlocks: checks.camera ? (raw.cameraBlocks || []) : [],
+            handwritingPages: {},
+            sections: newSections
+        };
+        if (typeof sheets !== 'undefined') {
+            sheets.push(newSheet);
+            currentSheetIndex = sheets.length - 1;
+            if (typeof applySheetToGlobal === 'function') applySheetToGlobal(newSheet);
+        }
         if (checks.sound && typeof window.normalizeAllDialogueBlockCells === 'function') window.normalizeAllDialogueBlockCells();
         if (checks.camera && typeof window.normalizeAllCameraBlockCells === 'function') window.normalizeAllCameraBlockCells();
         if (typeof updateSectionPositions === 'function') updateSectionPositions();
@@ -499,6 +575,11 @@ function applyImportData(raw, checks, mode) {
     // メタ情報の取込（new と overwrite 共通）
     if (checks.meta && raw.meta) Object.assign(metaData, raw.meta);
     if (checks.direction && raw.direction !== undefined) metaData.memo = raw.direction;
+    // カット尺は forceLength 指定時、meta チェックに関わらず必ず取込 (XDTS用)
+    if (extraOpts.forceLength && raw.meta) {
+        if (raw.meta.lengthSec !== undefined && raw.meta.lengthSec !== '') metaData.lengthSec = raw.meta.lengthSec;
+        if (raw.meta.lengthFrame !== undefined && raw.meta.lengthFrame !== '') metaData.lengthFrame = raw.meta.lengthFrame;
+    }
 
     // セルデータ取込
     if (raw.cellData) {
@@ -669,6 +750,13 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
                 opts.checks.action = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'action');
                 opts.checks.cell = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'cell');
                 if (opts.xdtsCut && raw.meta) raw.meta.cut = opts.xdtsCut;
+                // XDTS整理ルール:
+                // - 完全新規(new)以外ではヘッダー(meta)を勝手に上書きしない
+                // - カット尺(lengthSec/lengthFrame)はモードによらず常に取込 (applyImportDataのforceLength)
+                if (opts.merge !== 'new') {
+                    opts.checks.meta = false;
+                }
+                opts._forceLength = true;
             }
         }
 
@@ -683,7 +771,7 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
             pushHistory();
         }
 
-        applyImportData(raw, opts.checks, opts.merge);
+        applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength });
         currentFileHandle = null;
         currentDirectoryHandle = null;
         if (typeof setCurrentFileName === 'function') setCurrentFileName(file.name, fmt);

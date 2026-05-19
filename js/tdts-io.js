@@ -236,7 +236,8 @@ function extractXdtsCut(text) {
         if (text.startsWith(prefix1)) jsonText = text.substring(prefix1.length);
         else if (text.startsWith(prefix2)) jsonText = text.substring(prefix2.length);
         const data = JSON.parse(jsonText);
-        return data.header?.cut || data.timeTables?.[0]?.name || '';
+        // カット番号のみ取得。timeTables[0].name はシート名なのでフォールバックしない
+        return data.header?.cut || '';
     } catch (e) { return ''; }
 }
 
@@ -279,6 +280,9 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
                 opts.checks.cell = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'cell');
                 // ユーザーが入力したカット番号を反映
                 if (opts.xdtsCut && raw.meta) raw.meta.cut = opts.xdtsCut;
+                // 整理ルール: new以外ではmetaを勝手に上書きしない、カット尺は常に取込
+                if (opts.merge !== 'new') opts.checks.meta = false;
+                opts._forceLength = true;
             }
             if (!raw) { alert("読み込みエラー: ファイル構造が無効です。"); return; }
             if (opts.merge === 'new' && typeof createDocumentTabForIncomingDocument === 'function') {
@@ -287,7 +291,7 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
                 // 取込前の状態をUndoスタックに積む（Ctrl+Zで戻れるように）
                 pushHistory();
             }
-            applyImportData(raw, opts.checks, opts.merge);
+            applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength });
             currentFileHandle = null;
             currentDirectoryHandle = null;
             setCurrentFileName(fileName, fmt);
@@ -372,6 +376,9 @@ async function openTimesheetFromFolder() {
             opts.checks.cell = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'cell');
             // ユーザーが入力したカット番号を反映
             if (opts.xdtsCut && raw.meta) raw.meta.cut = opts.xdtsCut;
+            // 整理ルール: new以外ではmetaを勝手に上書きしない、カット尺は常に取込
+            if (opts.merge !== 'new') opts.checks.meta = false;
+            opts._forceLength = true;
         }
         if (!raw) {
             alert('ファイルを読み込めませんでした。');
@@ -382,7 +389,7 @@ async function openTimesheetFromFolder() {
         } else {
             pushHistory();
         }
-        applyImportData(raw, opts.checks, opts.merge);
+        applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength });
         redoStack = [];
         selectionStart = null; selectionEnd = null; selectedMeta = null;
         selectedDialogueId = null; selectedCameraId = null;
