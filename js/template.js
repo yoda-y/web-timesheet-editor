@@ -3309,6 +3309,122 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
     }
 }
 
+// 外部テンプレ ACTION/CELL の連続線(棒線/波線)描画
+// 標準A3 drawBarLines の移植版。BBox座標系で動作。
+// - 空白("") / "―" の連続セルを上下の値で繋ぐ縦線
+// - 上端の値が "×" なら波線(bezier)、それ以外は棒線
+// - autoRep / customRepeat の範囲はスキップ
+function drawBarLinesInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale) {
+    if (typeof cellData === 'undefined') return;
+    const upperType = type.toUpperCase();
+    const m = (mm) => mm * scale;
+
+    // カット尺
+    const targetFrames = (parseInt(metaData?.lengthSec) || 0) * 24 + (parseInt(metaData?.lengthFrame) || 0);
+    const endFrame = targetFrames > 0 ? Math.min(frameEnd, targetFrames) : frameEnd;
+    const lineGap = parseInt((typeof settings !== 'undefined' && settings?.draw?.lineGap) || '3', 10) || 3;
+
+    const getVal = (ci, f) => {
+        const key = `${upperType}-${ci}-${f}`;
+        const d = cellData[key];
+        if (d && d.value) return d.value;
+        if (upperType === 'CELL' && typeof getTemplateCustomRepeatAt === 'function') {
+            const rep = getTemplateCustomRepeatAt(upperType, ci, f);
+            const repData = (typeof getTemplateCustomRepeatData === 'function') ? getTemplateCustomRepeatData(rep, f) : null;
+            return repData?.value || '';
+        }
+        return '';
+    };
+
+    const isLinePiercing = (v) => v === '' || v === '―';
+
+    ctx.save();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = Math.max(0.6, scale * 0.18);
+
+    // autoRep のスキップ範囲 (ACTION のみ)
+    // - 非hold: chunk継続部分をスキップ (rep表記領域)
+    // - hold: 「止」「メ」が描かれる frame 1, 2 をスキップ (棒線が止メ表記と被らないように)
+    const autoRepSkipSet = new Set();
+    if (upperType === 'ACTION' && typeof checkRepeatColumns === 'function') {
+        const totalF = Math.max(targetFrames, frameEnd);
+        if (totalF > 0) {
+            for (let ci = 0; ci < columns; ci++) {
+                const colDataArr = [];
+                for (let f = 0; f < totalF; f++) colDataArr[f] = cellData[`ACTION-${ci}-${f}`] || null;
+                const reps = checkRepeatColumns(colDataArr, totalF, ci);
+                reps.forEach(r => {
+                    if (r.isHold) {
+                        // 止メ表記の 「止」(frame 1) と 「メ」(frame 2) のセルをスキップ
+                        autoRepSkipSet.add(`${ci}-1`);
+                        autoRepSkipSet.add(`${ci}-2`);
+                    } else {
+                        for (let f = r.startF + r.chunkLen; f < r.endF; f++) autoRepSkipSet.add(`${ci}-${f}`);
+                    }
+                });
+            }
+        }
+    }
+
+    for (let ci = 0; ci < columns; ci++) {
+        const tx = rect.x + ci * cellW + cellW / 2;
+
+        for (let f = frameStart; f < endFrame; f++) {
+            if (autoRepSkipSet.has(`${ci}-${f}`)) continue;
+            // customRepeat のソース範囲(参照元)もスキップ (ACTION のみ)
+            if (upperType === 'ACTION' && typeof customRepeats !== 'undefined' && Array.isArray(customRepeats)) {
+                const inActionRep = customRepeats.some(rep => {
+                    const patternLen = Array.isArray(rep.pattern) ? rep.pattern.length : 0;
+                    const sourceStart = rep.startF - patternLen;
+                    return rep.colType === 'ACTION' && rep.colIndex === ci && patternLen > 0 && f >= sourceStart && f <= rep.endF;
+                });
+                if (inActionRep) continue;
+            }
+            const val = getVal(ci, f);
+            if (!isLinePiercing(val)) continue;
+
+            // 上方向で値を探す
+            let startF = -1, startVal = '';
+            for (let tmp = f - 1; tmp >= 0; tmp--) {
+                const tmpV = getVal(ci, tmp);
+                if (!isLinePiercing(tmpV)) { startF = tmp; startVal = tmpV; break; }
+            }
+            if (startF === -1) continue;
+
+            // 下方向で終端を探す。BBox範囲ではなくデータ全体を探索
+            // (ページまたぎ時、次値が後続BBoxにあっても正しいgapを得るため)
+            const searchEnd = Math.max(targetFrames, frameEnd) || frameEnd;
+            let nextF = searchEnd;
+            for (let tmp = f + 1; tmp < searchEnd; tmp++) {
+                if (!isLinePiercing(getVal(ci, tmp))) { nextF = tmp; break; }
+            }
+
+            const gap = nextF - startF - 1;
+            if (gap < lineGap) continue;
+            if (upperType === 'ACTION' && (f - startF >= 9)) continue;
+
+            const drawY_top = rect.y + (f - frameStart) * cellH;
+            const drawY_bottom = rect.y + (f - frameStart + 1) * cellH;
+
+            if (startVal === '×') {
+                // 波線 (bezier)
+                const offset = cellH / 4;
+                ctx.beginPath();
+                ctx.moveTo(tx, drawY_top);
+                ctx.bezierCurveTo(tx - offset, drawY_top + offset, tx + offset, drawY_bottom - offset, tx, drawY_bottom);
+                ctx.stroke();
+            } else {
+                // 棒線
+                ctx.beginPath();
+                ctx.moveTo(tx, drawY_top);
+                ctx.lineTo(tx, drawY_bottom);
+                ctx.stroke();
+            }
+        }
+    }
+    ctx.restore();
+}
+
 function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, frameEnd, columns) {
     const rect = bboxToCanvas(bbox);
     if (rect.w <= 0 || rect.h <= 0) return;
@@ -3329,6 +3445,8 @@ function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, fram
             ? computeActionRepeatSkipSet(columns, frameStart, frameEnd)
             : null;
         drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm, skipSet);
+        // 連続線(棒線/波線) を ACTION/CELL の両方で描画
+        drawBarLinesInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
         if (type === 'action') {
             drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
         }
