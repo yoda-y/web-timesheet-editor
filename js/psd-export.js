@@ -27,7 +27,7 @@ async function buildTemplateMultiPagePsdBlob(pageIndexes, dpi, includeHandwritin
         layers.push(createPsdGroupStart(label, page.width, page.height, hidden));
     });
     if (onProgress) onProgress('PSDレイヤーを圧縮中...', 75);
-    return writePsdBlob(first.width, first.height, layers, first.composite);
+    return writePsdBlob(first.width, first.height, layers, first.composite, dpi);
 }
 
 async function buildPsdPageLayers(pageIndex, dpi, includeHandwriting) {
@@ -376,7 +376,7 @@ function drawTimelineDataOnlyForPsd(ctx, scale, startX, startY, bodyW, startFram
     drawCutLengthOverlay(ctx, startX, gridY, bodyW, rowH, absoluteStart, scale);
 }
 
-function writePsdBlob(width, height, layers, compositeCanvas) {
+function writePsdBlob(width, height, layers, compositeCanvas, dpi) {
     const records = [];
     const channelChunks = [];
 
@@ -397,7 +397,10 @@ function writePsdBlob(width, height, layers, compositeCanvas) {
     const chunks = [];
     chunks.push(createPsdHeader(width, height));
     chunks.push(u32be(0));
-    chunks.push(u32be(0));
+    // Image Resources セクション (ResolutionInfo を含む)
+    const imageResources = buildPsdImageResources(dpi || 300);
+    chunks.push(u32be(imageResources.length));
+    if (imageResources.length > 0) chunks.push(imageResources);
     chunks.push(u32be(layerMaskLength));
     chunks.push(u32be(layerInfoLength));
     chunks.push(i16be(layers.length));
@@ -414,6 +417,41 @@ function writePsdBlob(width, height, layers, compositeCanvas) {
     ];
     chunks.push(encodePsdRleComposite(compositeChannels, width, height));
     return new Blob(chunks, { type: 'image/vnd.adobe.photoshop' });
+}
+
+// PSD Image Resources セクション構築 (ResolutionInfo 1005 を含む)
+function buildPsdImageResources(dpi) {
+    const resBlocks = [];
+    resBlocks.push(buildResolutionInfoBlock(dpi));
+    return concatUint8(resBlocks);
+}
+
+// ResolutionInfo (resource id 1005) ブロック
+// 構造:
+//   '8BIM' (4) + uint16 id (1005) + Pascal name (空: 1+1=2 で偶数padding) + uint32 size + data(16) + pad
+function buildResolutionInfoBlock(dpi) {
+    const fixed1616 = (dpi << 16) >>> 0; // 16.16 fixed-point
+    // 16-byte ResolutionInfo data
+    const data = new Uint8Array(16);
+    const dv = new DataView(data.buffer);
+    dv.setUint32(0, fixed1616, false);  // hRes
+    dv.setInt16(4, 1, false);            // hResUnit: 1 = pixels/inch
+    dv.setInt16(6, 1, false);            // widthUnit: 1 = inches
+    dv.setUint32(8, fixed1616, false);  // vRes
+    dv.setInt16(12, 1, false);           // vResUnit
+    dv.setInt16(14, 1, false);           // heightUnit
+    // Image Resource Block ヘッダ
+    // signature(4) + id(2) + pascal-name(2) + size(4) + data + (pad to even)
+    const block = new Uint8Array(4 + 2 + 2 + 4 + 16);
+    writeAscii(block, 0, '8BIM');
+    const bv = new DataView(block.buffer);
+    bv.setUint16(4, 1005, false);  // resource id = ResolutionInfo
+    // Pascal name: 空文字。長さ1バイト(0) + パディング1バイト = 2バイト
+    block[6] = 0;
+    block[7] = 0;
+    bv.setUint32(8, 16, false);    // data size
+    block.set(data, 12);
+    return block;
 }
 
 function createPsdHeader(width, height) {
