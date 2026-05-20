@@ -51,8 +51,13 @@ async function buildPsdPageLayers(pageIndex, dpi, includeHandwriting) {
     const dataCanvas = isExternal && typeof renderExternalTemplateDataOnly === 'function'
         ? renderExternalTemplateDataOnly(dpi, pageIndex)
         : renderDataOnlyForPsd(dpi, pageIndex);
-    // 全ての層で白背景→透明 (alpha clean) 変換を適用 (CSP等のPSDビューア互換性確保)
-    const templateImageData = makeWhiteTransparentPsdImageData(blank);
+    // template層:
+    //   - 標準A3: 白を透明化 (グリッド線のみ視認)
+    //   - 外部テンプレ: 画像を完全不透明 (白を透明化すると画像が破壊される可能性)
+    const templateImageData = isExternal
+        ? makeOpaqueRgbPsdImageData(blank)
+        : makeWhiteTransparentPsdImageData(blank);
+    // data層: 外部テンプレは白→透明、標準A3は従来通り (renderDataOnlyForPsd は透明背景)
     const dataImageData = isExternal
         ? makeWhiteTransparentPsdImageData(dataCanvas)
         : dataCanvas.getContext('2d').getImageData(0, 0, full.width, full.height);
@@ -166,6 +171,24 @@ function makeWhiteTransparentPsdImageData(canvas) {
     const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
         data[i + 3] = (data[i] > 248 && data[i + 1] > 248 && data[i + 2] > 248) ? 0 : 255;
+    }
+    return imageData;
+}
+
+// 完全不透明レイヤー: alpha を全て 255 に。透明RGB(0,0,0,0) はそのままだと
+// PSD読込で問題が出ることがあるので、alpha=0 のピクセルは白(255,255,255)に
+function makeOpaqueRgbPsdImageData(canvas) {
+    const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 255) {
+            // 半透明部分は白とブレンド (背景白前提)
+            const a = data[i + 3] / 255;
+            data[i]     = Math.round(data[i]     * a + 255 * (1 - a));
+            data[i + 1] = Math.round(data[i + 1] * a + 255 * (1 - a));
+            data[i + 2] = Math.round(data[i + 2] * a + 255 * (1 - a));
+            data[i + 3] = 255;
+        }
     }
     return imageData;
 }
