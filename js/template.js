@@ -984,13 +984,11 @@ function drawBooksOnTemplate(ctx, scale, bodyY, bodyW) {
         const boxY = baseBookY - bookBoxH - book.row * bookRowH;
         const bw = book.boxW;
 
-        // BOOKボックス（黒枠）
-        ctx.fillStyle = TEMPLATE.BG_COLOR;
+        // BOOKボックス（黒枠のみ、背景塗りなし）
         ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
         ctx.lineWidth = TEMPLATE.LINE_THICK;
         ctx.beginPath();
         ctx.roundRect(boxX, boxY, bw, bookBoxH, m(1));
-        ctx.fill();
         ctx.stroke();
 
         // BOOKテキスト（黒）
@@ -1958,11 +1956,10 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
         const clipStartY = y + (sF - absoluteStart) * rowH;
         const clipEndY = y + (eF - absoluteStart + 1) * rowH;
 
-        // ページ範囲でクリップ。上端外側の話者名ラベル分も含めて余裕を持たせる
+        // ページ範囲でクリップ
         ctx.save();
         ctx.beginPath();
-        const speakerOverflow = m(5);  // 話者名ラベル領域 (上端より外側)
-        ctx.rect(tx, clipStartY - speakerOverflow, colW, clipEndY - clipStartY + speakerOverflow);
+        ctx.rect(tx, clipStartY, colW, clipEndY - clipStartY);
         ctx.clip();
 
         // 背景（真の範囲で描画。クリップで自動的に切り取られる）
@@ -1988,18 +1985,10 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
 
         // 主たるページ判定: ブロック開始フレームがこのページ範囲内のときのみ話者名/タイプを描く
         const isPrimaryPage = block.startFrame >= absoluteStart && block.startFrame < endFrame;
-
-        // タイプラベル (normal以外時、主たるページのみ): ブロック内上部に
         const typeLabel = (typeof getDialogueTypeLabel === 'function') ? getDialogueTypeLabel(block.dialogueType) : null;
-        if (isPrimaryPage && typeLabel && !isShort) {
-            let typeFontSize = m(2.2) * getFontScale('dialogue');
-            ctx.font = `bold ${typeFontSize}px sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.fillText(typeLabel, tx + colW / 2, trueStartY + m(3));
-            textStartY = trueStartY + m(6);
-        }
-        // 話者名: 主たるページのみ、ブロック上端の少し上に枠付きで
-        if (isPrimaryPage && block.speakerName) {
+
+        // 話者名: 元位置 (ブロック内上部、枠なし、主たるページのみ)
+        if (isPrimaryPage && block.speakerName && !isShort) {
             let speakerFontSize = m(2.5) * getFontScale('dialogue');
             ctx.font = `bold ${speakerFontSize}px sans-serif`;
             while (ctx.measureText(block.speakerName).width > colW - m(1) && speakerFontSize > m(1.5) * getFontScale('dialogue')) {
@@ -2007,21 +1996,17 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
                 ctx.font = `bold ${speakerFontSize}px sans-serif`;
             }
             ctx.textAlign = 'center';
-            // ブロック開始位置と枠の間に少しスペース (gap = m(1))
-            const gap = m(1);
-            const speakerY = Math.max(speakerFontSize, trueStartY - gap);
-            // 枠背景は話者色 (セリフブロック背景と同色)
-            const fillColor = (typeof getSpeakerColorTemplate === 'function')
-                ? getSpeakerColorTemplate(block.speakerName)
-                : '#fff';
-            if (typeof drawSpeakerNameWithBox === 'function') {
-                drawSpeakerNameWithBox(ctx, block.speakerName, tx + colW / 2, speakerY, {
-                    padX: m(0.8), padY: m(0.3), radius: m(0.5), lineWidth: Math.max(0.6, scale * 0.15),
-                    fillColor
-                });
-            } else {
-                ctx.fillText(block.speakerName, tx + colW / 2, speakerY);
-            }
+            ctx.fillText(block.speakerName, tx + colW / 2, trueStartY + m(3));
+            textStartY = trueStartY + m(6);
+        }
+        // タイプラベル (normal以外、主たるページのみ): 話者名の下に小さめで併記
+        if (isPrimaryPage && typeLabel && !isShort) {
+            let typeFontSize = m(2.0) * getFontScale('dialogue');
+            ctx.font = `${typeFontSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            const typeY = block.speakerName ? trueStartY + m(6) : trueStartY + m(3);
+            ctx.fillText(typeLabel, tx + colW / 2, typeY);
+            textStartY = block.speakerName ? trueStartY + m(9) : trueStartY + m(6);
         }
 
         // セリフテキスト: 真の範囲全体に展開
@@ -3160,13 +3145,12 @@ function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex) 
         const boxX = colX + m(3);
         const boxY = baseBookY - bookBoxH - book.row * bookRowH;
         const bw = book.boxW;
-        ctx.fillStyle = '#fff';
+        // 背景塗りなし、枠のみ
         ctx.strokeStyle = '#000';
         ctx.lineWidth = Math.max(1, scale * 0.3);
         ctx.beginPath();
         if (ctx.roundRect) ctx.roundRect(boxX, boxY, bw, bookBoxH, m(1));
         else ctx.rect(boxX, boxY, bw, bookBoxH);
-        ctx.fill();
         ctx.stroke();
 
         ctx.fillStyle = '#000';
@@ -3764,45 +3748,35 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
 
-        // タイプラベル (normal以外時): ブロック内上部
         const typeLabel = (typeof getDialogueTypeLabel === 'function') ? getDialogueTypeLabel(block.dialogueType) : null;
-        if (isPrimary && typeLabel) {
-            let typeFont = fontSize * 0.75;
-            ctx.font = `bold ${typeFont}px sans-serif`;
-            const typeW = ctx.measureText(typeLabel).width;
-            if (typeW > innerW) {
-                typeFont = typeFont * (innerW / typeW);
-                ctx.font = `bold ${typeFont}px sans-serif`;
-            }
-            ctx.fillText(typeLabel, bx + cellW / 2, by + 2);
-        }
-        // 話者名: 常にブロック上端の外側 + 白枠付き (タイプ問わず、frame 0 でも上に出す)
+        // 話者名: 元位置 (ブロック内上部、枠なし、主たるBBoxのみ)
         if (isPrimary && block.speakerName) {
             let nameFont = fontSize * 0.8;
             ctx.font = `bold ${nameFont}px sans-serif`;
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
             const nameW = ctx.measureText(block.speakerName).width;
             if (nameW > innerW) {
                 nameFont = nameFont * (innerW / nameW);
                 ctx.font = `bold ${nameFont}px sans-serif`;
             }
-            ctx.textBaseline = 'alphabetic';
-            ctx.textAlign = 'center';
-            // ブロック開始位置と枠の間に少しスペース
-            const gap = Math.max(2, scale * 0.5);
-            const nameY = Math.max(nameFont, by - gap);
-            // 枠背景は話者色 (セリフブロック背景と同色)
-            const fillColor = (typeof getSpeakerColor === 'function')
-                ? getSpeakerColor(block.speakerName)
-                : '#fff';
-            if (typeof drawSpeakerNameWithBox === 'function') {
-                drawSpeakerNameWithBox(ctx, block.speakerName, bx + cellW / 2, nameY, {
-                    padX: nameFont * 0.3, padY: nameFont * 0.12, radius: nameFont * 0.18,
-                    lineWidth: Math.max(0.6, scale * 0.15), fillColor
-                });
-            } else {
-                ctx.fillText(block.speakerName, bx + cellW / 2, nameY);
+            ctx.fillText(block.speakerName, bx + cellW / 2, by + 2);
+        }
+        // タイプラベル (normal以外、主たるBBoxのみ): 話者名の下に小さめで併記
+        if (isPrimary && typeLabel) {
+            let typeFont = fontSize * 0.65;
+            ctx.font = `${typeFont}px sans-serif`;
+            const typeW = ctx.measureText(typeLabel).width;
+            if (typeW > innerW) {
+                typeFont = typeFont * (innerW / typeW);
+                ctx.font = `${typeFont}px sans-serif`;
             }
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
+            const typeY = block.speakerName ? by + 2 + fontSize * 0.95 : by + 2;
+            ctx.fillText(typeLabel, bx + cellW / 2, typeY);
         }
 
         if (block.text) {
@@ -3810,8 +3784,10 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
             const lines = String(block.text).split('\n').filter(s => s.length > 0);
             if (lines.length === 0) return;
             const lineW = innerW / lines.length;
-            // タイプラベル分1コマ予約 (話者名は外側なので予約不要)
-            const headerReserveCells = typeLabel ? 1 : 0;
+            // 話者名/タイプラベル分のコマ予約 (両方とも内部表示に戻ったため)
+            let headerReserveCells = 0;
+            if (block.speakerName) headerReserveCells += 1;
+            if (typeLabel) headerReserveCells += 1;
             // 全体のframe範囲で間隔を決める (列跨ぎでも同じ位置に来るよう)
             const fullStart = block.startFrame + headerReserveCells;
             const fullEnd = block.endFrame;

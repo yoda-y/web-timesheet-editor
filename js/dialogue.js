@@ -197,19 +197,19 @@ function drawDialogueBlocks(ctx) {
         ctx.fillStyle = getStyle('--text-color');
         ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center";
         let textStartY = startY + 14;
-        // セリフタイプラベル (normal以外時): ブロック内上部に「(off)」「(mono)」「(背)」
         const typeLabel = (typeof getDialogueTypeLabel === 'function') ? getDialogueTypeLabel(block.dialogueType) : null;
-        if (typeLabel && !isShort) {
-            ctx.fillText(typeLabel, tx + sndSec.cw / 2, startY + 12);
+        // 話者名: ブロック内上部 (元位置)
+        if (block.speakerName && !isShort) {
+            ctx.fillText(block.speakerName, tx + sndSec.cw / 2, startY + 12);
             textStartY = startY + 28;
         }
-        // 話者名は常にブロック上端の外側 (edit は枠なし、テキストのみ)
-        if (block.speakerName) {
-            const labelY = Math.max(10, startY - 2);
-            ctx.font = "bold 10px sans-serif";
-            ctx.textAlign = "center";
-            ctx.fillStyle = getStyle('--text-color');
-            ctx.fillText(block.speakerName, tx + sndSec.cw / 2, labelY);
+        // タイプラベル (normal以外): 話者名の下に小さめで併記
+        if (typeLabel && !isShort) {
+            ctx.font = "9px sans-serif";
+            const typeY = block.speakerName ? startY + 24 : startY + 12;
+            ctx.fillText(typeLabel, tx + sndSec.cw / 2, typeY);
+            textStartY = block.speakerName ? startY + 36 : startY + 28;
+            ctx.font = "bold 10px sans-serif";  // 元に戻す
         }
         if (block.text) {
             ctx.font = "bold 12px sans-serif";
