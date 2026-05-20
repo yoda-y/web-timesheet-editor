@@ -2304,13 +2304,23 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             });
         };
 
-        // テキスト背景描画ヘルパー
-        const drawTextBg = (text, cx, cy, fontSize, padding = m(0.8)) => {
-            ctx.font = `bold ${fontSize}px sans-serif`;
-            const tw = ctx.measureText(text).width;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-            ctx.fillRect(cx - tw / 2 - padding, cy - fontSize * 0.8, tw + padding * 2, fontSize * 1.2);
+        // テキスト背景描画ヘルパー (no-op: 下地撤廃で外部テンプレと統一)
+        const drawTextBg = () => {};
+        // ラベル右優先・左フォールバック (外部テンプレ pickLabelXSide 相当)
+        // 標準A3 では body 全幅を境界に使用 (BBox外余白なし)
+        const pickLabelXStd = (cxArg, offset, estLabelW) => {
+            const margin = m(0.5);
+            const halfW = estLabelW / 2;
+            const rightX = cxArg + offset;
+            const leftX = cxArg - offset;
+            // page範囲はctx.canvas.width で代用 (粗いがstd A3では十分)
+            const pageW = (ctx.canvas && ctx.canvas.width) || (x + colW * colCount);
+            if (rightX + halfW <= pageW - margin) return rightX;
+            if (leftX - halfW >= margin) return leftX;
+            return Math.min(Math.max(rightX, margin + halfW), pageW - margin - halfW);
         };
+        // 主要範囲線幅 (外部テンプレ rangeLineW 相当)
+        const rangeLineW = Math.max(1.6, scale * 0.35);
         const chooseOpenLabelTop = (desiredCenter, labelH, avoidRanges, topLimit, bottomLimit) => {
             const safeTop = topLimit + m(1);
             const safeBottom = bottomLimit - m(1);
@@ -2576,10 +2586,11 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
                 ctx.fillText(toL, tx + drawWidth / 2, endY - m(1.5));
             }
         } else if (vt === 'instructionText') {
-            // 処理・効果系: 範囲線 + 縦書き指示テキスト
+            // 処理・効果系: 範囲線 + 縦書き指示テキスト (太め+右寄せラベル)
             const lineX = tx + drawWidth / 2;
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+            ctx.lineWidth = rangeLineW;
             if (block.startFrame >= absoluteStart) {
                 ctx.beginPath(); ctx.moveTo(lineX - m(2), startY); ctx.lineTo(lineX + m(2), startY); ctx.stroke();
             }
@@ -2587,42 +2598,42 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
                 ctx.beginPath(); ctx.moveTo(lineX - m(2), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
             }
             ctx.beginPath(); ctx.moveTo(lineX, startY); ctx.lineTo(lineX, endY); ctx.stroke();
+            ctx.lineWidth = TEMPLATE.LINE_THIN;
             // 縦書き: [layer1] [layer2] ... [layerN] pKind の順で積み上げ
             const charH = m(2.6) * getFontScale('camera');
             const fontSize = m(2.1) * getFontScale('camera');
-            // 全体の文字数を計算
             const tgtSegments = tgtList.map(l => `[${l}]`.split(''));
             const pKindChars = pKind.split('');
-            const totalChars = tgtSegments.reduce((s, seg) => s + seg.length, 0) + pKindChars.length + tgtSegments.length; // tgt間にmargin1コマ相当
+            const totalChars = tgtSegments.reduce((s, seg) => s + seg.length, 0) + pKindChars.length + tgtSegments.length;
             const labelTopY = isLongBlock ? (startY + rowH * 7) : (startY + (endY - startY) / 2 - (totalChars * charH) / 2);
-            // 背景
-            const bgW = Math.max(m(4), fontSize * 1.35);
-            const bgH = totalChars * charH + m(1.6);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
-            ctx.fillRect(lineX - bgW / 2, labelTopY - m(0.8), bgW, bgH);
+            // 下地撤廃 (外部テンプレと統一)
+            // ラベル位置: ライン右寄せ。BBoxからはみ出すなら左に逃がす
+            const labelX = pickLabelXStd(lineX, m(2.5), fontSize + m(1));
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             ctx.font = `${fontSize}px sans-serif`;
             ctx.textAlign = 'center';
             let curY = labelTopY + charH / 2;
             const drawCharAdj = (c) => {
-                ctx.fillText(c, lineX, adjustCharY(curY, charH));
+                ctx.fillText(c, labelX, adjustCharY(curY, charH));
                 curY += charH;
             };
             tgtSegments.forEach(seg => {
                 seg.forEach(drawCharAdj);
-                curY += charH; // レイヤー間のスペース
+                curY += charH;
             });
             pKindChars.forEach(drawCharAdj);
         } else if (vt === 'fromTo' || vt === 'multiLayerDirection') {
-            // fromTo: 矢印と縦線 + 中間点
+            // fromTo: 矢印と縦線 + 中間点 (太め+ラベル右寄せ/自動逃がし)
             const lineX = tx + m(2.2);
-            const labelX = lineX + m(3.6);
+            let labelX = lineX + m(3.6);
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             // 上下矢印
             ctx.beginPath(); ctx.moveTo(lineX - m(1), startY); ctx.lineTo(lineX + m(1), startY); ctx.lineTo(lineX, startY + m(1.5)); ctx.closePath(); ctx.fill();
             ctx.beginPath(); ctx.moveTo(lineX - m(1), endY); ctx.lineTo(lineX + m(1), endY); ctx.lineTo(lineX, endY - m(1.5)); ctx.closePath(); ctx.fill();
+            ctx.lineWidth = rangeLineW;
             ctx.beginPath(); ctx.moveTo(lineX, startY + m(1.5)); ctx.lineTo(lineX, endY - m(1.5)); ctx.stroke();
+            ctx.lineWidth = TEMPLATE.LINE_THIN;
             // 中間点(waypoints)
             if (block.waypoints && block.waypoints.length > 0) {
                 block.waypoints.forEach(wp => {
@@ -2695,9 +2706,10 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             }
             const labelTopY = chooseOpenLabelTop(midY, labelTotalH, avoidRanges, startY, endY);
             const textStartY = labelTopY + targetBlockH + charH / 2;
-            const kindBgW = Math.max(m(4), m(2.8) * getFontScale('camera') * 1.35);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
-            ctx.fillRect(labelX - kindBgW / 2, textStartY - charH / 2 - m(0.8), kindBgW, chars.length * charH + m(1.6));
+            // ラベルX: 右寄せ + ページ幅に応じた自動逃がし
+            const kindFontPx = m(2.8) * getFontScale('camera');
+            labelX = pickLabelXStd(lineX, m(3.6), kindFontPx + m(1));
+            // 下地撤廃
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             chars.forEach((c, i) => {
                 if (c === "ー") c = "丨";
@@ -2707,16 +2719,16 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
                 ctx.font = `${m(2) * getFontScale('camera')}px sans-serif`;
                 let y2 = labelTopY + targetGap;
                 tgtList.slice().reverse().forEach(l => {
-                    drawTextBg(`[${l}]`, labelX, y2, m(2) * getFontScale('camera'), m(0.5));
                     ctx.fillStyle = TEMPLATE.TEXT_COLOR;
                     ctx.fillText(`[${l}]`, labelX, y2);
                     y2 += targetGap;
                 });
             }
         } else {
-            // デフォルト: 縦線とテキスト
+            // デフォルト (fallback): 縦範囲線 + kind縦書き + targets小 (外部テンプレ J 相当)
             const lineX = tx + drawWidth / 2;
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
+            ctx.lineWidth = rangeLineW;
             if (block.startFrame >= absoluteStart) {
                 ctx.beginPath(); ctx.moveTo(lineX - m(2), startY); ctx.lineTo(lineX + m(2), startY); ctx.stroke();
             }
@@ -2724,18 +2736,29 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
                 ctx.beginPath(); ctx.moveTo(lineX - m(2), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
             }
             ctx.beginPath(); ctx.moveTo(lineX, startY); ctx.lineTo(lineX, endY); ctx.stroke();
+            ctx.lineWidth = TEMPLATE.LINE_THIN;
             const midY = labelAnchorY;
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
-            ctx.font = `bold ${m(2.5) * getFontScale('camera')}px sans-serif`;
+            // kind縦書き + targets小、ラベル右寄せ
+            const kindFontPx = m(2.5) * getFontScale('camera');
+            const kindCharH = kindFontPx * 1.15;
+            const tgtFontPx = m(1.8) * getFontScale('camera');
+            const tgtCharH = tgtFontPx * 1.2;
+            const kindChars = pKind.split('');
+            const labelX = pickLabelXStd(lineX, m(3), kindFontPx + m(1));
+            const kindMidY = midY;
+            const kindStartY = kindMidY - (kindChars.length - 1) * kindCharH / 2;
+            ctx.font = `bold ${kindFontPx}px sans-serif`;
             ctx.textAlign = 'center';
-            // tgts を上、pKind を下に積み上げ
-            let dispY = midY + m(1);
+            kindChars.forEach((c, i) => {
+                ctx.fillText(c === 'ー' ? '丨' : c, labelX, kindStartY + i * kindCharH);
+            });
             if (tgtList.length) {
-                const lineH = m(3) * getFontScale('camera');
-                let tgtY = dispY - lineH * tgtList.length;
-                tgtList.forEach(l => { ctx.fillText(`[${l}]`, lineX, tgtY); tgtY += lineH; });
+                ctx.font = `${tgtFontPx}px sans-serif`;
+                const tgtTopY = kindStartY - kindCharH / 2 - tgtCharH * tgtList.length - m(0.5);
+                let ty = tgtTopY + tgtCharH / 2;
+                tgtList.forEach(l => { ctx.fillText(`[${l}]`, labelX, ty); ty += tgtCharH; });
             }
-            ctx.fillText(pKind, lineX, dispY);
         }
         ctx.restore();
     });
