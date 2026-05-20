@@ -1151,9 +1151,9 @@ window.addEventListener('keydown', (e) => {
             return;
         }
     }
-    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT') {
         if (e.key === 'Enter') {
-            if (['speakerNameInput', 'dialogueTextInput', 'dialogueStartInput', 'dialogueEndInput'].includes(e.target.id)) return;
+            if (['speakerNameInput', 'dialogueTextInput', 'dialogueStartInput', 'dialogueEndInput', 'dialogueTypeInput'].includes(e.target.id)) return;
             if (['cameraKindInput', 'camFromText', 'camToText', 'camLayersFrom', 'camLayersTo', 'camDirection', 'camNumericFr', 'camFairingMode', 'camFreeText', 'camTargetLayers', 'camWaypoints', 'camMemo', 'cameraStartInput', 'cameraEndInput'].includes(e.target.id)) return;
         }
         if (e.target.id !== 'cellInput') return;

@@ -171,16 +171,20 @@ window.exportXDTS = async function(arg) {
     });
     if (!opts) return;
 
-    // XDTS は仕様上、外部テンプレ情報 (画像/BBox/customFields) を保持できない。
+    // XDTS は仕様上、外部テンプレ情報・customFields・セリフタイプを保持できない。
     // 該当データが存在する場合は警告。
     const hasExtTpl = (typeof getCurrentExternalTemplate === 'function') && !!getCurrentExternalTemplate();
     const cfKeys = (metaData && metaData.customFields && typeof metaData.customFields === 'object')
         ? Object.keys(metaData.customFields).filter(k => metaData.customFields[k] !== '' && metaData.customFields[k] != null)
         : [];
-    if (hasExtTpl || cfKeys.length > 0) {
+    const dlgTypeBlocks = (typeof dialogueBlocks !== 'undefined' && Array.isArray(dialogueBlocks))
+        ? dialogueBlocks.filter(b => b && b.dialogueType && b.dialogueType !== 'normal')
+        : [];
+    if (hasExtTpl || cfKeys.length > 0 || dlgTypeBlocks.length > 0) {
         const items = [];
         if (hasExtTpl) items.push('外部テンプレートの紐付け（画像/BBox配置）');
         if (cfKeys.length > 0) items.push(`カスタム項目 (${cfKeys.length}件)`);
+        if (dlgTypeBlocks.length > 0) items.push(`セリフタイプ (off/mono/背) (${dlgTypeBlocks.length}件)`);
         const msg = `XDTS形式では以下の情報を保持できません:\n\n・${items.join('\n・')}\n\n` +
             `これらを保持するには TDTS 形式で保存してください。\n` +
             `このまま XDTS で書き出しますか？`;
