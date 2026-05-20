@@ -161,13 +161,11 @@ function drawDialogueBlocks(ctx) {
         if (typeLabel && !isShort) {
             ctx.fillText(typeLabel, tx + sndSec.cw / 2, startY + 12);
             textStartY = startY + 28;
-            // 話者名はブロック上端より外側に
-            if (block.speakerName) {
-                ctx.fillText(block.speakerName, tx + sndSec.cw / 2, startY - 4);
-            }
-        } else if (block.speakerName && !isShort) {
-            ctx.fillText(block.speakerName, tx + sndSec.cw / 2, startY + 12);
-            textStartY = startY + 28;
+        }
+        // 話者名は常にブロック上端の外側 (タイプ問わず、frame 0 でも上に出す)
+        if (block.speakerName) {
+            const labelY = Math.max(8, startY - 4);
+            ctx.fillText(block.speakerName, tx + sndSec.cw / 2, labelY);
         }
         if (block.text) {
             ctx.font = "bold 12px sans-serif";

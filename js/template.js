@@ -1985,26 +1985,17 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
         let textStartY = trueStartY + m(4);
         const isShort = trueBlockH <= rowH * 2;
 
-        // タイプラベル + 話者名 (normal以外時はタイプを内部、話者名を外側に逃がす)
+        // タイプラベル (normal以外時): ブロック内上部に
         const typeLabel = (typeof getDialogueTypeLabel === 'function') ? getDialogueTypeLabel(block.dialogueType) : null;
         if (typeLabel && !isShort) {
-            // タイプラベルをブロック内上部に
             let typeFontSize = m(2.2) * getFontScale('dialogue');
             ctx.font = `bold ${typeFontSize}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.fillText(typeLabel, tx + colW / 2, trueStartY + m(3));
             textStartY = trueStartY + m(6);
-            // 話者名はブロック上端より外側 (frame 0 でも外に出す)
-            if (block.speakerName) {
-                let speakerFontSize = m(2.5) * getFontScale('dialogue');
-                ctx.font = `bold ${speakerFontSize}px sans-serif`;
-                while (ctx.measureText(block.speakerName).width > colW - m(1) && speakerFontSize > m(1.5) * getFontScale('dialogue')) {
-                    speakerFontSize -= m(0.2);
-                    ctx.font = `bold ${speakerFontSize}px sans-serif`;
-                }
-                ctx.fillText(block.speakerName, tx + colW / 2, trueStartY - m(1));
-            }
-        } else if (block.speakerName && !isShort) {
+        }
+        // 話者名: 常にブロック上端の外側 (タイプ問わず、frame 0 でも上に出す)
+        if (block.speakerName) {
             let speakerFontSize = m(2.5) * getFontScale('dialogue');
             ctx.font = `bold ${speakerFontSize}px sans-serif`;
             while (ctx.measureText(block.speakerName).width > colW - m(1) && speakerFontSize > m(1.5) * getFontScale('dialogue')) {
@@ -2012,8 +2003,9 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
                 ctx.font = `bold ${speakerFontSize}px sans-serif`;
             }
             ctx.textAlign = 'center';
-            ctx.fillText(block.speakerName, tx + colW / 2, trueStartY + m(3));
-            textStartY = trueStartY + m(6);
+            // ブロック上端より少し上、ただし最低限のY確保
+            const speakerY = Math.max(speakerFontSize, trueStartY - m(0.5));
+            ctx.fillText(block.speakerName, tx + colW / 2, speakerY);
         }
 
         // セリフテキスト: 真の範囲全体に展開
@@ -3756,10 +3748,9 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
 
-        // タイプラベル + 話者名 (normal以外時はタイプを内部、話者名を外側に逃がす)
+        // タイプラベル (normal以外時): ブロック内上部
         const typeLabel = (typeof getDialogueTypeLabel === 'function') ? getDialogueTypeLabel(block.dialogueType) : null;
         if (isPrimary && typeLabel) {
-            // タイプラベルをブロック内上部 (旧 speakerName位置)
             let typeFont = fontSize * 0.75;
             ctx.font = `bold ${typeFont}px sans-serif`;
             const typeW = ctx.measureText(typeLabel).width;
@@ -3768,29 +3759,21 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
                 ctx.font = `bold ${typeFont}px sans-serif`;
             }
             ctx.fillText(typeLabel, bx + cellW / 2, by + 2);
-            // 話者名はブロック上端より外側に
-            if (block.speakerName) {
-                let nameFont = fontSize * 0.8;
-                ctx.font = `bold ${nameFont}px sans-serif`;
-                ctx.textBaseline = 'bottom';
-                const nameW = ctx.measureText(block.speakerName).width;
-                if (nameW > innerW) {
-                    nameFont = nameFont * (innerW / nameW);
-                    ctx.font = `bold ${nameFont}px sans-serif`;
-                }
-                ctx.fillText(block.speakerName, bx + cellW / 2, by - 1);
-                ctx.textBaseline = 'top';
-            }
-        } else if (isPrimary && block.speakerName) {
-            // 通常 (normal): 話者名をブロック内上部 (従来通り)
+        }
+        // 話者名: 常にブロック上端の外側 (タイプ問わず、frame 0 でも上に出す)
+        if (isPrimary && block.speakerName) {
             let nameFont = fontSize * 0.8;
             ctx.font = `bold ${nameFont}px sans-serif`;
+            ctx.textBaseline = 'bottom';
             const nameW = ctx.measureText(block.speakerName).width;
             if (nameW > innerW) {
                 nameFont = nameFont * (innerW / nameW);
                 ctx.font = `bold ${nameFont}px sans-serif`;
             }
-            ctx.fillText(block.speakerName, bx + cellW / 2, by + 2);
+            // 上端より少し上、ただし最低限のY確保 (canvas 外に出ないよう)
+            const nameY = Math.max(nameFont, by - 1);
+            ctx.fillText(block.speakerName, bx + cellW / 2, nameY);
+            ctx.textBaseline = 'top';
         }
 
         if (block.text) {
@@ -3798,10 +3781,10 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
             const lines = String(block.text).split('\n').filter(s => s.length > 0);
             if (lines.length === 0) return;
             const lineW = innerW / lines.length;
-            // 話者名分1コマ予約 (列跨ぎ時も block 開始基準で一貫させる)
-            const speakerReserveCells = block.speakerName ? 1 : 0;
+            // タイプラベル分1コマ予約 (話者名は外側なので予約不要)
+            const headerReserveCells = typeLabel ? 1 : 0;
             // 全体のframe範囲で間隔を決める (列跨ぎでも同じ位置に来るよう)
-            const fullStart = block.startFrame + speakerReserveCells;
+            const fullStart = block.startFrame + headerReserveCells;
             const fullEnd = block.endFrame;
             const availableFrames = fullEnd - fullStart + 1;
             if (availableFrames <= 0) return;
