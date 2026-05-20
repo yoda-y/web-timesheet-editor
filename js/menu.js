@@ -1062,7 +1062,30 @@ const HELP_MANUAL_HTML_JA = `
 <ul>
   <li><b>Edit</b>: タイムシート入力（現在のメイン画面）</li>
   <li><b>Preview</b>: 用紙テンプレートへの流し込み、手書き、画像/PSD書き出し</li>
-  <li><b>Template</b>: 外部テンプレートと座標定義（今後実装予定）</li>
+</ul>
+
+<h4 style="margin:14px 0 8px; color:var(--select-border);">外部テンプレート (v0.8.0〜)</h4>
+<ul>
+  <li>Previewサイドバーの「用紙テンプレート」セレクトで <b>標準A3</b> / <b>外部テンプレ</b> を切替</li>
+  <li><b>追加</b>ボタン: 新規テンプレート作成（画像インポート + BBox配置）</li>
+  <li><b>設定</b>ボタン: 既存テンプレートの一覧・編集・複製・JSONインポート/エクスポート</li>
+  <li><b>BBox編集</b>ボタン: 現在のテンプレで画像上に座標領域を視覚的に配置</li>
+  <li>対応BBox: タイトル/カット/シーン/カット尺/作画者/演出/作監/動画/タイムライン4種(action/cell/sound/camera) ×2/カスタム項目4個 等</li>
+  <li>タイムラインBBoxは frames/columns プロパティで「何コマ何列か」を指定</li>
+</ul>
+
+<h4 style="margin:14px 0 8px; color:var(--select-border);">カスタム項目</h4>
+<ul>
+  <li>外部テンプレで custom1-4 BBox を有効化すると、サイドバーに「カスタム項目」入力欄が出現</li>
+  <li>テンプレ毎にラベルとタイプ (text/multiline) を設定可能</li>
+  <li>TDTS保存に含まれる (本家TDTSでは無視される)、XDTSでは保持されない</li>
+</ul>
+
+<h4 style="margin:14px 0 8px; color:var(--select-border);">セリフタイプ (v0.8.0〜)</h4>
+<ul>
+  <li>セリフ編集モーダルの「タイプ」セレクトで <b>通常 / off / mono / 背</b> を選択</li>
+  <li><b>通常以外</b>: 話者名の下に <code>(off)</code> <code>(mono)</code> <code>(背)</code> を小さく併記</li>
+  <li>TDTS保存に含まれる、XDTSでは保持されない (書出時に警告)</li>
 </ul>
 
 <h4 style="margin:14px 0 8px; color:var(--select-border);">Previewモード</h4>
@@ -1077,10 +1100,19 @@ const HELP_MANUAL_HTML_JA = `
 
 <h4 style="margin:14px 0 8px; color:var(--select-border);">ファイル形式</h4>
 <ul>
-  <li><b>TDTS</b> (.tdts): 東映デジタルタイムシート形式。ACTION/SOUND/CELL/CAMERA + BOOK + 文字色対応</li>
-  <li><b>XDTS</b> (.xdts): 標準交換形式。CELL/SOUND/CAMERA のみ対応（ACTION/CELL は統合）</li>
+  <li><b>TDTS</b> (.tdts): 東映デジタルタイムシート形式。ACTION/SOUND/CELL/CAMERA + BOOK + 文字色 + 外部テンプレ独自データ (customFields/dialogueType等) 対応</li>
+  <li><b>XDTS</b> (.xdts): 標準交換形式。CELL/SOUND/CAMERA のみ対応（ACTION/CELL は統合）。外部テンプレ/カスタム項目/セリフタイプは保持されない (書出時に警告)</li>
   <li>インポート時はフィールド単位で取込項目を選択可能</li>
+  <li>XDTS読み込みは <b>4モード</b>: 完全新規 / 新しいシートとして / 上書き (現在のシート) / 兼用カットとして</li>
   <li>上書き保存 (<b>Ctrl+S</b>) はダイアログなしで保存、別名保存 (<b>Ctrl+Shift+S</b>) は毎回ダイアログ</li>
+</ul>
+
+<h4 style="margin:14px 0 8px; color:var(--select-border);">画像/PSD書き出し</h4>
+<ul>
+  <li>サイドバーの「書き出し」で PNG / JPG / PSD を選択、DPI指定可能</li>
+  <li><b>PSD</b>: ページごとにグループ化、4レイヤー (<code>background</code> / <code>template</code> / <code>data</code> / <code>memo</code>) で分離</li>
+  <li>外部テンプレ使用時は <code>template</code> 層に画像、<code>data</code> 層にBBox描画</li>
+  <li>ResolutionInfo (DPI) 埋め込み済みなのでクリスタ等でも実寸表示</li>
 </ul>
 
 <h4 style="margin:14px 0 8px; color:var(--select-border);">入力色（リテイク赤など）</h4>
@@ -1127,7 +1159,30 @@ const HELP_MANUAL_HTML_EN = `
 <ul>
   <li><b>Edit</b>: Timesheet input (current main view)</li>
   <li><b>Preview</b>: Imprint data on paper templates, draw freehand, and export images/PSD</li>
-  <li><b>Template</b>: External templates and coordinate definition (planned)</li>
+</ul>
+
+<h4 style="margin:14px 0 8px; color:var(--select-border);">External Templates (v0.8.0+)</h4>
+<ul>
+  <li>Use the "Paper Template" select in the Preview sidebar to switch between <b>Standard A3</b> / <b>External</b></li>
+  <li><b>Add</b>: Create new template (image import + BBox placement)</li>
+  <li><b>Settings</b>: Manage existing templates (list, edit, duplicate, JSON import/export)</li>
+  <li><b>Edit BBox</b>: Visually place coordinate regions on the template image</li>
+  <li>Supported BBoxes: title/cut/scene/length/staff/timeline (action/cell/sound/camera ×2)/custom fields 1-4, etc.</li>
+  <li>Timeline BBoxes have frames/columns properties to define grid size</li>
+</ul>
+
+<h4 style="margin:14px 0 8px; color:var(--select-border);">Custom Fields</h4>
+<ul>
+  <li>Enabling custom1-4 BBoxes in an external template adds "Custom Fields" inputs to the sidebar</li>
+  <li>Label and type (text/multiline) are configurable per template</li>
+  <li>Saved in TDTS (ignored by reference TDTS readers), not retained in XDTS</li>
+</ul>
+
+<h4 style="margin:14px 0 8px; color:var(--select-border);">Dialogue Type (v0.8.0+)</h4>
+<ul>
+  <li>Choose <b>Normal / off / mono / 背</b> from the Type select in the dialogue editor</li>
+  <li>Non-normal types show <code>(off)</code> <code>(mono)</code> <code>(背)</code> below the speaker name</li>
+  <li>Saved in TDTS, not retained in XDTS (warning on save)</li>
 </ul>
 
 <h4 style="margin:14px 0 8px; color:var(--select-border);">Preview Mode</h4>
@@ -1142,10 +1197,19 @@ const HELP_MANUAL_HTML_EN = `
 
 <h4 style="margin:14px 0 8px; color:var(--select-border);">File Formats</h4>
 <ul>
-  <li><b>TDTS</b> (.tdts): Toei Digital Time Sheet. ACTION/SOUND/CELL/CAMERA + BOOK + font colors</li>
-  <li><b>XDTS</b> (.xdts): Exchange standard. CELL/SOUND/CAMERA only (ACTION/CELL merged)</li>
+  <li><b>TDTS</b> (.tdts): Toei Digital Time Sheet. ACTION/SOUND/CELL/CAMERA + BOOK + font colors + web editor extras (customFields/dialogueType)</li>
+  <li><b>XDTS</b> (.xdts): Exchange standard. CELL/SOUND/CAMERA only (ACTION/CELL merged). External template / custom fields / dialogue type are NOT preserved (warning on save)</li>
   <li>You can pick which fields to import on the dialog</li>
+  <li>XDTS import has <b>4 modes</b>: New Document / Add as New Sheet / Overwrite Current Sheet / Add as Shared Cut</li>
   <li>Save (<b>Ctrl+S</b>) writes silently. Save As (<b>Ctrl+Shift+S</b>) always shows the dialog</li>
+</ul>
+
+<h4 style="margin:14px 0 8px; color:var(--select-border);">Image / PSD Export</h4>
+<ul>
+  <li>Sidebar "Export" supports PNG / JPG / PSD with DPI control</li>
+  <li><b>PSD</b>: Pages grouped, 4 layers (<code>background</code> / <code>template</code> / <code>data</code> / <code>memo</code>)</li>
+  <li>With external templates, <code>template</code> layer holds the image and <code>data</code> layer holds BBox content</li>
+  <li>ResolutionInfo (DPI) is embedded for correct scaling in Clip Studio and other apps</li>
 </ul>
 
 <h4 style="margin:14px 0 8px; color:var(--select-border);">Input Color (e.g. retake red)</h4>
