@@ -2005,9 +2005,14 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
             }
             ctx.textAlign = 'center';
             const speakerY = Math.max(speakerFontSize, trueStartY - m(0.5));
+            // 枠背景は話者色 (セリフブロック背景と同色)
+            const fillColor = (typeof getSpeakerColorTemplate === 'function')
+                ? getSpeakerColorTemplate(block.speakerName)
+                : '#fff';
             if (typeof drawSpeakerNameWithBox === 'function') {
                 drawSpeakerNameWithBox(ctx, block.speakerName, tx + colW / 2, speakerY, {
-                    padX: m(0.8), padY: m(0.3), radius: m(0.5), lineWidth: Math.max(0.6, scale * 0.15)
+                    padX: m(0.8), padY: m(0.3), radius: m(0.5), lineWidth: Math.max(0.6, scale * 0.15),
+                    fillColor
                 });
             } else {
                 ctx.fillText(block.speakerName, tx + colW / 2, speakerY);
@@ -3778,10 +3783,14 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
             ctx.textBaseline = 'alphabetic';
             ctx.textAlign = 'center';
             const nameY = Math.max(nameFont, by - 1);
+            // 枠背景は話者色 (セリフブロック背景と同色)
+            const fillColor = (typeof getSpeakerColor === 'function')
+                ? getSpeakerColor(block.speakerName)
+                : '#fff';
             if (typeof drawSpeakerNameWithBox === 'function') {
                 drawSpeakerNameWithBox(ctx, block.speakerName, bx + cellW / 2, nameY, {
                     padX: nameFont * 0.3, padY: nameFont * 0.12, radius: nameFont * 0.18,
-                    lineWidth: Math.max(0.6, scale * 0.15)
+                    lineWidth: Math.max(0.6, scale * 0.15), fillColor
                 });
             } else {
                 ctx.fillText(block.speakerName, bx + cellW / 2, nameY);
