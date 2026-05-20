@@ -134,6 +134,47 @@ window.getDialogueTypeLabel = function(type) {
     }
 };
 
+// 共通: 話者名を枠付きで描画 (白背景+黒枠+黒文字)
+// ctx.font / ctx.textAlign は呼出側で設定済み前提。padding/角丸はscale引数で調整
+window.drawSpeakerNameWithBox = function(ctx, text, cx, baselineY, opts) {
+    if (!text) return;
+    opts = opts || {};
+    const padX = opts.padX != null ? opts.padX : 2;
+    const padY = opts.padY != null ? opts.padY : 1;
+    const radius = opts.radius != null ? opts.radius : 1.5;
+    const strokeColor = opts.strokeColor || '#000';
+    const fillColor = opts.fillColor || '#fff';
+    const textColor = opts.textColor || '#000';
+    const lineWidth = opts.lineWidth != null ? opts.lineWidth : 0.8;
+    // フォントサイズの抽出 (font文字列から px数値)
+    const fontMatch = /(\d+(?:\.\d+)?)px/.exec(ctx.font || '');
+    const fontPx = fontMatch ? parseFloat(fontMatch[1]) : 12;
+    const tw = ctx.measureText(String(text)).width;
+    // baselineY を alphabetic 基準として、ボックスは文字の上下に padding
+    const boxW = tw + padX * 2;
+    const boxH = fontPx + padY * 2;
+    const boxX = cx - boxW / 2;
+    // alphabetic 基準なので、文字の上端は baselineY - fontPx*0.8 程度
+    const boxY = baselineY - fontPx * 0.85 - padY;
+    ctx.save();
+    // 背景
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(boxX, boxY, boxW, boxH, radius);
+    } else {
+        ctx.rect(boxX, boxY, boxW, boxH);
+    }
+    ctx.fill();
+    ctx.stroke();
+    // テキスト
+    ctx.fillStyle = textColor;
+    ctx.fillText(text, cx, baselineY);
+    ctx.restore();
+};
+
 // === セリフブロック描画 ===
 function drawDialogueBlocks(ctx) {
     let sndSec = sections.find(s => s.type === "SOUND");
@@ -164,8 +205,14 @@ function drawDialogueBlocks(ctx) {
         }
         // 話者名は常にブロック上端の外側 (タイプ問わず、frame 0 でも上に出す)
         if (block.speakerName) {
-            const labelY = Math.max(8, startY - 4);
-            ctx.fillText(block.speakerName, tx + sndSec.cw / 2, labelY);
+            const labelY = Math.max(10, startY - 2);
+            ctx.font = "bold 10px sans-serif";
+            ctx.textAlign = "center";
+            if (typeof drawSpeakerNameWithBox === 'function') {
+                drawSpeakerNameWithBox(ctx, block.speakerName, tx + sndSec.cw / 2, labelY, { padX: 3, padY: 1, radius: 2 });
+            } else {
+                ctx.fillText(block.speakerName, tx + sndSec.cw / 2, labelY);
+            }
         }
         if (block.text) {
             ctx.font = "bold 12px sans-serif";
