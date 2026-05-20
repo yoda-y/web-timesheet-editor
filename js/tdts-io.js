@@ -448,15 +448,15 @@ function chooseTimesheetFileFromFolder(candidates) {
             modal.className = 'settings-modal';
             modal.innerHTML = `
                 <div class="settings-modal-inner" style="min-width:360px;">
-                    <h3>フォルダから開く</h3>
-                    <div class="io-note">フォルダ内のTDTS/XDTSを選んで開きます。新規で開く場合は、TDTSと同名フォルダ内の手書きPNG/INIも自動で探します。</div>
+                    <h3>${typeof t === 'function' ? t('folderOpen.title') : 'フォルダから開く'}</h3>
+                    <div class="io-note">${typeof t === 'function' ? t('folderOpen.note') : 'フォルダ内のTDTS/XDTSを選んで開きます。新規で開く場合は、TDTSと同名フォルダ内の手書きPNG/INIも自動で探します。'}</div>
                     <div class="settings-row" style="align-items:flex-start;">
-                        <label>ファイル:</label>
+                        <label>${typeof t === 'function' ? t('folderOpen.file') : 'ファイル:'}</label>
                         <select id="folder-open-select" style="flex:1; min-width:220px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick); padding:4px;"></select>
                     </div>
                     <div class="settings-actions">
-                        <button id="folder-open-ok" class="primary">開く</button>
-                        <button id="folder-open-cancel">キャンセル</button>
+                        <button id="folder-open-ok" class="primary">${typeof t === 'function' ? t('btn.open') : '開く'}</button>
+                        <button id="folder-open-cancel">${typeof t === 'function' ? t('btn.cancel') : 'キャンセル'}</button>
                     </div>
                 </div>
             `;

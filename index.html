@@ -71,10 +71,10 @@
     </div>
     <div class="sidebar-content">
       <select id="template-select" class="sidebar-select">
-        <optgroup label="標準">
-          <option value="default">A3 標準</option>
+        <optgroup label="標準" data-i18n-label="template.group.standard">
+          <option value="default" data-i18n="template.defaultA3">A3 標準</option>
         </optgroup>
-        <optgroup label="外部テンプレート" id="template-select-external-group">
+        <optgroup label="外部テンプレート" id="template-select-external-group" data-i18n-label="template.group.external">
           <!-- JSが動的生成 -->
         </optgroup>
         <option value="__new_external__" data-i18n="extTpl.newOption">+ 新規テンプレート追加...</option>
@@ -183,12 +183,12 @@
   <div class="mode-tab" data-mode="preview">Preview</div>
   <div class="mode-tabs-spacer"></div>
   <div id="page-nav" class="page-nav">
-    <button id="page-prev" onclick="goToPrevPage()" title="前のページ">◀</button>
+    <button id="page-prev" onclick="goToPrevPage()" title="前のページ" data-i18n-title="page.prev">◀</button>
     <span id="page-indicator">1 / 1</span>
-    <button id="page-next" onclick="goToNextPage()" title="次のページ">▶</button>
-    <select id="preview-cut-select" class="preview-cut-select" title="兼用カット切替" onchange="switchToSharedCut(this.value)" style="display:none;"></select>
+    <button id="page-next" onclick="goToNextPage()" title="次のページ" data-i18n-title="page.next">▶</button>
+    <select id="preview-cut-select" class="preview-cut-select" title="兼用カット切替" data-i18n-title="sharedCut.switch" onchange="switchToSharedCut(this.value)" style="display:none;"></select>
   </div>
-  <div id="current-file-label" class="current-file-label" data-i18n="file.unsaved" title="現在のファイル">未保存</div>
+  <div id="current-file-label" class="current-file-label" data-i18n="file.unsaved" title="現在のファイル" data-i18n-title="file.current">未保存</div>
   <div id="mode-status" class="mode-status" data-i18n="status.saved">保存済み</div>
 </div>
 
@@ -201,7 +201,7 @@
   <div class="menu-item" data-menu="settings" data-i18n="menu.settings">設定</div>
   <div class="menu-item" data-menu="help" data-i18n="menu.help">ヘルプ</div>
   <div class="menubar-spacer"></div>
-  <div class="menubar-inline menubar-tool-sizes" id="drawing-size-controls" title="プレビューモードの描画サイズ">
+  <div class="menubar-inline menubar-tool-sizes" id="drawing-size-controls" title="プレビューモードの描画サイズ" data-i18n-title="label.drawingSize">
     <span class="tool-size-label" data-i18n="label.penSize">ペン:</span>
     <div class="tool-size-group" data-tool-size-group="pen">
       <button class="tool-size-btn" data-drawing-size-tool="pen" data-drawing-size="large" data-i18n="size.large">大</button>
@@ -215,7 +215,7 @@
       <button class="tool-size-btn" data-drawing-size-tool="eraser" data-drawing-size="small" data-i18n="size.small">小</button>
     </div>
   </div>
-  <div class="menubar-inline" id="quick-palette" title="入力色を選択（次に入力するセルに自動適用）">
+  <div class="menubar-inline" id="quick-palette" title="入力色を選択（次に入力するセルに自動適用）" data-i18n-title="label.inputColorTitle">
     <span style="font-size:10px; color:var(--grid-medium);" data-i18n="label.inputColor">入力色:</span>
     <button class="qp-swatch active" data-fc="0" title="ID 0"></button>
     <button class="qp-swatch" data-fc="1" title="ID 1"></button>
@@ -338,10 +338,9 @@
     <h3 data-i18n="modal.about">バージョン情報</h3>
     <div style="font-size:12px; line-height:1.8;">
       <div><strong>web_timesheet_editer</strong></div>
-      <div>バージョン: <span id="about-version">Beta</span></div>
+      <div><span data-i18n="about.versionLabel">バージョン: </span><span id="about-version">Beta</span></div>
       <div style="margin-top:10px; color:var(--grid-medium); font-size:11px;">
-        ブラウザ向けタイムシートエディタ<br>
-        TDTS / XDTS フォーマット対応
+        <span data-i18n-html="about.desc">ブラウザ向けタイムシートエディタ<br>TDTS / XDTS フォーマット対応</span>
       </div>
       <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--grid-light); font-size:11px;">
         <div><strong>License</strong></div>
@@ -353,14 +352,13 @@
           <a href="https://github.com/yoda-y/web-timesheet-editor" target="_blank" rel="noopener" style="color:var(--accent-blue);">GitHub</a>
         </div>
         <div style="margin-top:8px;">
-          <button id="about-changelog-btn" style="font-size:11px; padding:4px 10px; cursor:pointer;">更新履歴を見る</button>
+          <button id="about-changelog-btn" style="font-size:11px; padding:4px 10px; cursor:pointer;" data-i18n="about.changelog">更新履歴を見る</button>
         </div>
       </div>
       <div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--grid-light); font-size:11px;">
-        <div><strong>免責事項 (Disclaimer)</strong></div>
+        <div><strong data-i18n="about.disclaimerTitle">免責事項 (Disclaimer)</strong></div>
         <div style="margin-top:4px; color:var(--grid-medium); line-height:1.6;">
-          本ツールは個人が開発した非公式の互換ツールです。各アニメーション制作会社や、XDTS/TDTSフォーマットの策定元（株式会社セルシス、東映アニメーション株式会社など）とは一切関係ありません。<br><br>
-          本ツールを使用したことによるデータの破損や、業務上のトラブルについて、作者は一切の責任を負いません。本番環境で使用する際は、必ず事前にバックアップを取得してください。
+          <span data-i18n-html="about.disclaimerBody">本ツールは個人が開発した非公式の互換ツールです。各アニメーション制作会社や、XDTS/TDTSフォーマットの策定元（株式会社セルシス、東映アニメーション株式会社など）とは一切関係ありません。<br><br>本ツールを使用したことによるデータの破損や、業務上のトラブルについて、作者は一切の責任を負いません。本番環境で使用する際は、必ず事前にバックアップを取得してください。</span>
         </div>
       </div>
     </div>
@@ -373,12 +371,12 @@
 <!-- 更新履歴モーダル -->
 <div id="changelog-modal" class="settings-modal" style="display:none;">
   <div class="settings-modal-inner" style="min-width:520px; max-width:720px; max-height:80vh; display:flex; flex-direction:column;">
-    <h3>更新履歴</h3>
+    <h3 data-i18n="about.changelogTitle">更新履歴</h3>
     <div id="changelog-content" style="flex:1; overflow-y:auto; padding:12px 4px; font-size:12px; line-height:1.7; white-space:pre-wrap; font-family:monospace;">
-      読み込み中...
+      <span data-i18n="common.loading">読み込み中...</span>
     </div>
     <div class="settings-actions">
-      <button id="changelog-close" class="primary">閉じる</button>
+      <button id="changelog-close" class="primary" data-i18n="btn.close">閉じる</button>
     </div>
   </div>
 </div>
@@ -472,7 +470,7 @@
           <div class="settings-row"><label data-i18n="bbox.prop.h">H (0-1):</label><input type="number" id="bbox-prop-h" min="0" max="1" step="0.001"></div>
           <div class="settings-row" id="bbox-prop-fontsize-row">
             <label data-i18n="bbox.prop.fontSize">文字サイズ (mm):</label>
-            <input type="number" id="bbox-prop-fontsize" min="1.0" max="20.0" step="0.1" placeholder="自動">
+            <input type="number" id="bbox-prop-fontsize" min="1.0" max="20.0" step="0.1" placeholder="自動" data-i18n-placeholder="bbox.prop.fontSizeAuto">
           </div>
           <div class="settings-row" id="bbox-prop-prefix-row" style="display:none;">
             <label data-i18n="bbox.prop.prefix">接頭辞:</label><input type="text" id="bbox-prop-prefix" placeholder="#/S- 等" data-i18n-placeholder="bbox.prop.prefixPlaceholder">
@@ -515,8 +513,8 @@
         <span data-i18n="settings.draw.desc">線発生ギャップ、頭/尻マージンなど</span>
       </button>
       <button type="button" class="settings-hub-card" data-settings-open="settings.font">
-        <strong>文字</strong>
-        <span>セル番号・セリフ・カメラ・メタ情報のサイズ (mm)</span>
+        <strong data-i18n="settings.font.short">文字</strong>
+        <span data-i18n="settings.font.desc">セル番号・セリフ・カメラ・メタ情報のサイズ (mm)</span>
       </button>
       <button type="button" class="settings-hub-card" data-settings-open="settings.color">
         <strong data-i18n="settings.color.short">色</strong>
@@ -541,10 +539,10 @@
     </div>
     <div class="settings-hub-quick" style="display:flex; gap:16px; padding:10px 14px; margin-top:8px; border-top:1px solid var(--border-color); font-size:12px;">
       <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-        <input type="checkbox" id="hubHeadMarginToggle"><span>先頭マージン</span>
+        <input type="checkbox" id="hubHeadMarginToggle"><span data-i18n="draw.headMarginQuick">先頭マージン</span>
       </label>
       <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-        <input type="checkbox" id="hubTailMarginToggle"><span>末尾マージン</span>
+        <input type="checkbox" id="hubTailMarginToggle"><span data-i18n="draw.tailMarginQuick">末尾マージン</span>
       </label>
     </div>
     <div class="settings-hub-backup">
@@ -649,19 +647,19 @@
       <span class="settings-hint" style="margin-left:0;" data-i18n="editor.sharedMetaHint">チェック項目はシート間で同期されます。チェックを外すとシート個別の設定になります。</span>
     </div>
     <div class="settings-row" style="flex-direction:column; align-items:flex-start; margin-top:12px; padding-top:12px; border-top:1px solid var(--border-color);">
-      <label style="font-weight:bold; margin-bottom:6px;">マージン設定</label>
+      <label style="font-weight:bold; margin-bottom:6px;" data-i18n="editor.marginSettings">マージン設定</label>
       <div class="settings-row" style="margin:4px 0;">
-        <label style="width:140px;">先頭マージン:</label>
+        <label style="width:140px;" data-i18n="draw.headMarginEnabled">先頭マージン:</label>
         <label style="min-width:0; display:flex; align-items:center; gap:6px; cursor:pointer;">
           <input type="checkbox" id="editorHeadMarginEnabled"><span>ON</span>
         </label>
         <input type="number" id="editorHeadMargin" min="0" max="120" value="0" style="width:60px; margin-left:12px;">
-        <span class="settings-hint">コマ数</span>
+        <span class="settings-hint" data-i18n="draw.headMarginHint">コマ数</span>
       </div>
       <div class="settings-row" style="margin:4px 0;">
-        <label style="width:140px;">末尾マージン:</label>
+        <label style="width:140px;" data-i18n="draw.tailMargin">末尾マージン:</label>
         <input type="number" id="editorTailMargin" min="0" max="120" value="18">
-        <span class="settings-hint">カット末尾より後ろに表示する空白コマ数</span>
+        <span class="settings-hint" data-i18n="draw.tailMarginHint">カット末尾より後ろに表示する空白コマ数</span>
       </div>
     </div>
     <div class="settings-actions">
@@ -692,10 +690,10 @@
       <span class="settings-hint" data-i18n="draw.repeatColorHint">rep の下の青点線の色</span>
     </div>
     <div class="settings-row">
-      <label>Rep自動付与:</label>
+      <label data-i18n="draw.repAuto">Rep自動付与:</label>
       <input type="checkbox" id="drawRepAutoEnabled" checked>
       <input type="number" id="drawRepMinCycles" min="2" max="10" value="2" style="width:60px; margin-left:12px;">
-      <span class="settings-hint">最小サイクル数（2=パターン+1リピート）</span>
+      <span class="settings-hint" data-i18n="draw.repAutoHint">最小サイクル数（2=パターン+1リピート）</span>
     </div>
     <div class="settings-actions">
       <button id="settings-draw-reset" data-i18n="draw.resetThis">この画面をリセット</button>
@@ -708,17 +706,17 @@
 <!-- 文字設定モーダル -->
 <div id="settings-font-modal" class="settings-modal" style="display:none;">
   <div class="settings-modal-inner">
-    <h3>文字設定</h3>
+    <h3 data-i18n="modal.font">文字設定</h3>
     <div class="settings-row">
-      <label style="width:140px;">セル番号 (mm):</label>
+      <label style="width:140px;" data-i18n="font.cellLabel">セル番号 (mm):</label>
       <input type="number" id="drawFontCellScale" min="1.0" max="10.0" step="0.1" value="2.7" style="width:70px;">
     </div>
     <div class="settings-row">
-      <label style="width:140px;">セリフ (mm):</label>
+      <label style="width:140px;" data-i18n="font.dialogueLabel">セリフ (mm):</label>
       <input type="number" id="drawFontDialogueScale" min="1.0" max="10.0" step="0.1" value="3.5" style="width:70px;">
     </div>
     <div class="settings-row">
-      <label style="width:140px;">カメララベル (mm):</label>
+      <label style="width:140px;" data-i18n="font.cameraLabel">カメララベル (mm):</label>
       <input type="number" id="drawFontCameraScale" min="1.0" max="10.0" step="0.1" value="2.7" style="width:70px;">
     </div>
     <div class="settings-row">
@@ -726,13 +724,13 @@
       <input type="number" id="drawFontDirectionScale" min="1.0" max="10.0" step="0.1" value="3.5" style="width:70px;">
     </div>
     <div class="settings-row">
-      <label style="width:140px;">メタ情報 (mm):</label>
+      <label style="width:140px;" data-i18n="font.metaLabel">メタ情報 (mm):</label>
       <input type="number" id="drawFontMetaScale" min="1.0" max="10.0" step="0.1" value="8.0" style="width:70px;">
     </div>
     <div class="settings-actions">
-      <button id="settings-font-reset">この画面をリセット</button>
-      <button id="settings-font-cancel">キャンセル</button>
-      <button id="settings-font-ok" class="primary">OK</button>
+      <button id="settings-font-reset" data-i18n="draw.resetThis">この画面をリセット</button>
+      <button id="settings-font-cancel" data-i18n="btn.cancel">キャンセル</button>
+      <button id="settings-font-ok" class="primary" data-i18n="btn.ok">OK</button>
     </div>
   </div>
 </div>
@@ -776,7 +774,7 @@
     </div>
     <div class="settings-row">
       <label data-i18n="imageExport.destination">保存場所:</label>
-      <span id="image-export-destination" class="image-export-destination">未選択</span>
+      <span id="image-export-destination" class="image-export-destination" data-i18n="imageExport.destinationInitial">未選択</span>
       <button type="button" id="image-export-choose-dir" data-i18n="imageExport.chooseDir">保存先を選択</button>
     </div>
     <div class="settings-row" style="flex-direction:column; align-items:flex-start;">
@@ -795,7 +793,7 @@
       <div id="image-export-filename-preview" class="image-export-filename-preview"></div>
     </div>
     <div id="image-export-progress-row" class="image-export-progress-row" style="display:none;">
-      <div id="image-export-progress-label" class="image-export-progress-label">書き出し準備中...</div>
+      <div id="image-export-progress-label" class="image-export-progress-label" data-i18n="imageExport.preparing">書き出し準備中...</div>
       <progress id="image-export-progress" max="100" value="0"></progress>
     </div>
     <div class="settings-actions">
@@ -962,7 +960,7 @@
   <div class="menu-label" data-i18n="settings.group.editing">編集・表示</div>
   <div class="menu-row" data-action="settings.editor" data-i18n="settings.editor">エディタ環境設定...</div>
   <div class="menu-row" data-action="settings.draw" data-i18n="settings.draw">描画設定...</div>
-  <div class="menu-row" data-action="settings.font">文字設定...</div>
+  <div class="menu-row" data-action="settings.font" data-i18n="settings.font">文字設定...</div>
   <div class="menu-row" data-action="settings.toggleHeadMargin" id="menu-toggle-head-margin">先頭マージン</div>
   <div class="menu-row" data-action="settings.toggleTailMargin" id="menu-toggle-tail-margin">末尾マージン</div>
   <div class="menu-row" data-action="settings.color" data-i18n="settings.color">色設定...</div>
@@ -1236,8 +1234,8 @@
 <!-- 数字パッド（タブレット用） -->
 <div id="numpad-panel" class="numpad-panel tablet-draggable" style="display:none;">
   <div class="numpad-header drag-handle" id="numpad-header">
-    <span>☰ 入力パッド</span>
-    <button id="numpad-close" title="閉じる">×</button>
+    <span data-i18n="numpad.title">☰ 入力パッド</span>
+    <button id="numpad-close" title="閉じる" data-i18n-title="btn.close">×</button>
   </div>
   <div class="numpad-grid">
     <button data-val="●" class="symbol">●</button><button data-val="○" class="symbol">○</button><button data-val="×" class="symbol">×</button>

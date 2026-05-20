@@ -21,7 +21,8 @@ function toggleTabletMode() {
 function updateTabletModeMenu() {
     const menuItem = document.getElementById('menu-tablet-mode');
     if (menuItem) {
-        menuItem.textContent = isTabletMode() ? '✓ タブレットモード' : 'タブレットモード';
+        const label = (typeof t === 'function') ? t('settings.tabletMode') : 'タブレットモード';
+        menuItem.textContent = isTabletMode() ? '✓ ' + label : label;
     }
 }
 

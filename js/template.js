@@ -2833,16 +2833,16 @@ function updateImageExportDestinationLabel() {
     if (!el) return;
     if (imageExportDirectoryHandle) {
         el.textContent = imageExportDirectoryHandle.name
-            ? `TDTSと同じフォルダ / ${imageExportDirectoryHandle.name}`
-            : 'TDTSと同じフォルダ';
+            ? `${typeof t === 'function' ? t('imageExport.sameAsTdts') : 'TDTSと同じフォルダ'} / ${imageExportDirectoryHandle.name}`
+            : (typeof t === 'function' ? t('imageExport.sameAsTdts') : 'TDTSと同じフォルダ');
     } else {
-        el.textContent = '未選択（書き出し時に保存先を選択）';
+        el.textContent = typeof t === 'function' ? t('imageExport.destinationNotSelected') : '未選択（書き出し時に保存先を選択）';
     }
 }
 
 async function chooseImageExportDirectory() {
     if (!window.showDirectoryPicker) {
-        alert('このブラウザでは保存先フォルダを選択できません。ダウンロード保存になります。');
+        alert(typeof t === 'function' ? t('imageExport.noDirectoryPicker') : 'このブラウザでは保存先フォルダを選択できません。ダウンロード保存になります。');
         return;
     }
     try {
@@ -2981,7 +2981,9 @@ function updateImageExportSizeHint() {
 function updateImageExportFilenamePreview() {
     const pages = getSelectedImageExportPages();
     const countEl = document.getElementById('image-export-page-count');
-    if (countEl) countEl.textContent = `${pages.length}ページ選択`;
+    if (countEl) countEl.textContent = typeof t === 'function'
+        ? t('imageExport.pagesSelected').replace('{count}', pages.length)
+        : `${pages.length}ページ選択`;
 
     const preview = document.getElementById('image-export-filename-preview');
     if (!preview) return;
@@ -2989,7 +2991,7 @@ function updateImageExportFilenamePreview() {
     const format = ['png', 'jpg', 'psd'].includes(selectedFormat) ? selectedFormat : 'png';
     const template = document.getElementById('image-export-filename')?.value.trim() || '%title_%scene_%cut';
     if (pages.length === 0) {
-        preview.textContent = '出力するページが選択されていません。';
+        preview.textContent = typeof t === 'function' ? t('imageExport.noPagesSelected') : '出力するページが選択されていません。';
         return;
     }
     if (format === 'psd' && pages.length > 1) {
@@ -2997,7 +2999,9 @@ function updateImageExportFilenamePreview() {
         return;
     }
     const names = pages.map(pageIndex => buildImageExportFilename(template, pageIndex, pages.length, format));
-    preview.textContent = names.slice(0, 8).join('\n') + (names.length > 8 ? `\n...ほか ${names.length - 8} 件` : '');
+    preview.textContent = names.slice(0, 8).join('\n') + (names.length > 8
+        ? '\n' + (typeof t === 'function' ? t('imageExport.moreFiles').replace('{count}', names.length - 8) : `...ほか ${names.length - 8} 件`)
+        : '');
 }
 
 async function runImageExportFromDialog() {
@@ -3008,7 +3012,7 @@ async function runImageExportFromDialog() {
     const includeHandwriting = document.getElementById('image-export-include-handwriting').checked;
     const pages = getSelectedImageExportPages();
     if (pages.length === 0) {
-        alert('出力するページを選択してください。');
+        alert(typeof t === 'function' ? t('imageExport.selectPagesAlert') : '出力するページを選択してください。');
         return;
     }
 
@@ -3034,13 +3038,13 @@ async function runImageExportFromDialog() {
         } catch (err) {
             if (err && err.name === 'AbortError') return; // ユーザーがキャンセル
             console.error(err);
-            alert('保存先フォルダの選択に失敗しました。');
+            alert(typeof t === 'function' ? t('imageExport.chooseFolderFailed') : '保存先フォルダの選択に失敗しました。');
             return;
         }
     }
 
     try {
-        setImageExportBusy(true, '書き出し準備中...', 0);
+        setImageExportBusy(true, typeof t === 'function' ? t('imageExport.preparing') : '書き出し準備中...', 0);
         await exportTemplateImagePages({
             format,
             dpi,
@@ -3054,7 +3058,7 @@ async function runImageExportFromDialog() {
     } catch (err) {
         if (err && err.name === 'AbortError') return;
         console.error(err);
-        alert('画像の保存に失敗しました。\n' + (err && err.message ? err.message : ''));
+        alert((typeof t === 'function' ? t('imageExport.saveFailed') : '画像の保存に失敗しました。') + '\n' + (err && err.message ? err.message : ''));
     } finally {
         setImageExportBusy(false);
     }
@@ -3091,16 +3095,18 @@ async function exportTemplateImagePages(options) {
         if (typeof buildTemplateMultiPagePsdBlob !== 'function') throw new Error('PSD exporter is not available.');
         const filename = buildImageExportBundleFilename(options.filenameTemplate, ext);
         const blob = await buildTemplateMultiPagePsdBlob(options.pages, options.dpi, options.includeHandwriting !== false, options.onProgress);
-        if (options.onProgress) options.onProgress('PSDを書き込み中...', 92);
+        if (options.onProgress) options.onProgress(typeof t === 'function' ? t('imageExport.writingPsd') : 'PSDを書き込み中...', 92);
         await saveBlobFile(blob, filename, mimeType, directoryHandle);
-        if (options.onProgress) options.onProgress('完了', 100);
+        if (options.onProgress) options.onProgress(typeof t === 'function' ? t('imageExport.done') : '完了', 100);
         return;
     }
 
     for (let i = 0; i < options.pages.length; i++) {
         const pageIndex = options.pages[i];
         const filename = buildImageExportFilename(options.filenameTemplate, pageIndex, options.pages.length, ext);
-        if (options.onProgress) options.onProgress(`${filename} を生成中...`, Math.round(i / options.pages.length * 90));
+        if (options.onProgress) options.onProgress(typeof t === 'function'
+            ? t('imageExport.generatingFile').replace('{filename}', filename)
+            : `${filename} を生成中...`, Math.round(i / options.pages.length * 90));
         if (format === 'psd') {
             if (typeof buildTemplatePsdBlob !== 'function') throw new Error('PSD exporter is not available.');
             const blob = await buildTemplatePsdBlob(pageIndex, options.dpi, options.includeHandwriting !== false);
@@ -3109,7 +3115,9 @@ async function exportTemplateImagePages(options) {
             const canvas = await renderImageExportPageCanvas(pageIndex, options.dpi, options.includeHandwriting !== false);
             await saveImageCanvas(canvas, filename, mimeType, directoryHandle);
         }
-        if (options.onProgress) options.onProgress(`${filename} を保存しました`, Math.round((i + 1) / options.pages.length * 100));
+        if (options.onProgress) options.onProgress(typeof t === 'function'
+            ? t('imageExport.savedFile').replace('{filename}', filename)
+            : `${filename} を保存しました`, Math.round((i + 1) / options.pages.length * 100));
     }
 }
 
