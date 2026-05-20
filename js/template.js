@@ -82,10 +82,14 @@ function createTemplateCanvas(dpi) {
 }
 
 // メインテンプレート描画
-// 外部テンプレ専用: image-only (背景白+画像のみ。BBox描画なし) — PSDのtemplate層用
+// 外部テンプレ専用: image-only (白背景+画像のみ。BBox描画なし) — PSDのtemplate層用
+// 標準A3 と同じパターン (白塗り → 内容) にして makeWhiteTransparentPsdImageData 適用可能にする
 function renderExternalTemplateImageOnly(dpi, pageIndex) {
     const canvas = createTemplateCanvas(dpi);
     const ctx = canvas.getContext('2d');
+    // まず白背景
+    ctx.fillStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.BG_COLOR) || '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage() : null;
     if (!extImg) return canvas;
     const cw = canvas.width, ch = canvas.height;
@@ -103,11 +107,16 @@ function renderExternalTemplateImageOnly(dpi, pageIndex) {
 }
 window.renderExternalTemplateImageOnly = renderExternalTemplateImageOnly;
 
-// 外部テンプレ専用: data-only (透明背景にBBox描画のみ) — PSDのdata層用
+// 外部テンプレ専用: data-only (白背景+BBox描画のみ。画像なし) — PSDのdata層用
+// 白背景にしておくことで、makeWhiteTransparentPsdImageData 適用後に
+// 描画部分だけ不透明・他は完全透明になり、PSD読込互換性が向上する
 function renderExternalTemplateDataOnly(dpi, pageIndex) {
     const canvas = createTemplateCanvas(dpi);
     const ctx = canvas.getContext('2d');
     const scale = dpi / 25.4;
+    // まず白背景 (PSD レイヤー alpha 抽出のための前提)
+    ctx.fillStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.BG_COLOR) || '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     const extTpl = (typeof getCurrentExternalTemplate === 'function') ? getCurrentExternalTemplate() : null;
     const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage() : null;
     if (!extTpl || !extImg) return canvas;

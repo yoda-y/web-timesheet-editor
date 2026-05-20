@@ -51,17 +51,18 @@ async function buildPsdPageLayers(pageIndex, dpi, includeHandwriting) {
     const dataCanvas = isExternal && typeof renderExternalTemplateDataOnly === 'function'
         ? renderExternalTemplateDataOnly(dpi, pageIndex)
         : renderDataOnlyForPsd(dpi, pageIndex);
-    // template 層の白背景を透明化 (外部テンプレ画像内の白も対象になるが、layered composite として違和感は少ない)
-    const templateImageData = isExternal
-        ? blank.getContext('2d').getImageData(0, 0, blank.width, blank.height)
-        : makeWhiteTransparentPsdImageData(blank);
+    // 全ての層で白背景→透明 (alpha clean) 変換を適用 (CSP等のPSDビューア互換性確保)
+    const templateImageData = makeWhiteTransparentPsdImageData(blank);
+    const dataImageData = isExternal
+        ? makeWhiteTransparentPsdImageData(dataCanvas)
+        : dataCanvas.getContext('2d').getImageData(0, 0, full.width, full.height);
     return {
         pageIndex,
         width: full.width,
         height: full.height,
         background: createSolidPsdImageData(full.width, full.height, 255, 255, 255, 255),
         template: templateImageData,
-        data: dataCanvas.getContext('2d').getImageData(0, 0, full.width, full.height),
+        data: dataImageData,
         memo: handwriting.getContext('2d').getImageData(0, 0, handwriting.width, handwriting.height),
         composite
     };
