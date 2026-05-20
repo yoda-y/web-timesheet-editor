@@ -203,22 +203,13 @@ function drawDialogueBlocks(ctx) {
             ctx.fillText(typeLabel, tx + sndSec.cw / 2, startY + 12);
             textStartY = startY + 28;
         }
-        // 話者名は常にブロック上端の外側 (タイプ問わず、frame 0 でも上に出す)
-        // 枠背景は話者色 (セリフブロック背景と同色)
+        // 話者名は常にブロック上端の外側 (edit は枠なし、テキストのみ)
         if (block.speakerName) {
             const labelY = Math.max(10, startY - 2);
             ctx.font = "bold 10px sans-serif";
             ctx.textAlign = "center";
-            const fillColor = (typeof getSpeakerColor === 'function')
-                ? getSpeakerColor(block.speakerName)
-                : '#fff';
-            if (typeof drawSpeakerNameWithBox === 'function') {
-                drawSpeakerNameWithBox(ctx, block.speakerName, tx + sndSec.cw / 2, labelY, {
-                    padX: 3, padY: 1, radius: 2, fillColor
-                });
-            } else {
-                ctx.fillText(block.speakerName, tx + sndSec.cw / 2, labelY);
-            }
+            ctx.fillStyle = getStyle('--text-color');
+            ctx.fillText(block.speakerName, tx + sndSec.cw / 2, labelY);
         }
         if (block.text) {
             ctx.font = "bold 12px sans-serif";

@@ -1986,17 +1986,20 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
         let textStartY = trueStartY + m(4);
         const isShort = trueBlockH <= rowH * 2;
 
-        // タイプラベル (normal以外時): ブロック内上部に
+        // 主たるページ判定: ブロック開始フレームがこのページ範囲内のときのみ話者名/タイプを描く
+        const isPrimaryPage = block.startFrame >= absoluteStart && block.startFrame < endFrame;
+
+        // タイプラベル (normal以外時、主たるページのみ): ブロック内上部に
         const typeLabel = (typeof getDialogueTypeLabel === 'function') ? getDialogueTypeLabel(block.dialogueType) : null;
-        if (typeLabel && !isShort) {
+        if (isPrimaryPage && typeLabel && !isShort) {
             let typeFontSize = m(2.2) * getFontScale('dialogue');
             ctx.font = `bold ${typeFontSize}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.fillText(typeLabel, tx + colW / 2, trueStartY + m(3));
             textStartY = trueStartY + m(6);
         }
-        // 話者名: 常にブロック上端の外側 + 白枠付き (タイプ問わず、frame 0 でも上に出す)
-        if (block.speakerName) {
+        // 話者名: 主たるページのみ、ブロック上端の少し上に枠付きで
+        if (isPrimaryPage && block.speakerName) {
             let speakerFontSize = m(2.5) * getFontScale('dialogue');
             ctx.font = `bold ${speakerFontSize}px sans-serif`;
             while (ctx.measureText(block.speakerName).width > colW - m(1) && speakerFontSize > m(1.5) * getFontScale('dialogue')) {
@@ -2004,7 +2007,9 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
                 ctx.font = `bold ${speakerFontSize}px sans-serif`;
             }
             ctx.textAlign = 'center';
-            const speakerY = Math.max(speakerFontSize, trueStartY - m(0.5));
+            // ブロック開始位置と枠の間に少しスペース (gap = m(1))
+            const gap = m(1);
+            const speakerY = Math.max(speakerFontSize, trueStartY - gap);
             // 枠背景は話者色 (セリフブロック背景と同色)
             const fillColor = (typeof getSpeakerColorTemplate === 'function')
                 ? getSpeakerColorTemplate(block.speakerName)
@@ -3782,7 +3787,9 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
             }
             ctx.textBaseline = 'alphabetic';
             ctx.textAlign = 'center';
-            const nameY = Math.max(nameFont, by - 1);
+            // ブロック開始位置と枠の間に少しスペース
+            const gap = Math.max(2, scale * 0.5);
+            const nameY = Math.max(nameFont, by - gap);
             // 枠背景は話者色 (セリフブロック背景と同色)
             const fillColor = (typeof getSpeakerColor === 'function')
                 ? getSpeakerColor(block.speakerName)
