@@ -565,11 +565,16 @@ function packBits(src) {
             continue;
         }
         const start = i;
-        i += run;
+        // 初回 run 加算でリテラル長が128を超えないようクランプ
+        const initLen = Math.min(run, 128);
+        i += initLen;
         while (i < src.length) {
             run = 1;
             while (i + run < src.length && run < 128 && src[i] === src[i + run]) run++;
-            if (run >= 3 || i - start >= 128) break;
+            // 重要: i += run しても (i - start) が 128 を超えないようにする
+            // 旧コードは run が大きい時にリテラル長が 128 を超え、PackBits規格違反だった
+            if (run >= 3) break;
+            if ((i - start) + run > 128) break;
             i += run;
         }
         const len = i - start;
