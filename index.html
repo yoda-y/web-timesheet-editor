@@ -1041,6 +1041,15 @@
       <input type="text" id="speakerNameInput" placeholder="A" onkeydown="handleDialogueKey(event)" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
     </div>
     <div style="margin-bottom:10px;">
+      <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="dlg.dialogueType">タイプ:</label>
+      <select id="dialogueTypeInput" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
+        <option value="normal" data-i18n="dlg.type.normal">通常</option>
+        <option value="off" data-i18n="dlg.type.off">off</option>
+        <option value="mono" data-i18n="dlg.type.mono">mono</option>
+        <option value="背" data-i18n="dlg.type.back">背</option>
+      </select>
+    </div>
+    <div style="margin-bottom:10px;">
       <label style="font-size:12px; color:var(--text-color); display:block;" data-i18n="dlg.dialogueText">セリフ:</label>
       <input type="text" id="dialogueTextInput" placeholder="あいうえお" onkeydown="handleDialogueKey(event)" style="width:100%; box-sizing:border-box; padding:4px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick);">
     </div>

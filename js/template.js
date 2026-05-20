@@ -1985,8 +1985,26 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
         let textStartY = trueStartY + m(4);
         const isShort = trueBlockH <= rowH * 2;
 
-        // 話者名（真の始点直下にのみ表示。複数ページ時もここだけ）
-        if (block.speakerName && !isShort) {
+        // タイプラベル + 話者名 (normal以外時はタイプを内部、話者名を外側に逃がす)
+        const typeLabel = (typeof getDialogueTypeLabel === 'function') ? getDialogueTypeLabel(block.dialogueType) : null;
+        if (typeLabel && !isShort) {
+            // タイプラベルをブロック内上部に
+            let typeFontSize = m(2.2) * getFontScale('dialogue');
+            ctx.font = `bold ${typeFontSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(typeLabel, tx + colW / 2, trueStartY + m(3));
+            textStartY = trueStartY + m(6);
+            // 話者名はブロック上端より外側 (frame 0 でも外に出す)
+            if (block.speakerName) {
+                let speakerFontSize = m(2.5) * getFontScale('dialogue');
+                ctx.font = `bold ${speakerFontSize}px sans-serif`;
+                while (ctx.measureText(block.speakerName).width > colW - m(1) && speakerFontSize > m(1.5) * getFontScale('dialogue')) {
+                    speakerFontSize -= m(0.2);
+                    ctx.font = `bold ${speakerFontSize}px sans-serif`;
+                }
+                ctx.fillText(block.speakerName, tx + colW / 2, trueStartY - m(1));
+            }
+        } else if (block.speakerName && !isShort) {
             let speakerFontSize = m(2.5) * getFontScale('dialogue');
             ctx.font = `bold ${speakerFontSize}px sans-serif`;
             while (ctx.measureText(block.speakerName).width > colW - m(1) && speakerFontSize > m(1.5) * getFontScale('dialogue')) {
@@ -3738,8 +3756,33 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
 
-        // 話者名: 主たるBBox のみ、cellW に収まらない場合は自動縮小
-        if (isPrimary && block.speakerName) {
+        // タイプラベル + 話者名 (normal以外時はタイプを内部、話者名を外側に逃がす)
+        const typeLabel = (typeof getDialogueTypeLabel === 'function') ? getDialogueTypeLabel(block.dialogueType) : null;
+        if (isPrimary && typeLabel) {
+            // タイプラベルをブロック内上部 (旧 speakerName位置)
+            let typeFont = fontSize * 0.75;
+            ctx.font = `bold ${typeFont}px sans-serif`;
+            const typeW = ctx.measureText(typeLabel).width;
+            if (typeW > innerW) {
+                typeFont = typeFont * (innerW / typeW);
+                ctx.font = `bold ${typeFont}px sans-serif`;
+            }
+            ctx.fillText(typeLabel, bx + cellW / 2, by + 2);
+            // 話者名はブロック上端より外側に
+            if (block.speakerName) {
+                let nameFont = fontSize * 0.8;
+                ctx.font = `bold ${nameFont}px sans-serif`;
+                ctx.textBaseline = 'bottom';
+                const nameW = ctx.measureText(block.speakerName).width;
+                if (nameW > innerW) {
+                    nameFont = nameFont * (innerW / nameW);
+                    ctx.font = `bold ${nameFont}px sans-serif`;
+                }
+                ctx.fillText(block.speakerName, bx + cellW / 2, by - 1);
+                ctx.textBaseline = 'top';
+            }
+        } else if (isPrimary && block.speakerName) {
+            // 通常 (normal): 話者名をブロック内上部 (従来通り)
             let nameFont = fontSize * 0.8;
             ctx.font = `bold ${nameFont}px sans-serif`;
             const nameW = ctx.measureText(block.speakerName).width;
