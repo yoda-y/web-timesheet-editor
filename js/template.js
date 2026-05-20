@@ -472,7 +472,15 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
             return (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.metaValue) || 4.5;
         })();
         if (isMultiline) {
-            drawMultilineInBBox(ctx, value, rect, scale, userMm);
+            // direction は BOOK/タイムラインを自動回避 + 多列自動展開
+            if (tagKey === 'direction') {
+                const effectiveRect = clipDirectionRectForExternal(rect, extTpl, bboxToCanvas);
+                drawWrappedMultiColumnText(ctx, value, effectiveRect, scale, userMm, {
+                    minCols: 1, maxCols: 6, drawDividers: true
+                });
+            } else {
+                drawMultilineInBBox(ctx, value, rect, scale, userMm);
+            }
         } else {
             const padding = Math.max(1, rect.w * 0.04);
             const usableW = Math.max(1, rect.w - padding * 2);
@@ -480,6 +488,132 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
             const fontSize = fitTextSize(ctx, value, usableW, usableH, Math.min(usableH * 0.85, userMm * scale));
             ctx.font = `${fontSize}px sans-serif`;
             ctx.fillText(value, rect.x + rect.w / 2, rect.y + rect.h / 2);
+        }
+        ctx.restore();
+    }
+}
+
+// 外部テンプレ Direction 専用: BBox を BOOK / timeline と干渉しないようクリップ
+// 戻り値: 効果的に使える rect (高さ縮小可能性あり)
+function clipDirectionRectForExternal(rect, extTpl, bboxToCanvas) {
+    if (!extTpl || !extTpl.bboxes) return rect;
+    let bottomLimit = rect.y + rect.h;
+    // 水平範囲が重なる他BBoxを検出し、その上端で direction の下端を制限
+    const dirL = rect.x, dirR = rect.x + rect.w;
+    Object.entries(extTpl.bboxes).forEach(([tag, bb]) => {
+        if (!bb || !bb.enabled) return;
+        if (tag === 'direction') return;
+        // タイムラインBBox + custom系のみ干渉対象 (meta系は通常 direction より上)
+        const cat = (window.externalTemplate && window.externalTemplate.tags && window.externalTemplate.tags[tag]) ? window.externalTemplate.tags[tag].category : '';
+        if (cat !== 'timeline' && cat !== 'custom') return;
+        const r = bboxToCanvas(bb);
+        // 水平重なり判定
+        const overlapX = !(r.x + r.w < dirL || r.x > dirR);
+        if (!overlapX) return;
+        // direction の下方に位置する場合のみ干渉
+        if (r.y >= rect.y) {
+            // BOOK領域分の余白 (action1なら BOOK 表示のために 2コマ分上を余裕)
+            let reserve = 0;
+            if (tag === 'action1') {
+                const frames = bb.frames || 72;
+                const cellH = r.h / frames;
+                reserve = cellH * 2;
+            }
+            const effectiveTop = r.y - reserve;
+            if (effectiveTop < bottomLimit) bottomLimit = effectiveTop;
+        }
+    });
+    const newH = Math.max(rect.h * 0.2, bottomLimit - rect.y);
+    return { x: rect.x, y: rect.y, w: rect.w, h: newH };
+}
+
+// 文字単位の自動折り返し + 多列自動展開
+// options: { minCols, maxCols, drawDividers, dividerColor }
+function drawWrappedMultiColumnText(ctx, text, rect, scale, fontMm, options) {
+    options = options || {};
+    const minCols = options.minCols || 1;
+    const maxCols = options.maxCols || 6;
+    const drawDividers = options.drawDividers !== false;
+    const dividerColor = options.dividerColor || (typeof TEMPLATE !== 'undefined' && TEMPLATE.TEMPLATE_COLOR) || '#999';
+    const padding = Math.max(2, rect.w * 0.02);
+    const colGap = Math.max(2, rect.w * 0.015);
+    const baseFontSize = (fontMm != null ? fontMm : 3.5) * scale;
+    const lineH = baseFontSize * 1.2;
+    const rawLines = String(text || '').split(/\r?\n/);
+
+    // 指定列数でテキストを折り返した結果を返す
+    const wrapWithCols = (numCols) => {
+        const colW = (rect.w - padding * 2 - colGap * (numCols - 1)) / numCols;
+        ctx.font = `${baseFontSize}px sans-serif`;
+        const lines = [];
+        rawLines.forEach(line => {
+            if (line.length === 0) { lines.push(''); return; }
+            let buf = '';
+            for (const ch of line) {
+                const test = buf + ch;
+                if (ctx.measureText(test).width > colW - scale && buf.length > 0) {
+                    lines.push(buf);
+                    buf = ch;
+                } else {
+                    buf = test;
+                }
+            }
+            if (buf) lines.push(buf);
+        });
+        const usableH = rect.h - padding * 2;
+        const maxLinesPerCol = Math.max(1, Math.floor(usableH / lineH));
+        const requiredCols = Math.ceil(lines.length / maxLinesPerCol);
+        return { lines, colW, maxLinesPerCol, requiredCols };
+    };
+
+    // 列数を minCols から増やして必要列数に追いつくまで
+    let numCols = minCols;
+    let result = wrapWithCols(numCols);
+    while (result.requiredCols > numCols && numCols < maxCols) {
+        numCols++;
+        result = wrapWithCols(numCols);
+    }
+    const { lines, colW, maxLinesPerCol } = result;
+
+    // 描画
+    ctx.fillStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.TEXT_COLOR) || '#000';
+    ctx.font = `${baseFontSize}px sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    let colIdx = 0, lineInCol = 0;
+    let usedCols = 1;
+    for (let i = 0; i < lines.length; i++) {
+        if (colIdx >= numCols) break;
+        const x = rect.x + padding + colIdx * (colW + colGap);
+        const y = rect.y + padding + lineInCol * lineH;
+        if (y + lineH > rect.y + rect.h) {
+            // 列満杯 → 次の列へ
+            colIdx++;
+            lineInCol = 0;
+            if (colIdx >= numCols) break;
+            i--;  // この行を次列の先頭で再処理
+            continue;
+        }
+        if (lines[i]) ctx.fillText(lines[i], x, y);
+        lineInCol++;
+        usedCols = Math.max(usedCols, colIdx + 1);
+        if (lineInCol >= maxLinesPerCol && colIdx < numCols - 1) {
+            colIdx++;
+            lineInCol = 0;
+        }
+    }
+
+    // 列区切り線
+    if (drawDividers && usedCols > 1) {
+        ctx.save();
+        ctx.strokeStyle = dividerColor;
+        ctx.lineWidth = Math.max(0.5, scale * 0.15);
+        for (let c = 0; c < usedCols - 1; c++) {
+            const divX = rect.x + padding + (c + 1) * colW + c * colGap + colGap / 2;
+            ctx.beginPath();
+            ctx.moveTo(divX, rect.y + padding);
+            ctx.lineTo(divX, rect.y + rect.h - padding);
+            ctx.stroke();
         }
         ctx.restore();
     }
