@@ -65,15 +65,15 @@ const menuActions = {
             createNewBlankDocumentTab();
             return;
         }
-        if (isDirty && !confirm('未保存の変更があります。破棄して新規作成しますか？')) return;
-        else if (!isDirty && !confirm('現在のシートを破棄して新規作成しますか？')) return;
+        if (isDirty && !confirm(typeof t === 'function' ? t('confirm.newDirty') : '未保存の変更があります。破棄して新規作成しますか？')) return;
+        else if (!isDirty && !confirm(typeof t === 'function' ? t('confirm.newClean') : '現在のシートを破棄して新規作成しますか？')) return;
         // 状態を初期化
         cellData = {};
         booksData = { "ACTION": {}, "SOUND": {}, "CELL": {}, "CAMERA": {} };
         customRepeats = [];
         dialogueBlocks = [];
         cameraBlocks = [];
-        metaData = { title:"", subTitle:"", scene:"", cut:"", sharedCuts: [], lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"" };
+        metaData = { title:"", subTitle:"", scene:"", cut:"", sharedCuts: [], lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"", customFields: {} };
         undoStack = []; redoStack = [];
         selectionStart = null; selectionEnd = null; selectedMeta = null;
         selectedDialogueId = null; selectedCameraId = null;
@@ -150,12 +150,12 @@ const menuActions = {
     'insert.layerLeft': () => {
         if (selectionStart && (selectionStart.colType === "ACTION" || selectionStart.colType === "CELL")) {
             window.addCellByRef(selectionStart.colType, selectionStart.colIndex, 'left');
-        } else { alert("ACTION か CELL の列を選択してください。"); }
+        } else { alert(typeof t === 'function' ? t('alert.selectActionOrCell') : "ACTION か CELL の列を選択してください。"); }
     },
     'insert.layerRight': () => {
         if (selectionStart && (selectionStart.colType === "ACTION" || selectionStart.colType === "CELL")) {
             window.addCellByRef(selectionStart.colType, selectionStart.colIndex, 'right');
-        } else { alert("ACTION か CELL の列を選択してください。"); }
+        } else { alert(typeof t === 'function' ? t('alert.selectActionOrCell') : "ACTION か CELL の列を選択してください。"); }
     },
     'insert.book': () => window.addNewBook(),
     'insert.camera': () => {
@@ -199,6 +199,7 @@ const menuActions = {
     'settings.color': () => openColorSettings(),
     'settings.shortcut': () => openShortcutSettings(),
     'settings.editor': () => openEditorSettings(),
+    'settings.externalTemplate': () => openExternalTemplateModal(),
     'settings.sidebar': () => openSidebarSettings(),
     'settings.naming': () => openNamingSettings(),
     'help.shortcuts': () => openHelpShortcuts(),
@@ -209,10 +210,10 @@ const menuActions = {
         document.getElementById('help-about-modal').style.display = 'flex';
     },
     'settings.reset': () => {
-        if (!confirm('全ての設定をデフォルトに戻しますか？')) return;
+        if (!confirm(typeof t === 'function' ? t('confirm.resetAllSettings') : '全ての設定をデフォルトに戻しますか？')) return;
         resetSettings();
         drawAll();
-        alert('設定をリセットしました。');
+        alert(typeof t === 'function' ? t('alert.settingsReset') : '設定をリセットしました。');
     },
 
     // 言語切替
@@ -227,8 +228,8 @@ const menuActions = {
 function updateSettingsMenuMarks() {
     const head = document.getElementById('menu-toggle-head-margin');
     const tail = document.getElementById('menu-toggle-tail-margin');
-    if (head) head.textContent = (settings.draw.headMarginEnabled ? '✓ ' : '   ') + '先頭マージン';
-    if (tail) tail.textContent = ((settings.draw.tailMargin || 0) > 0 ? '✓ ' : '   ') + '末尾マージン';
+    if (head) head.textContent = (settings.draw.headMarginEnabled ? '✓ ' : '   ') + (typeof t === 'function' ? t('draw.headMarginQuick') : '先頭マージン');
+    if (tail) tail.textContent = ((settings.draw.tailMargin || 0) > 0 ? '✓ ' : '   ') + (typeof t === 'function' ? t('draw.tailMarginQuick') : '末尾マージン');
 }
 
 window.runMenuAction = function(actionId) {
@@ -263,13 +264,13 @@ window.convertAllActionToCell = function() {
     const actionSec = sections.find(s => s.type === "ACTION");
     const cellSec = sections.find(s => s.type === "CELL");
     if (!actionSec || !cellSec) {
-        alert("ACTION/CELL欄が見つかりません。");
+        alert(typeof t === 'function' ? t('alert.actionCellNotFound') : "ACTION/CELL欄が見つかりません。");
         return;
     }
 
     const colCount = Math.min(actionSec.cols || 0, cellSec.cols || 0);
     if (colCount <= 0) {
-        alert("変換対象の列がありません。");
+        alert(typeof t === 'function' ? t('alert.noConvertColumns') : "変換対象の列がありません。");
         return;
     }
 
@@ -278,7 +279,7 @@ window.convertAllActionToCell = function() {
         const parts = key.split('-');
         return parts[0] === "CELL" && parseInt(parts[1], 10) < colCount;
     });
-    if (hasCellData && !confirm("CELL欄の既存入力を上書きして、ACTION欄から動画番号を作成します。よろしいですか？")) {
+    if (hasCellData && !confirm(typeof t === 'function' ? t('confirm.convertActionToCell') : "CELL欄の既存入力を上書きして、ACTION欄から動画番号を作成します。よろしいですか？")) {
         return;
     }
 
@@ -495,7 +496,7 @@ document.getElementById('settings-draw-ok').addEventListener('click', () => {
 });
 document.getElementById('settings-draw-cancel').addEventListener('click', closeDrawSettings);
 document.getElementById('settings-draw-reset').addEventListener('click', () => {
-    if (!confirm('描画設定をデフォルトに戻しますか？')) return;
+    if (!confirm(typeof t === 'function' ? t('confirm.resetDrawSettings') : '描画設定をデフォルトに戻しますか？')) return;
     settings.draw = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.draw));
     saveSettings();
     openDrawSettings(); // 再描画
@@ -510,6 +511,7 @@ function openFontSettings() {
     document.getElementById('drawFontCellScale').value = fs.cell != null ? fs.cell : 2.7;
     document.getElementById('drawFontDialogueScale').value = fs.dialogue != null ? fs.dialogue : 3.5;
     document.getElementById('drawFontCameraScale').value = fs.camera != null ? fs.camera : 2.7;
+    document.getElementById('drawFontDirectionScale').value = fs.direction != null ? fs.direction : 3.5;
     document.getElementById('drawFontMetaScale').value = fs.metaValue != null ? fs.metaValue : 8.0;
     document.getElementById('settings-font-modal').style.display = 'flex';
 }
@@ -526,6 +528,7 @@ document.getElementById('settings-font-ok').addEventListener('click', () => {
     settings.draw.fontSize.cell = parseFS('drawFontCellScale', 2.7);
     settings.draw.fontSize.dialogue = parseFS('drawFontDialogueScale', 3.5);
     settings.draw.fontSize.camera = parseFS('drawFontCameraScale', 2.7);
+    settings.draw.fontSize.direction = parseFS('drawFontDirectionScale', 3.5);
     settings.draw.fontSize.metaValue = parseFS('drawFontMetaScale', 8.0);
     saveSettings();
     closeFontSettings();
@@ -533,7 +536,7 @@ document.getElementById('settings-font-ok').addEventListener('click', () => {
 });
 document.getElementById('settings-font-cancel').addEventListener('click', closeFontSettings);
 document.getElementById('settings-font-reset').addEventListener('click', () => {
-    if (!confirm('文字設定をデフォルトに戻しますか？')) return;
+    if (!confirm(typeof t === 'function' ? t('confirm.resetFontSettings') : '文字設定をデフォルトに戻しますか？')) return;
     settings.draw.fontSize = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.draw.fontSize));
     saveSettings();
     openFontSettings();
@@ -672,7 +675,7 @@ document.querySelectorAll('.color-auto-btn').forEach(btn => {
 });
 document.getElementById('settings-color-cancel').addEventListener('click', closeColorSettings);
 document.getElementById('settings-color-reset').addEventListener('click', () => {
-    if (!confirm('色設定をデフォルトに戻しますか？')) return;
+    if (!confirm(typeof t === 'function' ? t('confirm.resetColorSettings') : '色設定をデフォルトに戻しますか？')) return;
     settings.colors = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.colors));
     saveSettings();
     openColorSettings();
@@ -789,8 +792,8 @@ function appendShortcutGroup(tbody, group, ids) {
         const sc = settings.shortcuts[aid];
         row.innerHTML = `
             <td style="padding:6px 4px;">${label}<br><span style="font-size:10px;color:var(--grid-medium);">${aid}</span></td>
-            <td style="padding:4px 4px;"><input type="text" class="sc-key" data-aid="${aid}" data-slot="main" value="${sc.main || ''}" placeholder="押下で記録" readonly style="width:120px; padding:4px 6px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick); border-radius:3px; font-size:11px; cursor:pointer; font-family:monospace;"></td>
-            <td style="padding:4px 4px;"><input type="text" class="sc-key" data-aid="${aid}" data-slot="sub" value="${sc.sub || ''}" placeholder="押下で記録" readonly style="width:120px; padding:4px 6px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick); border-radius:3px; font-size:11px; cursor:pointer; font-family:monospace;"></td>
+            <td style="padding:4px 4px;"><input type="text" class="sc-key" data-aid="${aid}" data-slot="main" value="${sc.main || ''}" placeholder="${typeof t === 'function' ? t('shortcut.pressKey') : '押下で記録'}" readonly style="width:120px; padding:4px 6px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick); border-radius:3px; font-size:11px; cursor:pointer; font-family:monospace;"></td>
+            <td style="padding:4px 4px;"><input type="text" class="sc-key" data-aid="${aid}" data-slot="sub" value="${sc.sub || ''}" placeholder="${typeof t === 'function' ? t('shortcut.pressKey') : '押下で記録'}" readonly style="width:120px; padding:4px 6px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick); border-radius:3px; font-size:11px; cursor:pointer; font-family:monospace;"></td>
         `;
         tbody.appendChild(row);
     });
@@ -799,7 +802,7 @@ function appendShortcutGroup(tbody, group, ids) {
 function bindShortcutKeyInputs(tbody) {
     tbody.querySelectorAll('.sc-key').forEach(input => {
         input.addEventListener('click', () => {
-            input.value = '...キー押下';
+            input.value = typeof t === 'function' ? t('shortcut.recording') : '...キー押下';
             input.style.background = 'rgba(66, 133, 244, 0.3)';
             input._recording = true;
         });
@@ -825,7 +828,10 @@ function bindShortcutKeyInputs(tbody) {
             const combo = eventToCombo(e);
             // ブラウザ予約キー警告
             if (isReservedKey(combo)) {
-                if (!confirm(`「${combo}」 はブラウザの予約キーのため、一部環境で機能しない可能性があります。\nそれでも割り当てますか？`)) {
+                const msg = typeof t === 'function'
+                    ? t('confirm.reservedShortcut').replace('{combo}', combo)
+                    : `「${combo}」 はブラウザの予約キーのため、一部環境で機能しない可能性があります。\nそれでも割り当てますか？`;
+                if (!confirm(msg)) {
                     input.style.background = '';
                     input._recording = false;
                     return;
@@ -876,7 +882,7 @@ function refreshConflictWarning() {
     const warn = document.getElementById('shortcut-conflicts');
     if (conflicts.length > 0) {
         warn.style.display = 'block';
-        warn.innerText = '[警告] キーが重複しています:\n' + conflicts.map(([k, v]) => `  ${k} → ${v.map(a => ACTION_LABELS[a] || a).join(' / ')}`).join('\n');
+        warn.innerText = (typeof t === 'function' ? t('shortcut.conflictWarning') : '[警告] キーが重複しています:') + '\n' + conflicts.map(([k, v]) => `  ${k} → ${v.map(a => ACTION_LABELS[a] || a).join(' / ')}`).join('\n');
     } else {
         warn.style.display = 'none';
     }
@@ -923,12 +929,12 @@ document.getElementById('settings-shortcut-apply').addEventListener('click', () 
     // 軽い視覚フィードバック
     const btn = document.getElementById('settings-shortcut-apply');
     const orig = btn.innerText;
-    btn.innerText = '適用しました';
+    btn.innerText = typeof t === 'function' ? t('btn.applied') : '適用しました';
     setTimeout(() => { btn.innerText = orig; }, 1200);
 });
 document.getElementById('settings-shortcut-cancel').addEventListener('click', closeShortcutSettings);
 document.getElementById('shortcut-reset').addEventListener('click', () => {
-    if (!confirm('ショートカットをデフォルトに戻しますか？')) return;
+    if (!confirm(typeof t === 'function' ? t('confirm.resetShortcuts') : 'ショートカットをデフォルトに戻しますか？')) return;
     settings.shortcuts = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.shortcuts));
     buildShortcutTable();
 });
@@ -955,8 +961,8 @@ document.getElementById('shortcut-import').addEventListener('click', () => {
                 }
                 settings.shortcuts = Object.assign({}, DEFAULT_SETTINGS.shortcuts, parsed);
                 buildShortcutTable();
-                alert('ショートカットを読み込みました（OKで反映）。');
-            } catch (err) { alert('JSON解析エラー: ' + err.message); }
+                alert(typeof t === 'function' ? t('alert.shortcutsImported') : 'ショートカットを読み込みました（OKで反映）。');
+            } catch (err) { alert((typeof t === 'function' ? t('alert.jsonParseError') : 'JSON解析エラー: ') + err.message); }
         };
         reader.readAsText(file);
     };
@@ -1504,7 +1510,7 @@ if (changelogBtn) {
         if (modal && content) {
             content.textContent = (typeof APP_CHANGELOG !== 'undefined')
                 ? APP_CHANGELOG
-                : 'CHANGELOG情報がありません。';
+                : (typeof t === 'function' ? t('about.noChangelog') : 'CHANGELOG情報がありません。');
             modal.style.display = 'flex';
         }
     });

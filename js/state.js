@@ -18,7 +18,7 @@ let sections = [
   {type:"CAMERA", x:0, cols:3, cw:58, chars:["CAM1","CAM2","CAM3"]}
 ];
 
-let metaData = { title:"", subTitle:"", scene:"", cut:"", sharedCuts: [], lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"" };
+let metaData = { title:"", subTitle:"", scene:"", cut:"", sharedCuts: [], lengthSec:"6", lengthFrame:"00", creator:"", sheetName:"sheet1", page:"1/1", memo:"", customFields: {} };
 let isMemoExpanded = true;
 let memoScrollLine = 0;
 let booksData = { "ACTION": {}, "SOUND": {}, "CELL": {}, "CAMERA": {} };
@@ -121,3 +121,11 @@ const TDTS_CAMERA_ID_MAP = {
 };
 const TDTS_ID_TO_CAMERA_MAP = {};
 for (let k in TDTS_CAMERA_ID_MAP) TDTS_ID_TO_CAMERA_MAP[TDTS_CAMERA_ID_MAP[k]] = k;
+
+// metaData の必須プロパティを補完（customFields など後追加フィールド対応）
+function ensureMetaDataDefaults(md) {
+    if (!md) return md;
+    if (!md.customFields || typeof md.customFields !== 'object') md.customFields = {};
+    return md;
+}
+window.ensureMetaDataDefaults = ensureMetaDataDefaults;

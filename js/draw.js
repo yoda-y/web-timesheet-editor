@@ -421,7 +421,6 @@ function drawGrid() {
         if (ct === "SOUND") continue;
         // 内部記号はスキップ
         if (data.value && internalSymbols.includes(data.value)) continue;
-        // カット尺以降のセル値は描画しない（TDTSの拡張データ等を表示しないため）
         // マージン部含めて描画（cut外も表示）
         let tx = 0, ty = frameY(f) + 16;
         const sec = sections.find(s => s.type === ct);
@@ -459,7 +458,9 @@ function drawGrid() {
         let dispOpt = data.option;
         if (ct === "CELL") { const actKey = `ACTION-${ci}-${f}`; if (cellData[actKey]?.option) dispOpt = cellData[actKey].option; }
         if (dispOpt && data.value !== "" && !["●", "○", "×", "―"].includes(data.value)) {
-            ctx.strokeStyle = "rgba(180, 180, 180, 0.4)"; ctx.lineWidth = 1.0;
+            // セルが色付き(fontColorId>0)なら囲いも同色、そうでなければ従来の灰色
+            ctx.strokeStyle = (colorId > 0) ? useColor : "rgba(180, 180, 180, 0.4)";
+            ctx.lineWidth = 1.0;
             if (dispOpt === "OPTION_KEYFRAME") { ctx.beginPath(); ctx.arc(tx, ty - 4, 10, 0, Math.PI * 2); ctx.stroke(); }
             else if (dispOpt === "OPTION_REFERENCEFRAME") {
                 ctx.beginPath(); ctx.moveTo(tx, ty - 14); ctx.lineTo(tx + 10, ty + 4); ctx.lineTo(tx - 10, ty + 4); ctx.closePath(); ctx.stroke();
@@ -652,6 +653,11 @@ function getNormalPageCount() {
 }
 
 function getTotalPages() {
+    // 外部テンプレート使用中は専用計算
+    if (typeof getCurrentExternalTemplate === 'function' && getCurrentExternalTemplate() &&
+        typeof getExternalTemplateTotalPages === 'function') {
+        return getExternalTemplateTotalPages();
+    }
     const normalPages = getNormalPageCount();
     // 先頭マージンON: 0ページ + 通常ページ
     // 先頭マージンOFF: 通常ページのみ
@@ -659,6 +665,11 @@ function getTotalPages() {
 }
 
 function getPageStartFrame(pageIndex) {
+    // 外部テンプレート使用中は専用計算
+    if (typeof getCurrentExternalTemplate === 'function' && getCurrentExternalTemplate() &&
+        typeof getExternalTemplatePageStartFrame === 'function') {
+        return getExternalTemplatePageStartFrame(pageIndex);
+    }
     const framesPerPage = (typeof TEMPLATE !== 'undefined' && TEMPLATE.FRAMES_PER_PAGE) ? TEMPLATE.FRAMES_PER_PAGE : 144;
     const headMargin = getHeadMarginForPage();
 

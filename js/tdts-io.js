@@ -14,6 +14,10 @@ function _parseTDTSSingleTable(header, table, opts) {
     meta.lengthSec = Math.floor(d / 24).toString();
     meta.lengthFrame = String(d % 24).padStart(2, '0');
     meta.sheetName = table.name || "sheet1";
+    // _webEditor.customFields の復元 (TDTS仕様外、本家には無視される)
+    if (table._webEditor && table._webEditor.customFields && typeof table._webEditor.customFields === 'object') {
+        meta.customFields = Object.assign({}, table._webEditor.customFields);
+    }
     const direction = table.direction || "";
     // headDummykomas/footDummykomas をマージン設定として記録
     if (typeof settings !== 'undefined' && settings.draw) {
@@ -236,7 +240,8 @@ function extractXdtsCut(text) {
         if (text.startsWith(prefix1)) jsonText = text.substring(prefix1.length);
         else if (text.startsWith(prefix2)) jsonText = text.substring(prefix2.length);
         const data = JSON.parse(jsonText);
-        return data.header?.cut || data.timeTables?.[0]?.name || '';
+        // カット番号のみ取得。timeTables[0].name はシート名なのでフォールバックしない
+        return data.header?.cut || '';
     } catch (e) { return ''; }
 }
 
@@ -279,6 +284,9 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
                 opts.checks.cell = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'cell');
                 // ユーザーが入力したカット番号を反映
                 if (opts.xdtsCut && raw.meta) raw.meta.cut = opts.xdtsCut;
+                // 整理ルール: new以外ではmetaを勝手に上書きしない、カット尺は常に取込
+                if (opts.merge !== 'new') opts.checks.meta = false;
+                opts._forceLength = true;
             }
             if (!raw) { alert("読み込みエラー: ファイル構造が無効です。"); return; }
             if (opts.merge === 'new' && typeof createDocumentTabForIncomingDocument === 'function') {
@@ -287,14 +295,19 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
                 // 取込前の状態をUndoスタックに積む（Ctrl+Zで戻れるように）
                 pushHistory();
             }
-            applyImportData(raw, opts.checks, opts.merge);
-            currentFileHandle = null;
-            currentDirectoryHandle = null;
-            setCurrentFileName(fileName, fmt);
-            if (typeof syncActiveDocumentTabAfterLoad === 'function') {
-                syncActiveDocumentTabAfterLoad(fileName, fmt, null, null);
+            applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength });
+            // 完全新規(new)のときだけ現在ファイル名/ハンドルを切替。それ以外は既存ドキュメント名を維持。
+            if (opts.merge === 'new') {
+                currentFileHandle = null;
+                currentDirectoryHandle = null;
+                setCurrentFileName(fileName, fmt);
+                if (typeof syncActiveDocumentTabAfterLoad === 'function') {
+                    syncActiveDocumentTabAfterLoad(fileName, fmt, null, null);
+                }
+                if (typeof markClean === 'function') markClean();
+            } else {
+                if (typeof markDirty === 'function') markDirty();
             }
-            if (opts.merge === 'new' && typeof markClean === 'function') markClean();
             // UI 状態リセット（undoStack は維持）
             redoStack = [];
             selectionStart = null; selectionEnd = null; selectedMeta = null;
@@ -372,6 +385,9 @@ async function openTimesheetFromFolder() {
             opts.checks.cell = (opts.xdtsCellTarget === 'both' || opts.xdtsCellTarget === 'cell');
             // ユーザーが入力したカット番号を反映
             if (opts.xdtsCut && raw.meta) raw.meta.cut = opts.xdtsCut;
+            // 整理ルール: new以外ではmetaを勝手に上書きしない、カット尺は常に取込
+            if (opts.merge !== 'new') opts.checks.meta = false;
+            opts._forceLength = true;
         }
         if (!raw) {
             alert('ファイルを読み込めませんでした。');
@@ -382,7 +398,7 @@ async function openTimesheetFromFolder() {
         } else {
             pushHistory();
         }
-        applyImportData(raw, opts.checks, opts.merge);
+        applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength });
         redoStack = [];
         selectionStart = null; selectionEnd = null; selectedMeta = null;
         selectedDialogueId = null; selectedCameraId = null;
@@ -396,18 +412,26 @@ async function openTimesheetFromFolder() {
                 showToast && showToast(`手書きデータを自動読み込みしました (${hwCount}件)`);
             }
         }
-        currentFileHandle = selected.handle;
-        currentFileFormat = fmt;
-        currentDirectoryHandle = directoryHandle;
-        setCurrentFileName(selected.name, fmt);
-        if (typeof syncActiveDocumentTabAfterLoad === 'function') {
-            syncActiveDocumentTabAfterLoad(selected.name, fmt, selected.handle, directoryHandle);
+        // 完全新規(new)のときだけ現在ファイル名/ハンドルを切替。それ以外は既存ドキュメント名を維持。
+        if (opts.merge === 'new') {
+            currentFileHandle = selected.handle;
+            currentFileFormat = fmt;
+            currentDirectoryHandle = directoryHandle;
+            setCurrentFileName(selected.name, fmt);
+            if (typeof syncActiveDocumentTabAfterLoad === 'function') {
+                syncActiveDocumentTabAfterLoad(selected.name, fmt, selected.handle, directoryHandle);
+            }
+            await saveLastFileHandle(fmt, selected.handle);
         }
-        await saveLastFileHandle(fmt, selected.handle);
         updateSectionPositions();
         drawAll();
         if (currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
-        if (typeof markClean === 'function') markClean();
+        // 完全新規(new)のみ markClean。それ以外は既存ドキュメントへの追加/変更なので未保存扱い。
+        if (opts.merge === 'new') {
+            if (typeof markClean === 'function') markClean();
+        } else {
+            if (typeof markDirty === 'function') markDirty();
+        }
     } catch (err) {
         if (err && err.name === 'AbortError') return;
         console.error(err);
@@ -424,15 +448,15 @@ function chooseTimesheetFileFromFolder(candidates) {
             modal.className = 'settings-modal';
             modal.innerHTML = `
                 <div class="settings-modal-inner" style="min-width:360px;">
-                    <h3>フォルダから開く</h3>
-                    <div class="io-note">フォルダ内のTDTS/XDTSを選んで開きます。新規で開く場合は、TDTSと同名フォルダ内の手書きPNG/INIも自動で探します。</div>
+                    <h3>${typeof t === 'function' ? t('folderOpen.title') : 'フォルダから開く'}</h3>
+                    <div class="io-note">${typeof t === 'function' ? t('folderOpen.note') : 'フォルダ内のTDTS/XDTSを選んで開きます。新規で開く場合は、TDTSと同名フォルダ内の手書きPNG/INIも自動で探します。'}</div>
                     <div class="settings-row" style="align-items:flex-start;">
-                        <label>ファイル:</label>
+                        <label>${typeof t === 'function' ? t('folderOpen.file') : 'ファイル:'}</label>
                         <select id="folder-open-select" style="flex:1; min-width:220px; background:var(--highlight); color:var(--text-color); border:1px solid var(--grid-thick); padding:4px;"></select>
                     </div>
                     <div class="settings-actions">
-                        <button id="folder-open-ok" class="primary">開く</button>
-                        <button id="folder-open-cancel">キャンセル</button>
+                        <button id="folder-open-ok" class="primary">${typeof t === 'function' ? t('btn.open') : '開く'}</button>
+                        <button id="folder-open-cancel">${typeof t === 'function' ? t('btn.cancel') : 'キャンセル'}</button>
                     </div>
                 </div>
             `;
@@ -744,7 +768,7 @@ function _buildTDTSTimeTable(sheetData, checks) {
     const exportDirection = checks.direction ? (md.memo || "") : "";
     const headDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.headMargin === 'number') ? settings.draw.headMargin : 24;
     const footDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.tailMargin === 'number') ? settings.draw.tailMargin : 24;
-    return {
+    const out = {
         "duration": duration || 144,
         "direction": exportDirection,
         "operatorName": exportCreator,
@@ -758,6 +782,16 @@ function _buildTDTSTimeTable(sheetData, checks) {
         "cameraBlocks": exportCameraBlocks,
         "fields": fields
     };
+    // customFields は本家 TDTS 仕様外なので _webEditor 名前空間に格納 (読込時に復元)
+    if (md && md.customFields && typeof md.customFields === 'object') {
+        const keys = Object.keys(md.customFields).filter(k => md.customFields[k] !== '' && md.customFields[k] != null);
+        if (keys.length > 0) {
+            const cf = {};
+            keys.forEach(k => { cf[k] = md.customFields[k]; });
+            out._webEditor = Object.assign(out._webEditor || {}, { customFields: cf });
+        }
+    }
+    return out;
 }
 
 function _buildTDTSTimeSheetHeader(md, checks) {

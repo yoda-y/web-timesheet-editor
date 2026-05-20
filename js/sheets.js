@@ -42,6 +42,7 @@ function captureCurrentSheet() {
 // シートを current 状態として展開
 function applySheetToGlobal(sheet) {
     metaData = JSON.parse(JSON.stringify(sheet.metaData));
+    ensureMetaDataDefaults(metaData);
     cellData = JSON.parse(JSON.stringify(sheet.cellData));
     booksData = JSON.parse(JSON.stringify(sheet.booksData));
     customRepeats = JSON.parse(JSON.stringify(sheet.customRepeats));

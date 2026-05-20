@@ -1,5 +1,6 @@
 // Service Worker for Web Timesheet Editor
-const CACHE_NAME = 'timesheet-editor-v1';
+// CACHE_NAME を更新するとクライアントが旧キャッシュを破棄してリロード
+const CACHE_NAME = 'timesheet-editor-v2-0.8.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -30,7 +31,13 @@ const ASSETS_TO_CACHE = [
   './js/io-common.js',
   './js/tdts-io.js',
   './js/xdts-io.js',
-  './js/document-tabs.js'
+  './js/document-tabs.js',
+  // v0.8.0 追加: 外部テンプレート関連
+  './js/external-template.js',
+  './js/external-template-ui.js',
+  './js/bbox-editor.js',
+  './js/bbox-editor-canvas.js',
+  './js/version.js'
 ];
 
 // Install: cache all assets

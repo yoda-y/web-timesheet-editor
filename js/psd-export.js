@@ -27,11 +27,19 @@ async function buildTemplateMultiPagePsdBlob(pageIndexes, dpi, includeHandwritin
         layers.push(createPsdGroupStart(label, page.width, page.height, hidden));
     });
     if (onProgress) onProgress('PSDレイヤーを圧縮中...', 75);
-    return writePsdBlob(first.width, first.height, layers, first.composite);
+    return writePsdBlob(first.width, first.height, layers, first.composite, dpi);
 }
 
 async function buildPsdPageLayers(pageIndex, dpi, includeHandwriting) {
-    const blank = renderBlankTemplateForPsd(dpi, pageIndex);
+    const isExternal = (typeof getCurrentExternalTemplate === 'function')
+        && !!getCurrentExternalTemplate()
+        && (typeof getCurrentExternalTemplateImage === 'function')
+        && !!getCurrentExternalTemplateImage();
+
+    // template 層: 外部テンプレは画像のみ、標準A3 は従来通り空メタの再render
+    const blank = isExternal && typeof renderExternalTemplateImageOnly === 'function'
+        ? renderExternalTemplateImageOnly(dpi, pageIndex)
+        : renderBlankTemplateForPsd(dpi, pageIndex);
     const full = renderTemplate(dpi, pageIndex);
     const handwriting = includeHandwriting && typeof renderHandwritingPageToCanvas === 'function'
         ? await renderHandwritingPageToCanvas(pageIndex, dpi)
@@ -39,13 +47,26 @@ async function buildPsdPageLayers(pageIndex, dpi, includeHandwriting) {
     const composite = typeof renderImageExportPageCanvas === 'function'
         ? await renderImageExportPageCanvas(pageIndex, dpi, includeHandwriting)
         : full;
+    // data 層: 外部テンプレ専用パスかどうかで分岐
+    const dataCanvas = isExternal && typeof renderExternalTemplateDataOnly === 'function'
+        ? renderExternalTemplateDataOnly(dpi, pageIndex)
+        : renderDataOnlyForPsd(dpi, pageIndex);
+    // template層:
+    //   - 標準A3: 白を透明化 (グリッド線のみ視認)
+    //   - 外部テンプレ: 画像を完全不透明 (白を透明化すると画像が破壊される可能性)
+    const templateImageData = isExternal
+        ? makeOpaqueRgbPsdImageData(blank)
+        : makeWhiteTransparentPsdImageData(blank);
+    // data層: native alpha を維持 (グレーアウト等の半透明描画を保つため)
+    // 標準A3/外部テンプレ共に raw getImageData
+    const dataImageData = dataCanvas.getContext('2d').getImageData(0, 0, full.width, full.height);
     return {
         pageIndex,
         width: full.width,
         height: full.height,
         background: createSolidPsdImageData(full.width, full.height, 255, 255, 255, 255),
-        template: makeWhiteTransparentPsdImageData(blank),
-        data: renderDataOnlyForPsd(dpi, pageIndex).getContext('2d').getImageData(0, 0, full.width, full.height),
+        template: templateImageData,
+        data: dataImageData,
         memo: handwriting.getContext('2d').getImageData(0, 0, handwriting.width, handwriting.height),
         composite
     };
@@ -149,6 +170,24 @@ function makeWhiteTransparentPsdImageData(canvas) {
     const data = imageData.data;
     for (let i = 0; i < data.length; i += 4) {
         data[i + 3] = (data[i] > 248 && data[i + 1] > 248 && data[i + 2] > 248) ? 0 : 255;
+    }
+    return imageData;
+}
+
+// 完全不透明レイヤー: alpha を全て 255 に。透明RGB(0,0,0,0) はそのままだと
+// PSD読込で問題が出ることがあるので、alpha=0 のピクセルは白(255,255,255)に
+function makeOpaqueRgbPsdImageData(canvas) {
+    const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 255) {
+            // 半透明部分は白とブレンド (背景白前提)
+            const a = data[i + 3] / 255;
+            data[i]     = Math.round(data[i]     * a + 255 * (1 - a));
+            data[i + 1] = Math.round(data[i + 1] * a + 255 * (1 - a));
+            data[i + 2] = Math.round(data[i + 2] * a + 255 * (1 - a));
+            data[i + 3] = 255;
+        }
     }
     return imageData;
 }
@@ -336,7 +375,7 @@ function drawTimelineDataOnlyForPsd(ctx, scale, startX, startY, bodyW, startFram
     drawCutLengthOverlay(ctx, startX, gridY, bodyW, rowH, absoluteStart, scale);
 }
 
-function writePsdBlob(width, height, layers, compositeCanvas) {
+function writePsdBlob(width, height, layers, compositeCanvas, dpi) {
     const records = [];
     const channelChunks = [];
 
@@ -357,7 +396,10 @@ function writePsdBlob(width, height, layers, compositeCanvas) {
     const chunks = [];
     chunks.push(createPsdHeader(width, height));
     chunks.push(u32be(0));
-    chunks.push(u32be(0));
+    // Image Resources セクション (ResolutionInfo を含む)
+    const imageResources = buildPsdImageResources(dpi || 300);
+    chunks.push(u32be(imageResources.length));
+    if (imageResources.length > 0) chunks.push(imageResources);
     chunks.push(u32be(layerMaskLength));
     chunks.push(u32be(layerInfoLength));
     chunks.push(i16be(layers.length));
@@ -374,6 +416,41 @@ function writePsdBlob(width, height, layers, compositeCanvas) {
     ];
     chunks.push(encodePsdRleComposite(compositeChannels, width, height));
     return new Blob(chunks, { type: 'image/vnd.adobe.photoshop' });
+}
+
+// PSD Image Resources セクション構築 (ResolutionInfo 1005 を含む)
+function buildPsdImageResources(dpi) {
+    const resBlocks = [];
+    resBlocks.push(buildResolutionInfoBlock(dpi));
+    return concatUint8(resBlocks);
+}
+
+// ResolutionInfo (resource id 1005) ブロック
+// 構造:
+//   '8BIM' (4) + uint16 id (1005) + Pascal name (空: 1+1=2 で偶数padding) + uint32 size + data(16) + pad
+function buildResolutionInfoBlock(dpi) {
+    const fixed1616 = (dpi << 16) >>> 0; // 16.16 fixed-point
+    // 16-byte ResolutionInfo data
+    const data = new Uint8Array(16);
+    const dv = new DataView(data.buffer);
+    dv.setUint32(0, fixed1616, false);  // hRes
+    dv.setInt16(4, 1, false);            // hResUnit: 1 = pixels/inch
+    dv.setInt16(6, 1, false);            // widthUnit: 1 = inches
+    dv.setUint32(8, fixed1616, false);  // vRes
+    dv.setInt16(12, 1, false);           // vResUnit
+    dv.setInt16(14, 1, false);           // heightUnit
+    // Image Resource Block ヘッダ
+    // signature(4) + id(2) + pascal-name(2) + size(4) + data + (pad to even)
+    const block = new Uint8Array(4 + 2 + 2 + 4 + 16);
+    writeAscii(block, 0, '8BIM');
+    const bv = new DataView(block.buffer);
+    bv.setUint16(4, 1005, false);  // resource id = ResolutionInfo
+    // Pascal name: 空文字。長さ1バイト(0) + パディング1バイト = 2バイト
+    block[6] = 0;
+    block[7] = 0;
+    bv.setUint32(8, 16, false);    // data size
+    block.set(data, 12);
+    return block;
 }
 
 function createPsdHeader(width, height) {
@@ -487,11 +564,16 @@ function packBits(src) {
             continue;
         }
         const start = i;
-        i += run;
+        // 初回 run 加算でリテラル長が128を超えないようクランプ
+        const initLen = Math.min(run, 128);
+        i += initLen;
         while (i < src.length) {
             run = 1;
             while (i + run < src.length && run < 128 && src[i] === src[i + run]) run++;
-            if (run >= 3 || i - start >= 128) break;
+            // 重要: i += run しても (i - start) が 128 を超えないようにする
+            // 旧コードは run が大きい時にリテラル長が 128 を超え、PackBits規格違反だった
+            if (run >= 3) break;
+            if ((i - start) + run > 128) break;
             i += run;
         }
         const len = i - start;

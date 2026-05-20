@@ -60,6 +60,8 @@ window.openDialogueModal = function() {
         document.getElementById('dialogueTextInput').value = existingBlock.text;
         document.getElementById('dialogueStartInput').value = existingBlock.startFrame + 1;
         document.getElementById('dialogueEndInput').value = existingBlock.endFrame + 1;
+        const typeSel = document.getElementById('dialogueTypeInput');
+        if (typeSel) typeSel.value = existingBlock.dialogueType || 'normal';
     } else if (selectionStart && selectionEnd && selectionStart.colType === "SOUND") {
         minF = Math.min(selectionStart.frame, selectionEnd.frame);
         maxF = Math.max(selectionStart.frame, selectionEnd.frame);
@@ -67,6 +69,8 @@ window.openDialogueModal = function() {
         document.getElementById('dialogueTextInput').value = "";
         document.getElementById('dialogueStartInput').value = minF + 1;
         document.getElementById('dialogueEndInput').value = maxF + 1;
+        const typeSel = document.getElementById('dialogueTypeInput');
+        if (typeSel) typeSel.value = 'normal';
     } else return;
     document.getElementById('dialogue-modal').style.display = 'block';
     setTimeout(() => document.getElementById('speakerNameInput').focus(), 10);
@@ -79,6 +83,9 @@ window.saveDialogueBlock = function() {
     let text = document.getElementById('dialogueTextInput').value.trim();
     let startF = parseInt(document.getElementById('dialogueStartInput').value, 10) - 1;
     let endF = parseInt(document.getElementById('dialogueEndInput').value, 10) - 1;
+    const typeSel = document.getElementById('dialogueTypeInput');
+    let dialogueType = typeSel ? typeSel.value : 'normal';
+    if (!['normal', 'off', 'mono', '背'].includes(dialogueType)) dialogueType = 'normal';
     let blockToEdit = dialogueBlocks.find(b => b.id === editingDialogueId);
     let previousBlock = blockToEdit ? JSON.parse(JSON.stringify(blockToEdit)) : null;
     let colIndex = blockToEdit ? blockToEdit.colIndex : (selectionStart ? selectionStart.colIndex : 0);
@@ -92,9 +99,10 @@ window.saveDialogueBlock = function() {
         blockToEdit.text = text;
         blockToEdit.startFrame = startF;
         blockToEdit.endFrame = endF;
+        blockToEdit.dialogueType = dialogueType;
         window.normalizeDialogueBlockCells(blockToEdit, previousBlock);
     } else {
-        let newBlock = { id: Date.now(), colIndex: colIndex, speakerName: speakerName, text: text, startFrame: startF, endFrame: endF };
+        let newBlock = { id: Date.now(), colIndex: colIndex, speakerName: speakerName, text: text, startFrame: startF, endFrame: endF, dialogueType: dialogueType };
         dialogueBlocks.push(newBlock);
         window.normalizeDialogueBlockCells(newBlock);
     }
@@ -113,6 +121,58 @@ window.deleteDialogueBlock = function(blockId) {
     dialogueBlocks = dialogueBlocks.filter(b => b.id !== blockId);
     if (selectedDialogueId === blockId) selectedDialogueId = null;
     drawAll();
+};
+
+// 共通: セリフタイプ → 表示ラベル ('normal' は null = 非表示)
+// 描画3経路 (edit / 標準A3 / 外部テンプレ) で共通利用
+window.getDialogueTypeLabel = function(type) {
+    switch (type) {
+        case 'off':  return '(off)';
+        case 'mono': return '(mono)';
+        case '背':   return '(背)';
+        default:     return null;  // normal or unknown
+    }
+};
+
+// 共通: 話者名を枠付きで描画 (白背景+黒枠+黒文字)
+// ctx.font / ctx.textAlign は呼出側で設定済み前提。padding/角丸はscale引数で調整
+window.drawSpeakerNameWithBox = function(ctx, text, cx, baselineY, opts) {
+    if (!text) return;
+    opts = opts || {};
+    const padX = opts.padX != null ? opts.padX : 2;
+    const padY = opts.padY != null ? opts.padY : 1;
+    const radius = opts.radius != null ? opts.radius : 1.5;
+    const strokeColor = opts.strokeColor || '#000';
+    const fillColor = opts.fillColor || '#fff';
+    const textColor = opts.textColor || '#000';
+    const lineWidth = opts.lineWidth != null ? opts.lineWidth : 0.8;
+    // フォントサイズの抽出 (font文字列から px数値)
+    const fontMatch = /(\d+(?:\.\d+)?)px/.exec(ctx.font || '');
+    const fontPx = fontMatch ? parseFloat(fontMatch[1]) : 12;
+    const tw = ctx.measureText(String(text)).width;
+    // baselineY を alphabetic 基準として、ボックスは文字の上下に padding
+    const boxW = tw + padX * 2;
+    const boxH = fontPx + padY * 2;
+    const boxX = cx - boxW / 2;
+    // alphabetic 基準なので、文字の上端は baselineY - fontPx*0.8 程度
+    const boxY = baselineY - fontPx * 0.85 - padY;
+    ctx.save();
+    // 背景
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(boxX, boxY, boxW, boxH, radius);
+    } else {
+        ctx.rect(boxX, boxY, boxW, boxH);
+    }
+    ctx.fill();
+    ctx.stroke();
+    // テキスト
+    ctx.fillStyle = textColor;
+    ctx.fillText(text, cx, baselineY);
+    ctx.restore();
 };
 
 // === セリフブロック描画 ===
@@ -137,7 +197,20 @@ function drawDialogueBlocks(ctx) {
         ctx.fillStyle = getStyle('--text-color');
         ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center";
         let textStartY = startY + 14;
-        if (block.speakerName && !isShort) { ctx.fillText(block.speakerName, tx + sndSec.cw / 2, startY + 12); textStartY = startY + 28; }
+        const typeLabel = (typeof getDialogueTypeLabel === 'function') ? getDialogueTypeLabel(block.dialogueType) : null;
+        // 話者名: ブロック内上部 (元位置)
+        if (block.speakerName && !isShort) {
+            ctx.fillText(block.speakerName, tx + sndSec.cw / 2, startY + 12);
+            textStartY = startY + 28;
+        }
+        // タイプラベル (normal以外): 話者名の下に小さめで併記
+        if (typeLabel && !isShort) {
+            ctx.font = "9px sans-serif";
+            const typeY = block.speakerName ? startY + 24 : startY + 12;
+            ctx.fillText(typeLabel, tx + sndSec.cw / 2, typeY);
+            textStartY = block.speakerName ? startY + 36 : startY + 28;
+            ctx.font = "bold 10px sans-serif";  // 元に戻す
+        }
         if (block.text) {
             ctx.font = "bold 12px sans-serif";
             const CHAR_H = 14; // 12px font + 余白

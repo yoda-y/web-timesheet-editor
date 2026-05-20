@@ -336,6 +336,7 @@ button:hover { background: var(--border-color); }
   pointer-events: none;
 }
 
+
 .sidebar-tool-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1189,3 +1190,237 @@ body:not(.tablet-mode) .undo-redo-float { display: none !important; }
 }
 /* タブレットモードのみ表示 */
 body:not(.tablet-mode) .numpad-panel { display: none !important; }
+
+/* === 外部テンプレート管理モーダル === */
+.ext-tpl-modal-inner {
+    min-width: 960px;
+    max-width: 1200px;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+}
+.ext-tpl-body {
+    flex: 1;
+    display: flex;
+    gap: 16px;
+    overflow: hidden;
+    padding: 8px 0;
+    min-height: 480px;
+}
+.ext-tpl-left {
+    width: 360px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border-color);
+    padding-right: 12px;
+}
+.ext-tpl-list-header {
+    font-weight: bold;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--text-color);
+}
+.ext-tpl-list {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 4px;
+    background: var(--panel-bg);
+    font-size: 12px;
+}
+.ext-tpl-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    gap: 4px;
+}
+.ext-tpl-list-item:hover { background: rgba(128,128,128,0.15); }
+.ext-tpl-list-item.selected { background: rgba(66,133,244,0.25); }
+.ext-tpl-list-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ext-tpl-list-item .row-btns { display: flex; gap: 4px; flex-shrink: 0; }
+.ext-tpl-list-item .row-btns button {
+    font-size: 11px;
+    padding: 4px 8px;
+    min-width: 64px; /* "Duplicate" の英語幅基準で固定（言語切替で揺れない） */
+    text-align: center;
+}
+.ext-tpl-empty {
+    padding: 16px;
+    text-align: center;
+    color: var(--grid-medium);
+    font-size: 12px;
+}
+.ext-tpl-list-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+.ext-tpl-list-actions button { flex: 1; font-size: 11px; padding: 6px; }
+.ext-tpl-right {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 4px;
+}
+.ext-tpl-placeholder {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--grid-medium);
+    font-size: 12px;
+}
+.ext-tpl-edit-form {
+    display: flex;
+    flex-direction: column;
+}
+.ext-tpl-image-preview-wrap {
+    margin-top: 12px;
+    padding: 8px;
+    background: rgba(0,0,0,0.1);
+    border-radius: 4px;
+    text-align: center;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+#ext-tpl-image-preview {
+    max-width: 100%;
+    max-height: 280px;
+    object-fit: contain;
+    display: block;
+}
+#ext-tpl-image-preview:not([src]), #ext-tpl-image-preview[src=""] { display: none; }
+.ext-tpl-image-info {
+    font-size: 11px;
+    color: var(--grid-medium);
+    margin-top: 6px;
+}
+
+/* === BBoxエディタ === */
+.bbox-editor-inner {
+    width: 95vw;
+    height: 92vh;
+    max-width: none;
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+}
+.bbox-editor-body {
+    flex: 1;
+    display: flex;
+    gap: 12px;
+    overflow: hidden;
+    padding: 8px 0;
+    min-height: 0;
+}
+.bbox-editor-tags {
+    width: 240px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border-color);
+    padding-right: 8px;
+    overflow-y: auto;
+}
+.bbox-editor-section-title {
+    font-weight: bold;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+.bbox-editor-tag-list { font-size: 12px; }
+.bbox-editor-tag-category {
+    margin-bottom: 10px;
+}
+.bbox-editor-tag-category-label {
+    font-size: 10px;
+    color: var(--grid-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 4px;
+}
+.bbox-editor-tag-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.bbox-editor-tag-item:hover { background: rgba(128,128,128,0.15); }
+.bbox-editor-tag-item.selected { background: rgba(66,133,244,0.25); }
+.bbox-editor-tag-item input[type="checkbox"] { margin: 0; }
+.bbox-editor-tag-item .tag-key {
+    font-family: monospace;
+    color: var(--grid-medium);
+    font-size: 10px;
+    margin-left: auto;
+}
+.bbox-editor-canvas-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+.bbox-editor-canvas-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    padding: 4px 6px;
+    background: var(--highlight);
+    border-radius: 3px;
+    margin-bottom: 6px;
+}
+.bbox-editor-canvas-hint { color: var(--grid-medium); }
+.bbox-editor-canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: auto;
+    background: rgba(0,0,0,0.15);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+}
+#bbox-editor-canvas {
+    display: block;
+    cursor: crosshair;
+}
+.bbox-editor-no-image {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--grid-medium);
+    font-size: 12px;
+}
+.bbox-editor-props {
+    width: 260px;
+    overflow-y: auto;
+    padding: 0 4px;
+    border-left: 1px solid var(--border-color);
+    padding-left: 12px;
+}
+.bbox-editor-props-empty {
+    padding: 30px 8px;
+    text-align: center;
+    color: var(--grid-medium);
+    font-size: 12px;
+}
+.bbox-editor-props-form .settings-row {
+    margin: 4px 0;
+}
+.bbox-editor-props-form label {
+    width: 100px;
+    font-size: 11px;
+}
+.bbox-prop-readonly {
+    font-family: monospace;
+    color: var(--text-color);
+    background: var(--highlight);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
