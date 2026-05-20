@@ -498,26 +498,46 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
 function clipDirectionRectForExternal(rect, extTpl, bboxToCanvas) {
     if (!extTpl || !extTpl.bboxes) return rect;
     let bottomLimit = rect.y + rect.h;
-    // 水平範囲が重なる他BBoxを検出し、その上端で direction の下端を制限
     const dirL = rect.x, dirR = rect.x + rect.w;
+    const m = (mm) => mm * (rect.w > 0 ? rect.w / rect.w : 1);  // scaleが取れないのでpx直接指定
+
+    // BOOK 積み上げの最大行数を計算 (drawExternalTemplateBooks と同じロジック)
+    let bookMaxRow = 0;
+    if (typeof booksData !== 'undefined' && booksData && booksData['ACTION']) {
+        const allBookCounts = [];
+        for (const lineIdx in booksData['ACTION']) {
+            const books = booksData['ACTION'][lineIdx];
+            if (books && books.length) allBookCounts.push(books.length);
+        }
+        // 各カラムのBOOK数の最大値が概ね積み上げの最大行数 (簡易計算)
+        bookMaxRow = allBookCounts.length ? Math.max(...allBookCounts) - 1 : 0;
+    }
+
     Object.entries(extTpl.bboxes).forEach(([tag, bb]) => {
         if (!bb || !bb.enabled) return;
         if (tag === 'direction') return;
-        // タイムラインBBox + custom系のみ干渉対象 (meta系は通常 direction より上)
         const cat = (window.externalTemplate && window.externalTemplate.tags && window.externalTemplate.tags[tag]) ? window.externalTemplate.tags[tag].category : '';
         if (cat !== 'timeline' && cat !== 'custom') return;
         const r = bboxToCanvas(bb);
-        // 水平重なり判定
         const overlapX = !(r.x + r.w < dirL || r.x > dirR);
         if (!overlapX) return;
-        // direction の下方に位置する場合のみ干渉
         if (r.y >= rect.y) {
-            // BOOK領域分の余白 (action1なら BOOK 表示のために 2コマ分上を余裕)
             let reserve = 0;
+            // action1: BOOK 領域を考慮 (drawExternalTemplateBooks と同じ計算)
+            //   baseBookY = action1.y - cellH * 2
+            //   bookBoxH ≈ 約4.5mm相当 → px換算 (rect.h を 72cells 想定で逆算は不可なので近似値)
+            //   topmost book = baseBookY - bookBoxH - maxRow * bookRowH
             if (tag === 'action1') {
                 const frames = bb.frames || 72;
                 const cellH = r.h / frames;
-                reserve = cellH * 2;
+                // 4.5mm/6mm を cellHから逆算する代わりに、px ベースの近似:
+                //   bookBoxH ≈ cellH * 1.5、bookRowH ≈ cellH * 2.0 (typical 3mmrowH時)
+                //   safer: 直接px ベース、ただしdpiにそって調整
+                // bbox.frames=72 / cellH=2.4mm を想定すると bookBoxH=4.5mm ≈ 1.875*cellH
+                const bookBoxH = cellH * 1.875;  // ≈ 4.5mm 相当 (cellH=2.4mm想定)
+                const bookRowH = cellH * 2.5;    // ≈ 6mm 相当
+                const cellsAbove = cellH * 2;     // 2コマ分余裕
+                reserve = cellsAbove + bookBoxH + bookMaxRow * bookRowH + cellH * 0.5;
             }
             const effectiveTop = r.y - reserve;
             if (effectiveTop < bottomLimit) bottomLimit = effectiveTop;
