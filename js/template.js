@@ -107,16 +107,12 @@ function renderExternalTemplateImageOnly(dpi, pageIndex) {
 }
 window.renderExternalTemplateImageOnly = renderExternalTemplateImageOnly;
 
-// 外部テンプレ専用: data-only (白背景+BBox描画のみ。画像なし) — PSDのdata層用
-// 白背景にしておくことで、makeWhiteTransparentPsdImageData 適用後に
-// 描画部分だけ不透明・他は完全透明になり、PSD読込互換性が向上する
+// 外部テンプレ専用: data-only (透明背景+BBox描画のみ。画像なし) — PSDのdata層用
+// グレーアウト等の半透明描画を保持するため白塗りはしない (native alpha を維持)
 function renderExternalTemplateDataOnly(dpi, pageIndex) {
     const canvas = createTemplateCanvas(dpi);
     const ctx = canvas.getContext('2d');
     const scale = dpi / 25.4;
-    // まず白背景 (PSD レイヤー alpha 抽出のための前提)
-    ctx.fillStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.BG_COLOR) || '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
     const extTpl = (typeof getCurrentExternalTemplate === 'function') ? getCurrentExternalTemplate() : null;
     const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage() : null;
     if (!extTpl || !extImg) return canvas;

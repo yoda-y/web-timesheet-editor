@@ -57,10 +57,9 @@ async function buildPsdPageLayers(pageIndex, dpi, includeHandwriting) {
     const templateImageData = isExternal
         ? makeOpaqueRgbPsdImageData(blank)
         : makeWhiteTransparentPsdImageData(blank);
-    // data層: 外部テンプレは白→透明、標準A3は従来通り (renderDataOnlyForPsd は透明背景)
-    const dataImageData = isExternal
-        ? makeWhiteTransparentPsdImageData(dataCanvas)
-        : dataCanvas.getContext('2d').getImageData(0, 0, full.width, full.height);
+    // data層: native alpha を維持 (グレーアウト等の半透明描画を保つため)
+    // 標準A3/外部テンプレ共に raw getImageData
+    const dataImageData = dataCanvas.getContext('2d').getImageData(0, 0, full.width, full.height);
     return {
         pageIndex,
         width: full.width,
