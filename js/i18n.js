@@ -83,7 +83,8 @@ const I18N = {
         'view.zoom100': '100%',
         'view.fit': 'ウィンドウにフィット',
         'view.toggleDirection': 'DIRECTION欄を展開/折りたたみ',
-        'view.togglePanel': 'セル構成パネル表示/非表示',
+        'view.togglePanel': 'セル構成パネルを表示',
+        'panel.close': '閉じる',
         'view.theme.light': 'ライトモード',
         'view.theme.dark': 'ダークモード',
         'view.theme.system': 'システム連動',
@@ -618,7 +619,8 @@ const I18N = {
         'view.zoom100': '100%',
         'view.fit': 'Fit to Window',
         'view.toggleDirection': 'Toggle DIRECTION Pane',
-        'view.togglePanel': 'Toggle Cell Layout Panel',
+        'view.togglePanel': 'Show Cell Layout Panel',
+        'panel.close': 'Close',
         'view.theme.light': 'Light Mode',
         'view.theme.dark': 'Dark Mode',
         'view.theme.system': 'System Theme',
@@ -1213,6 +1215,8 @@ function applyI18n() {
     document.querySelectorAll('[data-i18n-label]').forEach(el => {
         el.label = t(el.dataset.i18nLabel);
     });
+    // i18n適用後、状態依存のメニューチェックを再適用
+    if (typeof updateCellLayoutPanelMenuCheck === 'function') updateCellLayoutPanelMenuCheck();
 }
 
 function setLang(lang) {

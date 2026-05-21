@@ -1000,7 +1000,10 @@
   <div id="floating-panel">
     <div class="panel-header" id="panel-header">
       <span data-i18n="panel.cellLayout">セル構成</span>
-      <span id="panel-toggle-icon">▼</span>
+      <span style="display:flex; gap:6px; align-items:center;">
+        <span id="panel-toggle-icon">▼</span>
+        <span id="panel-close-btn" title="閉じる" data-i18n-title="panel.close" style="cursor:pointer; padding:0 4px; font-size:14px; line-height:1;">×</span>
+      </span>
     </div>
     <div class="panel-content" id="cell-config-list"></div>
     <div class="panel-footer">

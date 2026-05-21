@@ -1,5 +1,6 @@
 // === セクション・セル・BOOK 操作 / セル構成パネル ===
 
+// ヘッダクリック: 内容を折りたたみ (パネルは残る)
 window.togglePanel = function() {
     isPanelExpanded = !isPanelExpanded;
     const panel = document.getElementById('floating-panel');
@@ -7,6 +8,54 @@ window.togglePanel = function() {
     if (isPanelExpanded) { panel.classList.remove('collapsed'); icon.innerText = '▼'; }
     else { panel.classList.add('collapsed'); icon.innerText = '◀'; }
 };
+
+// === セル構成パネルの表示/非表示 (localStorage 永続化) ===
+const CELL_PANEL_VISIBLE_KEY = 'cellLayoutPanelVisible';
+
+function isCellLayoutPanelVisible() {
+    const v = localStorage.getItem(CELL_PANEL_VISIBLE_KEY);
+    // 未設定時はデフォルト表示
+    return v === null ? true : v === '1';
+}
+
+function setCellLayoutPanelVisible(visible) {
+    const panel = document.getElementById('floating-panel');
+    if (!panel) return;
+    panel.style.display = visible ? '' : 'none';
+    localStorage.setItem(CELL_PANEL_VISIBLE_KEY, visible ? '1' : '0');
+    updateCellLayoutPanelMenuCheck();
+}
+window.setCellLayoutPanelVisible = setCellLayoutPanelVisible;
+
+window.toggleCellLayoutPanelVisible = function() {
+    setCellLayoutPanelVisible(!isCellLayoutPanelVisible());
+};
+
+// メニュー項目に表示状態のチェックマーク (✓) を付ける
+function updateCellLayoutPanelMenuCheck() {
+    const menuRow = document.querySelector('[data-action="view.togglePanel"]');
+    if (!menuRow) return;
+    const visible = isCellLayoutPanelVisible();
+    const baseLabel = (typeof t === 'function') ? t('view.togglePanel') : 'セル構成パネル表示';
+    menuRow.textContent = (visible ? '✓ ' : '   ') + baseLabel;
+}
+window.updateCellLayoutPanelMenuCheck = updateCellLayoutPanelMenuCheck;
+
+// 初期化: localStorage の値を反映 + 閉じるボタン配線
+document.addEventListener('DOMContentLoaded', () => {
+    const panel = document.getElementById('floating-panel');
+    if (panel) {
+        if (!isCellLayoutPanelVisible()) panel.style.display = 'none';
+    }
+    const closeBtn = document.getElementById('panel-close-btn');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setCellLayoutPanelVisible(false);
+        });
+    }
+    updateCellLayoutPanelMenuCheck();
+});
 
 window.renameCellByRef = function(type, idx) {
     let sec = sections.find(s => s.type === type);
