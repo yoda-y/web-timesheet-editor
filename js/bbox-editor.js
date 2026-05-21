@@ -261,6 +261,50 @@ window.bboxEditorGetSelectedTag = () => bboxEditorSelectedTag;
 window.bboxEditorSetSelectedTag = (tag) => selectBBoxTag(tag);
 window.bboxEditorRenderTagList = () => renderBBoxEditorTagList();
 
+// BBox 矢印キー微調整 (位置 / Alt時はサイズ、Shift時は10px倍)
+// modal 開いていて、入力欄にフォーカスしていない時のみ動作
+window.addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    if (e.ctrlKey || e.metaKey) return;
+    const modal = document.getElementById('bbox-editor-modal');
+    if (!modal || modal.style.display === 'none' || modal.style.display === '') return;
+    const target = e.target;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return;
+    if (!bboxEditorTemplate || !bboxEditorSelectedTag) return;
+    const bbox = bboxEditorTemplate.bboxes[bboxEditorSelectedTag];
+    if (!bbox || bbox.locked) return;
+    const imgW = bboxEditorTemplate.imageWidth || 800;
+    const imgH = bboxEditorTemplate.imageHeight || 600;
+    const step = e.shiftKey ? 10 : 1;
+    const dx = step / imgW;
+    const dy = step / imgH;
+    const isResize = e.altKey;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    e.stopPropagation();
+    pushBBoxHistory();
+    if (isResize) {
+        // サイズ変更: 右/下=拡大、左/上=縮小
+        if (e.key === 'ArrowRight') bbox.w += dx;
+        else if (e.key === 'ArrowLeft') bbox.w -= dx;
+        else if (e.key === 'ArrowDown') bbox.h += dy;
+        else if (e.key === 'ArrowUp') bbox.h -= dy;
+        bbox.w = Math.max(0.005, Math.min(1.05, bbox.w));
+        bbox.h = Math.max(0.005, Math.min(1.05, bbox.h));
+    } else {
+        // 位置移動
+        if (e.key === 'ArrowRight') bbox.x += dx;
+        else if (e.key === 'ArrowLeft') bbox.x -= dx;
+        else if (e.key === 'ArrowDown') bbox.y += dy;
+        else if (e.key === 'ArrowUp') bbox.y -= dy;
+        bbox.x = Math.max(-0.05, Math.min(1.0, bbox.x));
+        bbox.y = Math.max(-0.05, Math.min(1.0, bbox.y));
+    }
+    // プロパティ入力欄を更新 + canvas再描画
+    if (typeof renderBBoxEditorPropsForm === 'function') renderBBoxEditorPropsForm();
+    if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
+}, true);
+
 // Ctrl+Z: BBoxエディタが開いている時のUndo（window-captureで最上流に登録）
 // handwriting.js などの document-capture より先に処理させるため window レベル
 window.addEventListener('keydown', (e) => {
