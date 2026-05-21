@@ -390,7 +390,7 @@ function drawGrid() {
         if (sec.type === "ACTION") {
             let firstData = rep.pattern[0] || null;
             let firstVal = firstData ? firstData.value : "";
-            drawRepMark(ctx, sec, rep.colIndex, rep.startF, rep.endF + 1, firstVal, firstData, typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep');
+            drawRepMark(ctx, sec, rep.colIndex, rep.startF, rep.endF + 1, firstVal, firstData, typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep', rep.fontColorId);
         } else {
             ctx.fillStyle = "rgba(200, 200, 200, 0.5)"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
             let endF = Math.min(rep.endF, numFrames - 1);

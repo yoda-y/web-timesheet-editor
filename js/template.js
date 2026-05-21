@@ -1732,20 +1732,19 @@ function drawRepeatTextWithBg(ctx, text, x, y, font, scale) {
 }
 
 // セル寸法 (colW/rowH) を渡すと囲いをクランプ + 半透明化
-// 渡さない場合は従来通り m(2.5) 固定 (互換)
-function drawTemplateOptionMark(ctx, x, y, data, scale, colW, rowH) {
+// overrideColor を渡すと囲いの色を上書き (Rep の fontColorId 反映用)
+function drawTemplateOptionMark(ctx, x, y, data, scale, colW, rowH, overrideColor) {
     if (!data || !data.option || !data.value) return;
     if (['●', '○', '×', '―'].includes(data.value)) return;
     const m = (mm) => mm * scale;
     const baseRadius = m(2.5);
-    // colW/rowH が渡されたらセル寸法にクランプ + 半透明 (外部テンプレと統一)
     const useClamp = (typeof colW === 'number' && colW > 0) || (typeof rowH === 'number' && rowH > 0);
     const radius = useClamp
         ? Math.min(baseRadius, (colW || baseRadius) * 0.42, (rowH || baseRadius) * 0.42)
         : baseRadius;
     ctx.save();
     if (useClamp) ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
+    ctx.strokeStyle = overrideColor || TEMPLATE.TEXT_COLOR;
     ctx.lineWidth = useClamp ? Math.max(1.0, scale * 0.25) : TEMPLATE.LINE_FINE;
     if (data.option === 'OPTION_KEYFRAME') {
         ctx.beginPath();
@@ -2041,7 +2040,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
 
                 // 先頭セル番号 (下地なし)
                 drawPlainText(firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`, repColor);
-                drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale, colW, rowH);
+                drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale, colW, rowH, repColor);
 
                 // "rep" (下地なし)
                 const repTextFrame = chunkStartFrame + 1;
@@ -2081,8 +2080,10 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
             const firstData = rep.pattern?.[0] || null;
             const firstVal = firstData?.value || '';
 
-            // 色: firstData の fontColorId を Rep 全体に反映
-            const cRepColorId = (firstData && firstData.fontColorId) || 0;
+            // 色: rep.fontColorId (適用時のactiveFontColorId) 優先、無ければ firstData.fontColorId
+            const cRepColorId = (rep.fontColorId && rep.fontColorId > 0)
+                ? rep.fontColorId
+                : ((firstData && firstData.fontColorId) || 0);
             const cRepColor = (cRepColorId > 0 && typeof getFontColorById === 'function')
                 ? getFontColorById(cRepColorId)
                 : null;
@@ -2091,7 +2092,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
             if (chunkStartFrame >= absoluteStart && chunkStartFrame < endFrame) {
                 const repY = y + (chunkStartFrame - absoluteStart) * rowH;
                 drawPlainText(firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`, cRepColor);
-                drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale, colW, rowH);
+                drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale, colW, rowH, cRepColor);
             }
 
             const repTextFrame = chunkStartFrame + 1;
@@ -3527,13 +3528,13 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
     };
     // Rep 先頭セル用の小さめ option mark (通常セルと同じ計算)
     // drawTemplateOptionMark は radius=m(2.5) 固定で大きすぎるので、セル寸法にクランプ
-    const drawSmallOptionMark = (px, py, data) => {
+    const drawSmallOptionMark = (px, py, data, overrideColor) => {
         if (!data || !data.option || !data.value) return;
         if (['●','○','×','―'].includes(data.value)) return;
         const r = Math.min(scale * 2.5, cellW * 0.42, cellH * 0.42);
         ctx.save();
         ctx.globalAlpha = 0.5;
-        ctx.strokeStyle = '#000';
+        ctx.strokeStyle = overrideColor || '#000';
         ctx.lineWidth = Math.max(1.0, scale * 0.25);
         if (data.option === 'OPTION_KEYFRAME') {
             ctx.beginPath();
@@ -3587,7 +3588,7 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
             // 先頭セル番号 (下地なし、囲いは通常セルと同じ小さめ半透明)
             if (inRange(chunkStartFrame)) {
                 const repY = yOfFrame(chunkStartFrame);
-                drawSmallOptionMark(tx, repY + cellH / 2, firstData);
+                drawSmallOptionMark(tx, repY + cellH / 2, firstData, repColor);
                 drawPlainTextColored(firstVal, tx, repY + cellH / 2, `bold ${m(2.2)}px sans-serif`, repColor);
             }
             // "rep" ラベル (下地なし)
@@ -3614,15 +3615,17 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
             const firstData = rep.pattern?.[0] || null;
             const firstVal = firstData?.value || '';
 
-            // 色: firstData の fontColorId を Rep 全体に反映
-            const cRepColorId = (firstData && firstData.fontColorId) || 0;
+            // 色: rep.fontColorId (適用時のactiveFontColorId) 優先、無ければ firstData.fontColorId
+            const cRepColorId = (rep.fontColorId && rep.fontColorId > 0)
+                ? rep.fontColorId
+                : ((firstData && firstData.fontColorId) || 0);
             const cRepColor = (cRepColorId > 0 && typeof getFontColorById === 'function')
                 ? getFontColorById(cRepColorId)
                 : null;
 
             if (inRange(chunkStartFrame)) {
                 const repY = yOfFrame(chunkStartFrame);
-                drawSmallOptionMark(tx, repY + cellH / 2, firstData);
+                drawSmallOptionMark(tx, repY + cellH / 2, firstData, cRepColor);
                 drawPlainTextColored(firstVal, tx, repY + cellH / 2, `bold ${m(2.2)}px sans-serif`, cRepColor);
             }
 
