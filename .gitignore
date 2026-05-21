@@ -8,4 +8,7 @@ Thumbs.db
 *.local
 settings.local.json
 XDTSFileFormat_ver10_ja/
-docs/
+docs/*
+
+# プロジェクトHTML 仕様書は公開する
+!docs/project_html_spec.md
