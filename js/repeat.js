@@ -125,7 +125,21 @@ window.applyRepeat = function(mode = 'repeat') {
         if (cellData[`${selectionStart.colType}-${selectionStart.colIndex}-${f}`]) { endF = f - 1; break; }
     }
     if (endF >= maxF + 1) {
-        customRepeats.push({ id: Date.now(), colType: selectionStart.colType, colIndex: selectionStart.colIndex, startF: maxF + 1, endF: endF, pattern: pattern, mode });
+        // 入力色 (activeFontColorId) を Rep 専用色として保存
+        // 0 なら未設定として扱い、表示色は pattern[0].fontColorId にフォールバック
+        const activeColorId = (typeof activeFontColorId !== 'undefined' && activeFontColorId > 0)
+            ? activeFontColorId
+            : 0;
+        customRepeats.push({
+            id: Date.now(),
+            colType: selectionStart.colType,
+            colIndex: selectionStart.colIndex,
+            startF: maxF + 1,
+            endF: endF,
+            pattern: pattern,
+            mode,
+            fontColorId: activeColorId
+        });
     }
     drawAll();
 };
@@ -167,36 +181,44 @@ function getRepeatPatternData(rep, f) {
 }
 
 // 描画ヘルパー: rep 表記（先頭セル番号 + "rep" + 青点線）
-function drawRepMark(ctx, sec, colIndex, chunkStartFrame, endF, firstVal, firstData, label = 'rep') {
+function drawRepMark(ctx, sec, colIndex, chunkStartFrame, endF, firstVal, firstData, label = 'rep', repColorIdOverride) {
     const drawFrameLimit = (typeof numFrames !== 'undefined' && numFrames > 0) ? numFrames : targetFrames;
     if (chunkStartFrame >= drawFrameLimit) return;
     let tx = sec.x + colIndex * sec.cw + sec.cw / 2;
-    ctx.fillStyle = getStyle('--text-color');
+    // 色: rep専用color (適用時のactiveFontColorId) 優先、無ければ firstData.fontColorId
+    const colorId = (repColorIdOverride && repColorIdOverride > 0)
+        ? repColorIdOverride
+        : ((firstData && firstData.fontColorId) || 0);
+    const useColor = (colorId > 0 && typeof getFontColorById === 'function')
+        ? getFontColorById(colorId)
+        : getStyle('--text-color');
+    ctx.fillStyle = useColor;
     ctx.font = "bold 12px sans-serif";
     ctx.textAlign = "center";
     const ty = frameY(chunkStartFrame) + 16;
     ctx.fillText(firstVal, tx, ty);
-    drawRepOptionMark(ctx, tx, ty, firstData);
+    drawRepOptionMark(ctx, tx, ty, firstData, colorId > 0 ? useColor : null);
     let repFrame = chunkStartFrame + 1;
     if (repFrame < drawFrameLimit) {
-        // ブレ/ランダムブレも横書き表示。ランダムブレは Rブレ に略記。
         let displayLabel = label;
         if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
-        // フォントサイズ調整（多文字ラベルは少し小さく）
         if (displayLabel !== 'rep') {
             ctx.font = "bold 10px sans-serif";
         }
+        ctx.fillStyle = useColor;
         ctx.fillText(displayLabel, tx, frameY(repFrame) + 16);
         ctx.font = "bold 12px sans-serif";
     }
     let lineStartF = repFrame + 1;
     let lineEndF = Math.min(endF - 1, repFrame + 6, drawFrameLimit - 1);
     if (lineEndF >= lineStartF && lineStartF < drawFrameLimit) {
-        ctx.strokeStyle = (typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)";
+        // 点線色: 色付きセルなら useColor、無ければ既定 (blue)
+        ctx.strokeStyle = (colorId > 0)
+            ? useColor
+            : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)");
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
-        // 文字と被らないよう少し下に逃がす (+4px)
         ctx.moveTo(tx, frameY(lineStartF) + 4);
         ctx.lineTo(tx, frameY(lineEndF + 1));
         ctx.stroke();
@@ -217,10 +239,16 @@ function drawVerticalRepeatLabel(ctx, tx, y, label) {
     return y + 4 + bgH;
 }
 
-function drawRepOptionMark(ctx, tx, ty, data) {
+function drawRepOptionMark(ctx, tx, ty, data, overrideColor) {
     if (!data || !data.option || !data.value) return;
     if (["●", "○", "×", "―"].includes(data.value)) return;
-    ctx.strokeStyle = "rgba(180, 180, 180, 0.4)";
+    ctx.save();
+    if (overrideColor) {
+        ctx.strokeStyle = overrideColor;
+        ctx.globalAlpha = 0.5;
+    } else {
+        ctx.strokeStyle = "rgba(180, 180, 180, 0.4)";
+    }
     ctx.lineWidth = 1.0;
     if (data.option === "OPTION_KEYFRAME") {
         ctx.beginPath();
@@ -234,6 +262,7 @@ function drawRepOptionMark(ctx, tx, ty, data) {
         ctx.closePath();
         ctx.stroke();
     }
+    ctx.restore();
 }
 
 function getMotionInstruction(value) {

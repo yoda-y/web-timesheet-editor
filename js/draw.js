@@ -338,14 +338,20 @@ function drawGrid() {
                         if (currentGap >= lineGap && (s.type === "CELL" || (f - startF < 9))) {
                             let drawY_top = frameY(f);
                             let drawY_bottom = frameY(f + 1);
+                            // 棒線/波線色: startVal セルの fontColorId を反映 (数字と同色)
+                            const startCell = cellData[`${s.type}-${ci}-${startF}`];
+                            const startColorId = (startCell && startCell.fontColorId) || 0;
+                            const lineColor = (startColorId > 0 && typeof getFontColorById === 'function')
+                                ? getFontColorById(startColorId)
+                                : getStyle('--text-color');
+                            ctx.strokeStyle = lineColor;
+                            ctx.lineWidth = 1.5;
                             if (startVal === "×") {
                                 let offset = rowHeight / 4;
-                                ctx.strokeStyle = getStyle('--text-color'); ctx.lineWidth = 1.5;
                                 ctx.beginPath(); ctx.moveTo(tx, drawY_top);
                                 ctx.bezierCurveTo(tx - offset, drawY_top + offset, tx + offset, drawY_bottom - offset, tx, drawY_bottom);
                                 ctx.stroke();
                             } else {
-                                ctx.strokeStyle = getStyle('--text-color'); ctx.lineWidth = 1.5;
                                 ctx.beginPath(); ctx.moveTo(tx, drawY_top); ctx.lineTo(tx, drawY_bottom); ctx.stroke();
                             }
                         }
@@ -384,7 +390,7 @@ function drawGrid() {
         if (sec.type === "ACTION") {
             let firstData = rep.pattern[0] || null;
             let firstVal = firstData ? firstData.value : "";
-            drawRepMark(ctx, sec, rep.colIndex, rep.startF, rep.endF + 1, firstVal, firstData, typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep');
+            drawRepMark(ctx, sec, rep.colIndex, rep.startF, rep.endF + 1, firstVal, firstData, typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep', rep.fontColorId);
         } else {
             ctx.fillStyle = "rgba(200, 200, 200, 0.5)"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "center";
             let endF = Math.min(rep.endF, numFrames - 1);
@@ -458,13 +464,18 @@ function drawGrid() {
         let dispOpt = data.option;
         if (ct === "CELL") { const actKey = `ACTION-${ci}-${f}`; if (cellData[actKey]?.option) dispOpt = cellData[actKey].option; }
         if (dispOpt && data.value !== "" && !["●", "○", "×", "―"].includes(data.value)) {
-            // セルが色付き(fontColorId>0)なら囲いも同色、そうでなければ従来の灰色
-            ctx.strokeStyle = (colorId > 0) ? useColor : "rgba(180, 180, 180, 0.4)";
+            // 半透明化 (標準A3/外部テンプレと統一)。
+            // 色付きセル(fontColorId>0)なら同色、そうでなければ text-color (ダークモード対応)
+            ctx.save();
+            const prevAlpha = ctx.globalAlpha;
+            ctx.globalAlpha = prevAlpha * 0.5;
+            ctx.strokeStyle = (colorId > 0) ? useColor : getStyle('--text-color');
             ctx.lineWidth = 1.0;
             if (dispOpt === "OPTION_KEYFRAME") { ctx.beginPath(); ctx.arc(tx, ty - 4, 10, 0, Math.PI * 2); ctx.stroke(); }
             else if (dispOpt === "OPTION_REFERENCEFRAME") {
                 ctx.beginPath(); ctx.moveTo(tx, ty - 14); ctx.lineTo(tx + 10, ty + 4); ctx.lineTo(tx - 10, ty + 4); ctx.closePath(); ctx.stroke();
             }
+            ctx.restore();
         }
         ctx.globalAlpha = 1.0;
     }
@@ -599,19 +610,23 @@ function drawMotionInstructionMarks(ctx) {
                         break;
                     }
                 }
-                drawMotionInstructionMark(ctx, tx, f, endF, mark);
+                drawMotionInstructionMark(ctx, tx, f, endF, mark, data);
             }
         }
     }
 }
 
-function drawMotionInstructionMark(ctx, tx, startF, endF, mark) {
+function drawMotionInstructionMark(ctx, tx, startF, endF, mark, cellInfo) {
     // ブレ/ランダムブレを横書き + 点線に統一 (Rep系統と表記を揃える)
-    // ランダムブレは 'Rブレ' に略記
+    // ランダムブレは 'Rブレ' に略記。色: cellInfo (該当セル) の fontColorId を反映
     ctx.save();
     let displayLabel = mark.label;
     if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
-    ctx.fillStyle = getStyle('--text-color');
+    const colorId = (cellInfo && cellInfo.fontColorId) || 0;
+    const useColor = (colorId > 0 && typeof getFontColorById === 'function')
+        ? getFontColorById(colorId)
+        : null;
+    ctx.fillStyle = useColor || getStyle('--text-color');
     ctx.font = (displayLabel === 'ブレ' || displayLabel === 'rep')
         ? "bold 12px sans-serif"
         : "bold 10px sans-serif";
@@ -620,13 +635,12 @@ function drawMotionInstructionMark(ctx, tx, startF, endF, mark) {
 
     const lineStartF = startF + 1;
     if (endF >= lineStartF) {
-        ctx.strokeStyle = mark.random
+        ctx.strokeStyle = useColor || (mark.random
             ? "rgba(180, 90, 220, 0.85)"
-            : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)");
+            : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)"));
         ctx.lineWidth = 1.5;
         ctx.setLineDash(mark.random ? [2, 3] : [4, 4]);
         ctx.beginPath();
-        // 文字直下から終端まで (+4px で文字と被らない)
         ctx.moveTo(tx, frameY(lineStartF) + 4);
         ctx.lineTo(tx, frameY(endF + 1));
         ctx.stroke();
