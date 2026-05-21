@@ -173,7 +173,7 @@ const menuActions = {
     'view.zoom100': () => zoom100(),
     'view.fit': () => zoomFit(),
     'view.toggleDirection': () => { isMemoExpanded = !isMemoExpanded; drawAll(); },
-    'view.togglePanel': () => window.togglePanel(),
+    'view.togglePanel': () => window.toggleCellLayoutPanelVisible(),
     'view.theme.light': () => setThemeMode('light'),
     'view.theme.dark': () => setThemeMode('dark'),
     'view.theme.system': () => setThemeMode('system'),
