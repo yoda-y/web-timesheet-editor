@@ -606,26 +606,29 @@ function drawMotionInstructionMarks(ctx) {
 }
 
 function drawMotionInstructionMark(ctx, tx, startF, endF, mark) {
-    const textY = frameY(startF);
+    // ブレ/ランダムブレを横書き + 点線に統一 (Rep系統と表記を揃える)
+    // ランダムブレは 'Rブレ' に略記
     ctx.save();
-    const labelBottomY = drawVerticalRepeatLabel(ctx, tx, textY, mark.label);
+    let displayLabel = mark.label;
+    if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
+    ctx.fillStyle = getStyle('--text-color');
+    ctx.font = (displayLabel === 'ブレ' || displayLabel === 'rep')
+        ? "bold 12px sans-serif"
+        : "bold 10px sans-serif";
+    ctx.textAlign = 'center';
+    ctx.fillText(displayLabel, tx, frameY(startF) + 16);
+
     const lineStartF = startF + 1;
     if (endF >= lineStartF) {
         ctx.strokeStyle = mark.random
             ? "rgba(180, 90, 220, 0.85)"
             : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)");
         ctx.lineWidth = 1.5;
-        ctx.setLineDash(mark.random ? [2, 3] : []);
+        ctx.setLineDash(mark.random ? [2, 3] : [4, 4]);
         ctx.beginPath();
-        const top = Math.max(frameY(lineStartF), labelBottomY + 4);
-        const bottom = frameY(endF + 1);
-        const amp = mark.random ? 4 : 3;
-        const step = rowHeight / 2;
-        ctx.moveTo(tx, top);
-        for (let y = top; y <= bottom; y += step) {
-            const phase = (y - top) / step;
-            ctx.lineTo(tx + Math.sin(phase * Math.PI) * amp, y);
-        }
+        // 文字直下から終端まで (+4px で文字と被らない)
+        ctx.moveTo(tx, frameY(lineStartF) + 4);
+        ctx.lineTo(tx, frameY(endF + 1));
         ctx.stroke();
         ctx.setLineDash([]);
     }

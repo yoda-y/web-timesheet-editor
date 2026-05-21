@@ -1562,10 +1562,12 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
         }
 
         if (dispOpt && data.value !== '' && !['●', '○', '×', '―'].includes(data.value)) {
+            // セル寸法にクランプ + 半透明 (外部テンプレと統一)
+            const radius = Math.min(m(2.5), colW * 0.42, rowH * 0.42);
+            ctx.save();
+            ctx.globalAlpha = 0.5;
             ctx.strokeStyle = (colorId > 0) ? cellColor : TEMPLATE.TEXT_COLOR;
-            ctx.lineWidth = TEMPLATE.LINE_FINE;
-            const radius = m(2.5);
-
+            ctx.lineWidth = Math.max(1.0, scale * 0.25);
             if (dispOpt === 'OPTION_KEYFRAME') {
                 ctx.beginPath();
                 ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -1578,6 +1580,7 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
                 ctx.closePath();
                 ctx.stroke();
             }
+            ctx.restore();
         }
         ctx.restore();
     };
@@ -1728,14 +1731,22 @@ function drawRepeatTextWithBg(ctx, text, x, y, font, scale) {
     ctx.restore();
 }
 
-function drawTemplateOptionMark(ctx, x, y, data, scale) {
+// セル寸法 (colW/rowH) を渡すと囲いをクランプ + 半透明化
+// 渡さない場合は従来通り m(2.5) 固定 (互換)
+function drawTemplateOptionMark(ctx, x, y, data, scale, colW, rowH) {
     if (!data || !data.option || !data.value) return;
     if (['●', '○', '×', '―'].includes(data.value)) return;
     const m = (mm) => mm * scale;
-    const radius = m(2.5);
+    const baseRadius = m(2.5);
+    // colW/rowH が渡されたらセル寸法にクランプ + 半透明 (外部テンプレと統一)
+    const useClamp = (typeof colW === 'number' && colW > 0) || (typeof rowH === 'number' && rowH > 0);
+    const radius = useClamp
+        ? Math.min(baseRadius, (colW || baseRadius) * 0.42, (rowH || baseRadius) * 0.42)
+        : baseRadius;
     ctx.save();
+    if (useClamp) ctx.globalAlpha = 0.5;
     ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
-    ctx.lineWidth = TEMPLATE.LINE_FINE;
+    ctx.lineWidth = useClamp ? Math.max(1.0, scale * 0.25) : TEMPLATE.LINE_FINE;
     if (data.option === 'OPTION_KEYFRAME') {
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -1770,26 +1781,31 @@ function drawMotionInstructionMarksTemplate(ctx, x, y, colW, colCount, rowH, col
                     break;
                 }
             }
+            // ブレ/ランダムブレを横書き + 点線に統一 (Rep系統と表記を揃える)
+            let displayLabel = mark.label;
+            if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
+            ctx.save();
+            ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+            ctx.font = `bold ${m(2)}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
             const labelY = y + (f - absoluteStart) * rowH + rowH / 2;
-            const labelBox = drawVerticalRepeatTextWithBg(ctx, mark.label, tx, labelY + rowH * 0.2, `bold ${m(1.7)}px sans-serif`, scale);
+            ctx.fillText(displayLabel, tx, labelY);
+            ctx.restore();
+
             const lineStartF = Math.max(f + 1, absoluteStart);
             const lineEndF = Math.min(endF, endFrame - 1, targetFrames - 1);
             if (lineEndF >= lineStartF) {
-                const top = Math.max(y + (lineStartF - absoluteStart) * rowH, labelBox.bottom + m(0.4));
+                const top = y + (lineStartF - absoluteStart) * rowH;
                 const bottom = y + (lineEndF - absoluteStart + 1) * rowH;
                 ctx.strokeStyle = mark.random
                     ? 'rgba(180, 90, 220, 0.85)'
                     : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || 'rgba(66, 133, 244, 0.8)');
                 ctx.lineWidth = TEMPLATE.LINE_THIN;
-                ctx.setLineDash(mark.random ? [m(0.8), m(1.2)] : []);
+                ctx.setLineDash(mark.random ? [m(0.8), m(1.2)] : [m(1), m(1)]);
                 ctx.beginPath();
-                const amp = mark.random ? m(1.1) : m(0.8);
-                const step = rowH / 2;
                 ctx.moveTo(tx, top);
-                for (let yy = top; yy <= bottom; yy += step) {
-                    const phase = (yy - top) / step;
-                    ctx.lineTo(tx + Math.sin(phase * Math.PI) * amp, yy);
-                }
+                ctx.lineTo(tx, bottom);
                 ctx.stroke();
                 ctx.setLineDash([]);
             }
@@ -2005,7 +2021,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
 
                 // 先頭セル番号 (下地なし)
                 drawPlainText(firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`);
-                drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale);
+                drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale, colW, rowH);
 
                 // "rep" (下地なし)
                 const repTextFrame = chunkStartFrame + 1;
@@ -2048,7 +2064,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
             if (chunkStartFrame >= absoluteStart && chunkStartFrame < endFrame) {
                 const repY = y + (chunkStartFrame - absoluteStart) * rowH;
                 drawPlainText(firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`);
-                drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale);
+                drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale, colW, rowH);
             }
 
             const repTextFrame = chunkStartFrame + 1;
@@ -3473,6 +3489,30 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
         ctx.stroke();
         ctx.setLineDash([]);
     };
+    // Rep 先頭セル用の小さめ option mark (通常セルと同じ計算)
+    // drawTemplateOptionMark は radius=m(2.5) 固定で大きすぎるので、セル寸法にクランプ
+    const drawSmallOptionMark = (px, py, data) => {
+        if (!data || !data.option || !data.value) return;
+        if (['●','○','×','―'].includes(data.value)) return;
+        const r = Math.min(scale * 2.5, cellW * 0.42, cellH * 0.42);
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = Math.max(1.0, scale * 0.25);
+        if (data.option === 'OPTION_KEYFRAME') {
+            ctx.beginPath();
+            ctx.arc(px, py, r, 0, Math.PI * 2);
+            ctx.stroke();
+        } else if (data.option === 'OPTION_REFERENCEFRAME') {
+            ctx.beginPath();
+            ctx.moveTo(px, py - r * 1.2);
+            ctx.lineTo(px + r, py + r * 0.6);
+            ctx.lineTo(px - r, py + r * 0.6);
+            ctx.closePath();
+            ctx.stroke();
+        }
+        ctx.restore();
+    };
 
     for (let ci = 0; ci < columns; ci++) {
         const colData = [];
@@ -3502,11 +3542,11 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
             const firstData = colData[r.startF] || null;
             const firstVal = firstData?.value || '';
 
-            // 先頭セル番号 (下地なし)
+            // 先頭セル番号 (下地なし、囲いは通常セルと同じ小さめ半透明)
             if (inRange(chunkStartFrame)) {
                 const repY = yOfFrame(chunkStartFrame);
+                drawSmallOptionMark(tx, repY + cellH / 2, firstData);
                 drawPlainText(firstVal, tx, repY + cellH / 2, `bold ${m(2.2)}px sans-serif`);
-                drawTemplateOptionMark(ctx, tx, repY + cellH / 2, firstData, scale);
             }
             // "rep" ラベル (下地なし)
             const repTextFrame = chunkStartFrame + 1;
@@ -3534,8 +3574,8 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
 
             if (inRange(chunkStartFrame)) {
                 const repY = yOfFrame(chunkStartFrame);
+                drawSmallOptionMark(tx, repY + cellH / 2, firstData);
                 drawPlainText(firstVal, tx, repY + cellH / 2, `bold ${m(2.2)}px sans-serif`);
-                drawTemplateOptionMark(ctx, tx, repY + cellH / 2, firstData, scale);
             }
 
             const repTextFrame = chunkStartFrame + 1;
