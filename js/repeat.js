@@ -171,7 +171,12 @@ function drawRepMark(ctx, sec, colIndex, chunkStartFrame, endF, firstVal, firstD
     const drawFrameLimit = (typeof numFrames !== 'undefined' && numFrames > 0) ? numFrames : targetFrames;
     if (chunkStartFrame >= drawFrameLimit) return;
     let tx = sec.x + colIndex * sec.cw + sec.cw / 2;
-    ctx.fillStyle = getStyle('--text-color');
+    // 色: firstData の fontColorId を反映 (Rep全体を user color に染める)
+    const colorId = (firstData && firstData.fontColorId) || 0;
+    const useColor = (colorId > 0 && typeof getFontColorById === 'function')
+        ? getFontColorById(colorId)
+        : getStyle('--text-color');
+    ctx.fillStyle = useColor;
     ctx.font = "bold 12px sans-serif";
     ctx.textAlign = "center";
     const ty = frameY(chunkStartFrame) + 16;
@@ -179,24 +184,25 @@ function drawRepMark(ctx, sec, colIndex, chunkStartFrame, endF, firstVal, firstD
     drawRepOptionMark(ctx, tx, ty, firstData);
     let repFrame = chunkStartFrame + 1;
     if (repFrame < drawFrameLimit) {
-        // ブレ/ランダムブレも横書き表示。ランダムブレは Rブレ に略記。
         let displayLabel = label;
         if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
-        // フォントサイズ調整（多文字ラベルは少し小さく）
         if (displayLabel !== 'rep') {
             ctx.font = "bold 10px sans-serif";
         }
+        ctx.fillStyle = useColor;
         ctx.fillText(displayLabel, tx, frameY(repFrame) + 16);
         ctx.font = "bold 12px sans-serif";
     }
     let lineStartF = repFrame + 1;
     let lineEndF = Math.min(endF - 1, repFrame + 6, drawFrameLimit - 1);
     if (lineEndF >= lineStartF && lineStartF < drawFrameLimit) {
-        ctx.strokeStyle = (typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)";
+        // 点線色: 色付きセルなら useColor、無ければ既定 (blue)
+        ctx.strokeStyle = (colorId > 0)
+            ? useColor
+            : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)");
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
-        // 文字と被らないよう少し下に逃がす (+4px)
         ctx.moveTo(tx, frameY(lineStartF) + 4);
         ctx.lineTo(tx, frameY(lineEndF + 1));
         ctx.stroke();

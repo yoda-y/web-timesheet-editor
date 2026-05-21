@@ -1782,10 +1782,15 @@ function drawMotionInstructionMarksTemplate(ctx, x, y, colW, colCount, rowH, col
                 }
             }
             // ブレ/ランダムブレを横書き + 点線に統一 (Rep系統と表記を揃える)
+            // 色: 該当セル data の fontColorId を反映
             let displayLabel = mark.label;
             if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
+            const miColorId = (data && data.fontColorId) || 0;
+            const miColor = (miColorId > 0 && typeof getFontColorById === 'function')
+                ? getFontColorById(miColorId)
+                : null;
             ctx.save();
-            ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+            ctx.fillStyle = miColor || TEMPLATE.TEXT_COLOR;
             ctx.font = `bold ${m(2)}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -1798,9 +1803,9 @@ function drawMotionInstructionMarksTemplate(ctx, x, y, colW, colCount, rowH, col
             if (lineEndF >= lineStartF) {
                 const top = y + (lineStartF - absoluteStart) * rowH;
                 const bottom = y + (lineEndF - absoluteStart + 1) * rowH;
-                ctx.strokeStyle = mark.random
+                ctx.strokeStyle = miColor || (mark.random
                     ? 'rgba(180, 90, 220, 0.85)'
-                    : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || 'rgba(66, 133, 244, 0.8)');
+                    : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || 'rgba(66, 133, 244, 0.8)'));
                 ctx.lineWidth = TEMPLATE.LINE_THIN;
                 ctx.setLineDash(mark.random ? [m(0.8), m(1.2)] : [m(1), m(1)]);
                 ctx.beginPath();
@@ -1957,11 +1962,11 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
     if (typeof cellData === 'undefined') return;
     if (typeof checkRepeatColumns !== 'function') return;
 
-    // 下地なしテキスト (rep/firstVal用)
-    const drawPlainText = (text, px, py, font) => {
+    // 下地なしテキスト (rep/firstVal用)。color指定可
+    const drawPlainText = (text, px, py, font, color) => {
         ctx.save();
         ctx.font = font;
-        ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+        ctx.fillStyle = color || TEMPLATE.TEXT_COLOR;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(String(text), px, py);
@@ -2027,15 +2032,22 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
                 const firstVal = firstData?.value || '';
                 const repY = y + (chunkStartFrame - absoluteStart) * rowH;
 
+                // 色: firstData の fontColorId を Rep 全体に反映
+                const repColorId = (firstData && firstData.fontColorId) || 0;
+                const repColor = (repColorId > 0 && typeof getFontColorById === 'function')
+                    ? getFontColorById(repColorId)
+                    : null;
+                const repLineColor = repColor || 'rgba(66, 133, 244, 0.8)';
+
                 // 先頭セル番号 (下地なし)
-                drawPlainText(firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`);
+                drawPlainText(firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`, repColor);
                 drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale, colW, rowH);
 
                 // "rep" (下地なし)
                 const repTextFrame = chunkStartFrame + 1;
                 if (repTextFrame >= absoluteStart && repTextFrame < endFrame && repTextFrame < drawFrameLimit) {
                     const repTextY = y + (repTextFrame - absoluteStart) * rowH;
-                    drawPlainText('rep', tx, repTextY + rowH / 2, `bold ${m(2)}px sans-serif`);
+                    drawPlainText('rep', tx, repTextY + rowH / 2, `bold ${m(2)}px sans-serif`, repColor);
                 }
 
                 // 点線
@@ -2045,7 +2057,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
                     const lineStartY = y + (lineStartF - absoluteStart) * rowH;
                     const lineEndY = y + (Math.min(lineEndF, endFrame - 1) - absoluteStart + 1) * rowH;
 
-                    ctx.strokeStyle = 'rgba(66, 133, 244, 0.8)';
+                    ctx.strokeStyle = repLineColor;
                     ctx.lineWidth = TEMPLATE.LINE_THIN;
                     ctx.setLineDash([m(1), m(1)]);
                     ctx.beginPath();
@@ -2069,9 +2081,16 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
             const firstData = rep.pattern?.[0] || null;
             const firstVal = firstData?.value || '';
 
+            // 色: firstData の fontColorId を Rep 全体に反映
+            const cRepColorId = (firstData && firstData.fontColorId) || 0;
+            const cRepColor = (cRepColorId > 0 && typeof getFontColorById === 'function')
+                ? getFontColorById(cRepColorId)
+                : null;
+            const cRepLineColor = cRepColor || ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || 'rgba(66, 133, 244, 0.8)');
+
             if (chunkStartFrame >= absoluteStart && chunkStartFrame < endFrame) {
                 const repY = y + (chunkStartFrame - absoluteStart) * rowH;
-                drawPlainText(firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`);
+                drawPlainText(firstVal, tx, repY + rowH / 2, `bold ${m(2.2) * getFontScale('cell')}px sans-serif`, cRepColor);
                 drawTemplateOptionMark(ctx, tx, repY + rowH / 2, firstData, scale, colW, rowH);
             }
 
@@ -2080,13 +2099,12 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
             if (repTextFrame >= absoluteStart && repTextFrame < endFrame && repTextFrame < drawFrameLimit) {
                 const repTextY = y + (repTextFrame - absoluteStart) * rowH;
                 const label = typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep';
-                // ブレ/ランダムブレも横書き。ランダムブレ→Rブレ略記。
                 let displayLabel = label;
                 if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
                 const labelFont = (displayLabel === 'rep')
                     ? `bold ${m(2)}px sans-serif`
                     : `${m(1.8)}px "Yu Gothic UI", "Meiryo", sans-serif`;
-                drawPlainText(displayLabel, tx, repTextY + rowH / 2, labelFont);
+                drawPlainText(displayLabel, tx, repTextY + rowH / 2, labelFont, cRepColor);
                 labelBox = { bottom: repTextY + rowH };
             }
 
@@ -2096,7 +2114,7 @@ function drawRepeatMarksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart,
                 const baseLineStartY = y + (lineStartF - absoluteStart) * rowH;
                 const lineStartY = labelBox ? Math.max(baseLineStartY, labelBox.bottom + m(0.4)) : baseLineStartY;
                 const lineEndY = y + (Math.min(lineEndF, endFrame - 1) - absoluteStart + 1) * rowH;
-                ctx.strokeStyle = (typeof settings !== 'undefined' && settings.draw.repeatDashColor) || 'rgba(66, 133, 244, 0.8)';
+                ctx.strokeStyle = cRepLineColor;
                 ctx.lineWidth = TEMPLATE.LINE_THIN;
                 ctx.setLineDash([m(1), m(1)]);
                 ctx.beginPath();
@@ -3465,6 +3483,16 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
         ctx.fillText(String(text), x, y);
         ctx.restore();
     };
+    // 同上、色指定対応版
+    const drawPlainTextColored = (text, x, y, font, color) => {
+        ctx.save();
+        ctx.font = font;
+        ctx.fillStyle = color || '#000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(text), x, y);
+        ctx.restore();
+    };
     // 縦書きテキスト (1セル1文字、下地なし)
     // ランダムブレは「Rブレ」に略記
     const drawVerticalLabelPerCell = (text, x, startY, font) => {
@@ -3481,14 +3509,14 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
         return { top: startY, bottom: startY + cellH * chars.length, charCount: chars.length };
     };
 
-    const drawDashedLine = (tx, lineStartF, lineEndF) => {
+    const drawDashedLine = (tx, lineStartF, lineEndF, overrideColor) => {
         if (lineEndF < lineStartF) return;
         const sf = Math.max(lineStartF, frameStart);
         const ef = Math.min(lineEndF, frameEnd - 1);
         if (ef < sf) return;
         const lineStartY = rect.y + (sf - frameStart) * cellH;
         const lineEndY = rect.y + (ef - frameStart + 1) * cellH;
-        ctx.strokeStyle = dashColor;
+        ctx.strokeStyle = overrideColor || dashColor;
         ctx.lineWidth = Math.max(0.5, scale * 0.15);
         ctx.setLineDash([m(1), m(1)]);
         ctx.beginPath();
@@ -3550,22 +3578,28 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
             const firstData = colData[r.startF] || null;
             const firstVal = firstData?.value || '';
 
+            // 色: firstData の fontColorId を Rep 全体に反映
+            const repColorId = (firstData && firstData.fontColorId) || 0;
+            const repColor = (repColorId > 0 && typeof getFontColorById === 'function')
+                ? getFontColorById(repColorId)
+                : null;
+
             // 先頭セル番号 (下地なし、囲いは通常セルと同じ小さめ半透明)
             if (inRange(chunkStartFrame)) {
                 const repY = yOfFrame(chunkStartFrame);
                 drawSmallOptionMark(tx, repY + cellH / 2, firstData);
-                drawPlainText(firstVal, tx, repY + cellH / 2, `bold ${m(2.2)}px sans-serif`);
+                drawPlainTextColored(firstVal, tx, repY + cellH / 2, `bold ${m(2.2)}px sans-serif`, repColor);
             }
             // "rep" ラベル (下地なし)
             const repTextFrame = chunkStartFrame + 1;
             if (inRange(repTextFrame) && repTextFrame < totalF) {
                 const repTextY = yOfFrame(repTextFrame);
-                drawPlainText('rep', tx, repTextY + cellH / 2, `bold ${m(2)}px sans-serif`);
+                drawPlainTextColored('rep', tx, repTextY + cellH / 2, `bold ${m(2)}px sans-serif`, repColor);
             }
             // 点線
             const lineStartF = repTextFrame + 1;
             const lineEndF = Math.min(r.endF - 1, chunkStartFrame + 6, totalF - 1);
-            drawDashedLine(tx, lineStartF, lineEndF);
+            drawDashedLine(tx, lineStartF, lineEndF, repColor);
         });
     }
 
@@ -3580,10 +3614,16 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
             const firstData = rep.pattern?.[0] || null;
             const firstVal = firstData?.value || '';
 
+            // 色: firstData の fontColorId を Rep 全体に反映
+            const cRepColorId = (firstData && firstData.fontColorId) || 0;
+            const cRepColor = (cRepColorId > 0 && typeof getFontColorById === 'function')
+                ? getFontColorById(cRepColorId)
+                : null;
+
             if (inRange(chunkStartFrame)) {
                 const repY = yOfFrame(chunkStartFrame);
                 drawSmallOptionMark(tx, repY + cellH / 2, firstData);
-                drawPlainText(firstVal, tx, repY + cellH / 2, `bold ${m(2.2)}px sans-serif`);
+                drawPlainTextColored(firstVal, tx, repY + cellH / 2, `bold ${m(2.2)}px sans-serif`, cRepColor);
             }
 
             const repTextFrame = chunkStartFrame + 1;
@@ -3591,13 +3631,12 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
             if (inRange(repTextFrame) && repTextFrame < totalF) {
                 const repTextY = yOfFrame(repTextFrame);
                 const label = typeof getRepeatLabel === 'function' ? getRepeatLabel(rep) : 'rep';
-                // ブレ/ランダムブレも横書き。ランダムブレ→Rブレ略記。
                 let displayLabel = label;
                 if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
                 const labelFont = (displayLabel === 'rep')
                     ? `bold ${m(2)}px sans-serif`
                     : `${Math.min(cellH * 0.7, m(1.8))}px "Yu Gothic UI", "Meiryo", sans-serif`;
-                drawPlainText(displayLabel, tx, repTextY + cellH / 2, labelFont);
+                drawPlainTextColored(displayLabel, tx, repTextY + cellH / 2, labelFont, cRepColor);
                 labelBox = { bottom: repTextY + cellH };
             }
 
@@ -3611,7 +3650,7 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
                     const baseStartY = rect.y + (sf - frameStart) * cellH;
                     const lineStartY = labelBox ? Math.max(baseStartY, labelBox.bottom + m(0.4)) : baseStartY;
                     const lineEndY = rect.y + (ef - frameStart + 1) * cellH;
-                    ctx.strokeStyle = dashColor;
+                    ctx.strokeStyle = cRepColor || dashColor;
                     ctx.lineWidth = Math.max(0.5, scale * 0.15);
                     ctx.setLineDash([m(1), m(1)]);
                     ctx.beginPath();

@@ -610,19 +610,23 @@ function drawMotionInstructionMarks(ctx) {
                         break;
                     }
                 }
-                drawMotionInstructionMark(ctx, tx, f, endF, mark);
+                drawMotionInstructionMark(ctx, tx, f, endF, mark, data);
             }
         }
     }
 }
 
-function drawMotionInstructionMark(ctx, tx, startF, endF, mark) {
+function drawMotionInstructionMark(ctx, tx, startF, endF, mark, cellInfo) {
     // ブレ/ランダムブレを横書き + 点線に統一 (Rep系統と表記を揃える)
-    // ランダムブレは 'Rブレ' に略記
+    // ランダムブレは 'Rブレ' に略記。色: cellInfo (該当セル) の fontColorId を反映
     ctx.save();
     let displayLabel = mark.label;
     if (displayLabel === 'ランダムブレ') displayLabel = 'Rブレ';
-    ctx.fillStyle = getStyle('--text-color');
+    const colorId = (cellInfo && cellInfo.fontColorId) || 0;
+    const useColor = (colorId > 0 && typeof getFontColorById === 'function')
+        ? getFontColorById(colorId)
+        : null;
+    ctx.fillStyle = useColor || getStyle('--text-color');
     ctx.font = (displayLabel === 'ブレ' || displayLabel === 'rep')
         ? "bold 12px sans-serif"
         : "bold 10px sans-serif";
@@ -631,13 +635,12 @@ function drawMotionInstructionMark(ctx, tx, startF, endF, mark) {
 
     const lineStartF = startF + 1;
     if (endF >= lineStartF) {
-        ctx.strokeStyle = mark.random
+        ctx.strokeStyle = useColor || (mark.random
             ? "rgba(180, 90, 220, 0.85)"
-            : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)");
+            : ((typeof settings !== 'undefined' && settings.draw.repeatDashColor) || "rgba(66, 133, 244, 0.8)"));
         ctx.lineWidth = 1.5;
         ctx.setLineDash(mark.random ? [2, 3] : [4, 4]);
         ctx.beginPath();
-        // 文字直下から終端まで (+4px で文字と被らない)
         ctx.moveTo(tx, frameY(lineStartF) + 4);
         ctx.lineTo(tx, frameY(endF + 1));
         ctx.stroke();
