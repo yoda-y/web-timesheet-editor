@@ -1925,6 +1925,14 @@ function drawBarLines(ctx, x, y, colW, colCount, rowH, colType, absoluteStart, s
             const drawY_top = y + (f - absoluteStart) * rowH;
             const drawY_bottom = y + (f - absoluteStart + 1) * rowH;
 
+            // 線色: startVal セルの fontColorId を反映 (数字と同色)
+            const startCell = cellData[`${colType}-${ci}-${startF}`];
+            const startColorId = (startCell && startCell.fontColorId) || 0;
+            const lineColor = (startColorId > 0 && typeof getFontColorById === 'function')
+                ? getFontColorById(startColorId)
+                : TEMPLATE.TEXT_COLOR;
+            ctx.strokeStyle = lineColor;
+
             if (startVal === '×') {
                 // 波線
                 const offset = rowH / 4;
@@ -3713,6 +3721,14 @@ function drawBarLinesInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, 
 
             const drawY_top = rect.y + (f - frameStart) * cellH;
             const drawY_bottom = rect.y + (f - frameStart + 1) * cellH;
+
+            // 線色: startVal セルの fontColorId を反映 (数字と同色)
+            const startCell = cellData[`${upperType}-${ci}-${startF}`];
+            const startColorId = (startCell && startCell.fontColorId) || 0;
+            const lineColor = (startColorId > 0 && typeof getFontColorById === 'function')
+                ? getFontColorById(startColorId)
+                : '#000';
+            ctx.strokeStyle = lineColor;
 
             if (startVal === '×') {
                 // 波線 (bezier)
