@@ -628,7 +628,7 @@ function applyImportData(raw, checks, mode, extraOpts) {
     if (checks.camera && typeof window.normalizeAllCameraBlockCells === 'function') window.normalizeAllCameraBlockCells();
 
     // TDTS手書きメモを手書きレイヤーに統合
-    if ((raw.memos && raw.memos.length) || raw.headerMemo) {
+    if (extraOpts.importTdtsMemos !== false && ((raw.memos && raw.memos.length) || raw.headerMemo)) {
         applyTdtsMemosToHandwriting(raw.memos || [], raw.headerMemo);
         if (typeof showToast === 'function') {
             showToast('TDTSの手書きメモを取り込みました。位置がずれている場合があります。', 5000);
@@ -793,7 +793,14 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
             pushHistory();
         }
 
-        applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength });
+        if (fmt === 'tdts' && ((raw.memos && raw.memos.length) || raw.headerMemo)) {
+            const msg = (typeof t === 'function')
+                ? t('confirm.importTdtsMemos')
+                : 'このTDTSには本家TDTSの手描きメモが含まれています。手書きレイヤーとして読み込みますか？';
+            opts._importTdtsMemos = confirm(msg);
+        }
+
+        applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength, importTdtsMemos: opts._importTdtsMemos });
         // 完全新規(new)のときだけ現在ファイル名/ハンドルを切替。それ以外は既存ドキュメント名を維持。
         if (opts.merge === 'new') {
             currentFileHandle = null;

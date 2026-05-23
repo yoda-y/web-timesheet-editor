@@ -1597,7 +1597,11 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
                 for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
                 const reps = checkRepeatColumns(colData, totalF, ci);
                 reps.forEach(r => {
-                    if (r.isHold) return;
+                    if (r.isHold) {
+                        autoRepSkipSet.add(`${ci}-1`);
+                        autoRepSkipSet.add(`${ci}-2`);
+                        return;
+                    }
                     for (let f = r.startF + r.chunkLen; f < r.endF; f++) {
                         autoRepSkipSet.add(`${ci}-${f}`);
                     }
@@ -1876,7 +1880,11 @@ function drawBarLines(ctx, x, y, colW, colCount, rowH, colType, absoluteStart, s
                 for (let f = 0; f < totalF; f++) colDataArr[f] = cellData[`ACTION-${ci}-${f}`] || null;
                 const reps = checkRepeatColumns(colDataArr, totalF, ci);
                 reps.forEach(r => {
-                    if (r.isHold) return;
+                    if (r.isHold) {
+                        autoRepSkipSet.add(`${ci}-1`);
+                        autoRepSkipSet.add(`${ci}-2`);
+                        return;
+                    }
                     for (let f = r.startF + r.chunkLen; f < r.endF; f++) {
                         autoRepSkipSet.add(`${ci}-${f}`);
                     }

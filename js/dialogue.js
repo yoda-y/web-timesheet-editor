@@ -85,7 +85,7 @@ window.saveDialogueBlock = function() {
     let endF = parseInt(document.getElementById('dialogueEndInput').value, 10) - 1;
     const typeSel = document.getElementById('dialogueTypeInput');
     let dialogueType = typeSel ? typeSel.value : 'normal';
-    if (!['normal', 'off', 'mono', '背'].includes(dialogueType)) dialogueType = 'normal';
+    if (!['normal', 'off', 'mono', 'N', '背'].includes(dialogueType)) dialogueType = 'normal';
     let blockToEdit = dialogueBlocks.find(b => b.id === editingDialogueId);
     let previousBlock = blockToEdit ? JSON.parse(JSON.stringify(blockToEdit)) : null;
     let colIndex = blockToEdit ? blockToEdit.colIndex : (selectionStart ? selectionStart.colIndex : 0);
@@ -129,6 +129,7 @@ window.getDialogueTypeLabel = function(type) {
     switch (type) {
         case 'off':  return '(off)';
         case 'mono': return '(mono)';
+        case 'N':    return '(N)';
         case '背':   return '(背)';
         default:     return null;  // normal or unknown
     }
