@@ -381,6 +381,86 @@ function validateProjectData(data) {
     return { ok: true };
 }
 
+// ─── JSON エクスポート / インポート (P1-c) ───────────────────────────────────
+
+// 提案ファイル名: <displayName>.wtproj.json (英数+_-のみに浄化)
+function suggestProjectJSONFileName(projectData) {
+    const raw = (projectData && projectData.meta && projectData.meta.displayName) || 'project';
+    const safe = String(raw).replace(/[^A-Za-z0-9_\-぀-ヿ一-鿿]/g, '_').slice(0, 60) || 'project';
+    return `${safe}.wtproj.json`;
+}
+
+// 現在の state を JSON ファイルとして書き出す
+async function exportProjectJSON() {
+    const data = buildProjectData();
+    const fileContent = JSON.stringify(data, null, 2);
+    const suggestedName = suggestProjectJSONFileName(data);
+    if (window.showSaveFilePicker) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName,
+                types: [{ description: 'Web Timesheet Project (JSON)', accept: { 'application/json': ['.json'] } }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(fileContent);
+            await writable.close();
+        } catch (err) {
+            if (err && err.name !== 'AbortError') alert('プロジェクトJSONの書き出しに失敗しました: ' + (err.message || err));
+        }
+    } else {
+        const blob = new Blob([fileContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = suggestedName; a.click();
+        URL.revokeObjectURL(url);
+    }
+}
+
+// JSON ファイルを選択させて現在 state に読み込む。
+// 既存変更がある場合は確認ダイアログを出す。
+function importProjectJSON() {
+    if (typeof isDirty !== 'undefined' && isDirty) {
+        const msg = '未保存の変更があります。破棄してプロジェクトJSONを読み込みますか？';
+        if (!confirm(msg)) return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            let parsed;
+            try {
+                parsed = JSON.parse(evt.target.result);
+            } catch (err) {
+                alert('JSON解析エラー: ' + err.message);
+                return;
+            }
+            try {
+                const r = await loadProjectData(parsed);
+                if (!r.ok) {
+                    alert('プロジェクトの読み込みに失敗しました: ' + (r.error || ''));
+                    return;
+                }
+                if (r.warnings && r.warnings.length) {
+                    console.warn('[projectHtml] warnings:', r.warnings);
+                }
+                // 既存 TDTS/XDTS の保存挙動と衝突しないよう、currentFileHandle はリセット
+                if (typeof currentFileHandle !== 'undefined') currentFileHandle = null;
+                if (typeof currentFileFormat !== 'undefined') currentFileFormat = null;
+                if (typeof setCurrentFileName === 'function') setCurrentFileName(file.name, null);
+                if (typeof markClean === 'function') markClean();
+            } catch (err) {
+                alert('プロジェクトの読み込み中にエラー: ' + (err && err.message || err));
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
 // ─── window 公開 (デバッグ/将来UI配線用) ─────────────────────────────────────
 
 window.projectHtml = {
@@ -389,5 +469,7 @@ window.projectHtml = {
     build: buildProjectData,
     load: loadProjectData,
     validate: validateProjectData,
-    generateProjectId
+    generateProjectId,
+    exportJSON: exportProjectJSON,
+    importJSON: importProjectJSON
 };
