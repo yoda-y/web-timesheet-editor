@@ -199,7 +199,7 @@ function exportHandwritingFromSidebar() {
 function importFileFromSidebar() {
     const input = document.getElementById('fileInput');
     if (!input) return;
-    input.accept = '.tdts,.xdts,.json';
+    input.accept = '.tdts,.xdts,.json,.html,.htm';
     input.click();
 }
 
