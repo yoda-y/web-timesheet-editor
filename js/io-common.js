@@ -647,29 +647,33 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
     const gridTopPx = marginTopPx + colHeaderHpx;
     const FRAMES_PER_PAGE = TEMPLATE.FRAMES_PER_COL;
 
+    const splitter = (typeof window !== 'undefined') ? window.splitImageToHandwritingObjects : null;
+
     // セルメモ
     memos.forEach((memo, i) => {
         const pageIdx = Math.floor(memo.frame / FRAMES_PER_PAGE);
         const frameInPage = memo.frame % FRAMES_PER_PAGE;
         const key = `page-${pageIdx}`;
         if (!handwritingPages[key]) handwritingPages[key] = { strokes: [], images: [] };
-        // 画像サイズ算出のため一時Imageを作成
         const dataUrl = `data:image/png;base64,${memo.imageData}`;
-        const tmpImg = new Image();
-        tmpImg.onload = () => {
-            const cellY = gridTopPx + frameInPage * rowHpx + (memo.offsetY || 0);
-            const cellX = (memo.offsetX || 0); // 列位置は近似（左端起点）
-            handwritingPages[key].images.push({
-                id: `tdts-memo-${Date.now()}-${i}`,
-                dataUrl,
-                x: cellX,
-                y: cellY,
-                w: tmpImg.width,
-                h: tmpImg.height
-            });
-            if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
-        };
-        tmpImg.src = dataUrl;
+        const cellY = gridTopPx + frameInPage * rowHpx + (memo.offsetY || 0);
+        const cellX = (memo.offsetX || 0);
+        if (splitter) {
+            splitter(dataUrl, { baseX: cellX, baseY: cellY, idPrefix: `tdts-memo-${i}` }).then(objs => {
+                objs.forEach(o => handwritingPages[key].images.push(o));
+                if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
+            }).catch(() => {});
+        } else {
+            const tmpImg = new Image();
+            tmpImg.onload = () => {
+                handwritingPages[key].images.push({
+                    id: `tdts-memo-${Date.now()}-${i}`,
+                    dataUrl, x: cellX, y: cellY, w: tmpImg.width, h: tmpImg.height
+                });
+                if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
+            };
+            tmpImg.src = dataUrl;
+        }
     });
 
     // ヘッダーメモ（Direction欄相当、ページ1の上部）
@@ -677,19 +681,22 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
         const key = 'page-0';
         if (!handwritingPages[key]) handwritingPages[key] = { strokes: [], images: [] };
         const dataUrl = `data:image/png;base64,${headerMemo.imageData}`;
-        const tmpImg = new Image();
-        tmpImg.onload = () => {
-            handwritingPages[key].images.push({
-                id: `tdts-headermemo-${Date.now()}`,
-                dataUrl,
-                x: marginTopPx, // 左マージンと同程度
-                y: marginTopPx,
-                w: tmpImg.width,
-                h: tmpImg.height
-            });
-            if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
-        };
-        tmpImg.src = dataUrl;
+        if (splitter) {
+            splitter(dataUrl, { baseX: marginTopPx, baseY: marginTopPx, idPrefix: 'tdts-headermemo' }).then(objs => {
+                objs.forEach(o => handwritingPages[key].images.push(o));
+                if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
+            }).catch(() => {});
+        } else {
+            const tmpImg = new Image();
+            tmpImg.onload = () => {
+                handwritingPages[key].images.push({
+                    id: `tdts-headermemo-${Date.now()}`,
+                    dataUrl, x: marginTopPx, y: marginTopPx, w: tmpImg.width, h: tmpImg.height
+                });
+                if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
+            };
+            tmpImg.src = dataUrl;
+        }
     }
 }
 
@@ -857,21 +864,37 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
         }
 
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
+            const dataUrl = reader.result;
             const page = getHandwritingPage();
             if (!page.images) page.images = [];
-            page.images.push({
-                id: `drop-${Date.now()}`,
-                dataUrl: reader.result,
-                x: 0,
-                y: 0,
-                w: null,
-                h: null
-            });
+            // ドラッグ画像もファイル読込と同様にテンプレ全面 (A3 @ 150dpi) にフィット
+            const fitW = (typeof TEMPLATE !== 'undefined' && typeof HANDWRITING_BASE_DPI !== 'undefined')
+                ? Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4)
+                : (handwritingCanvas?.width || 1754);
+            const fitH = (typeof TEMPLATE !== 'undefined' && typeof HANDWRITING_BASE_DPI !== 'undefined')
+                ? Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
+                : (handwritingCanvas?.height || 2480);
+            let added = 0;
+            if (typeof window.splitImageToHandwritingObjects === 'function') {
+                const objs = await window.splitImageToHandwritingObjects(dataUrl, {
+                    baseX: 0, baseY: 0, fallbackW: fitW, fallbackH: fitH,
+                    targetW: fitW, targetH: fitH,
+                    idPrefix: 'drop'
+                });
+                objs.forEach(o => page.images.push(o));
+                added = objs.length;
+            } else {
+                page.images.push({
+                    id: `drop-${Date.now()}`, dataUrl, x: 0, y: 0,
+                    w: fitW, h: fitH
+                });
+                added = 1;
+            }
             renderHandwritingLayer();
             if (typeof drawHandwritingUi === 'function') drawHandwritingUi();
             if (typeof markDirty === 'function') markDirty();
-            showToast(`画像を手書きレイヤーに追加しました`);
+            showToast(added > 1 ? `画像を${added}パーツに分割して追加しました` : `画像を手書きレイヤーに追加しました`);
         };
         reader.readAsDataURL(file);
     }
