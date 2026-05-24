@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.10.0';
+const APP_VERSION = '0.11.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,27 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.11.0 (2026-05-24)
+
+### 追加 (P2-2 a+b+c)
+- 保存先の自動切替: Ctrl+S が currentFileFormat に応じて分岐
+  - TDTS/XDTS: 従来通り互換書き出しで上書き
+  - Project HTML (.html / .wtproj.html): silent or picker で HTML 保存
+  - Project JSON (.wtproj.json): HTML に昇格保存
+  - 新規 / handoff / 不明: Project HTML として保存ピッカー
+- \`exportProjectHTML\` に silent 上書き対応 (currentFileHandle 保持時)
+- 標準拡張子を \`.html\` に変更 (旧 \`.wtproj.html\` は読込互換維持)
+- \`settings.preview.projectFilenameTemplate\` 追加 (デフォルト \`%title_%episode_%cut_ts\`)
+
+### 変更
+- Ctrl+Shift+S が常に TDTS 別名保存だったバグを修正 (現在形式に応じた別名保存に)
+- handoff 受信成功時に currentFileFormat を 'wtproj-html' に設定
+
+### 既知の制限
+- \`<input type=file>\` 経由で開いた project HTML は最初の Ctrl+S でピッカー必須 (handle 取得不可)
+- Ctrl+Shift+S での形式選択モーダルは P2-2d で別途実装予定
+- メニュー個別エクスポータ (TDTSへ / XDTSへ等) は今回変更なし
 
 ## v0.10.0 (2026-05-24)
 
