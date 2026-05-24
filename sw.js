@@ -1,6 +1,6 @@
 // Service Worker for Web Timesheet Editor
 // CACHE_NAME を更新するとクライアントが旧キャッシュを破棄してリロード
-const CACHE_NAME = 'timesheet-editor-v2-0.9.0';
+const CACHE_NAME = 'timesheet-editor-v2-0.9.1';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -37,6 +37,10 @@ const ASSETS_TO_CACHE = [
   './js/external-template-ui.js',
   './js/bbox-editor.js',
   './js/bbox-editor-canvas.js',
+  // v0.9.0 追加: プロジェクトHTML/JSON
+  './js/project-html.js',
+  // v0.9.1 追加: 読み込み画像の自動分割
+  './js/image-splitter.js',
   './js/version.js'
 ];
 
