@@ -144,11 +144,20 @@ function buildProjectData(extraMeta) {
     const registry = createAssetRegistry();
     const serializedSheets = sheetsCopy.map((sh, idx) => serializeSheet(sh, registry, idx));
 
-    // 外部テンプレ (任意)
+    // 外部テンプレ (任意)。window 経由で確実にアクセス。
     let externalTemplateBlock = null;
-    if (typeof getCurrentExternalTemplate === 'function') {
-        const tpl = getCurrentExternalTemplate();
-        if (tpl && tpl.image) {
+    const getterFn = (typeof window !== 'undefined' && typeof window.getCurrentExternalTemplate === 'function')
+        ? window.getCurrentExternalTemplate
+        : (typeof getCurrentExternalTemplate === 'function' ? getCurrentExternalTemplate : null);
+    if (!getterFn) {
+        console.warn('[projectHtml.build] getCurrentExternalTemplate が見つからない (external-template.js 未ロード?)');
+    } else {
+        const tpl = getterFn();
+        if (!tpl) {
+            console.info('[projectHtml.build] 外部テンプレ未選択。externalTemplate を含めない。');
+        } else if (!tpl.image) {
+            console.warn('[projectHtml.build] 外部テンプレに image が無い。書き出しから除外します。tpl=', tpl);
+        } else {
             const tplAssetId = registry.addImage(
                 tpl.image, 'externalTemplate', 'main',
                 tpl.imageWidth, tpl.imageHeight
@@ -290,14 +299,17 @@ async function loadProjectData(projectData) {
     }
 
     // 外部テンプレ復元 (sheets 読み込み前に走らせて、後続の drawAll で反映)
-    if (projectData.externalTemplate && typeof applyProjectExternalTemplate === 'function') {
+    const applyTplFn = (typeof window !== 'undefined' && window.applyProjectExternalTemplate)
+        ? window.applyProjectExternalTemplate
+        : (typeof applyProjectExternalTemplate === 'function' ? applyProjectExternalTemplate : null);
+    if (projectData.externalTemplate && applyTplFn) {
         const et = projectData.externalTemplate;
         const dataUrl = resolveAssetDataUrl(assets, et.imageAssetId);
         if (!dataUrl) {
             result.warnings.push(`externalTemplate.imageAssetId=${et.imageAssetId} が assets に見つかりません`);
-            await applyProjectExternalTemplate(null);
+            await applyTplFn(null);
         } else {
-            await applyProjectExternalTemplate({
+            await applyTplFn({
                 id: et.sourceTemplateId || null,
                 name: et.name || '',
                 image: dataUrl,
@@ -306,12 +318,22 @@ async function loadProjectData(projectData) {
                 bboxes: deepCloneJSON(et.bboxes || {})
             });
         }
-    } else if (typeof applyProjectExternalTemplate === 'function') {
-        // 外部テンプレなしのプロジェクトを開いた時は現在のテンプレを解除
-        await applyProjectExternalTemplate(null);
+        // Preview / サイドバー selector 同期
+        syncTemplateSelectorAfterProjectLoad(et);
+    } else if (applyTplFn) {
+        await applyTplFn(null);
+        syncTemplateSelectorAfterProjectLoad(null);
     }
 
     loadAllSheetsData(sheetsArr, activeIdx);
+
+    // Preview 強制再描画 (Preview モードで JSON 読み込み時に標準A3に戻る問題対策)
+    if (typeof updateTemplatePreview === 'function') {
+        try { updateTemplatePreview(); } catch (e) { console.warn('[projectHtml.load] updateTemplatePreview 失敗:', e); }
+    }
+    if (typeof drawAll === 'function') {
+        try { drawAll(); } catch (e) { /* ignore */ }
+    }
 
     // 既存 TDTS/XDTS 保存挙動への影響を避けるため、currentFileHandle は触らない
     result.ok = true;
@@ -379,6 +401,37 @@ function validateProjectData(data) {
         return { ok: false, error: 'documents[0].sheets が空または配列ではありません' };
     }
     return { ok: true };
+}
+
+// プロジェクト読込後、サイドバーの template-select を外部テンプレ選択中状態に同期する。
+// 復元した外部テンプレが既存ローカルIDBに無い場合は仮エントリ "(プロジェクト由来) name" を追加。
+function syncTemplateSelectorAfterProjectLoad(externalTemplateBlock) {
+    const sel = document.getElementById('template-select');
+    if (!sel) return;
+    if (!externalTemplateBlock) {
+        // 標準A3に戻す
+        const def = Array.from(sel.options).find(o => o.value === 'default');
+        if (def) sel.value = 'default';
+        if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
+        return;
+    }
+    const wantId = externalTemplateBlock.sourceTemplateId || '';
+    const wantValue = wantId ? `ext:${wantId}` : '';
+    // 既存 option を探す
+    let opt = wantValue ? Array.from(sel.options).find(o => o.value === wantValue) : null;
+    if (!opt) {
+        // 仮エントリ追加 (project-loaded grouping)
+        const group = document.getElementById('template-select-external-group')
+            || sel; // optgroup 無ければ select 直下
+        opt = document.createElement('option');
+        opt.value = wantValue || `ext:__project_loaded__`;
+        opt.textContent = `(プロジェクト由来) ${externalTemplateBlock.name || ''}`.trim();
+        opt.dataset.projectLoaded = '1';
+        group.appendChild(opt);
+    }
+    sel.value = opt.value;
+    if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
+    if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
 }
 
 // ─── JSON エクスポート / インポート (P1-c) ───────────────────────────────────
