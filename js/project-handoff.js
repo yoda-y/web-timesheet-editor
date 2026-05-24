@@ -76,7 +76,9 @@
         function reply(payload) {
             if (!opener) return;
             try {
-                const target = openerOrigin || '*';
+                // openerOrigin が "null" (file:// ランチャー) の場合は target に "null" を渡せないため "*" を使う。
+                // 安全性は nonce 検証で担保される。
+                const target = (!openerOrigin || openerOrigin === 'null') ? '*' : openerOrigin;
                 opener.postMessage(payload, target);
             } catch (e) { console.warn('[project-handoff] reply 送信失敗:', e); }
         }
