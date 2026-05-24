@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.9.1';
+const APP_VERSION = '0.10.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,23 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.10.0 (2026-05-24)
+
+### 追加 (P2-1)
+- \`.wtproj.html\` ランチャーから「アプリで開く」ボタンで、新タブのアプリへ projectData を postMessage で自動転送
+- postMessage + nonce ハンドシェイク（origin/nonce/source 三重検証、30秒タイムアウト）
+- handoff 起動時 (URLに \`#wtproj=...\` がある場合) は autosave 復元プロンプトをスキップ
+- ランチャーに状態表示エリア（接続中 / 成功 / キャンセル / エラー）を追加
+- JSON書き出しは fallback として常に残置
+
+### 変更
+- ランチャーボタン名「アプリを開く」→「アプリで開く」
+
+### 既知の制限
+- 既存アプリタブの再利用はしない（常に新規タブを開く）
+- file:// ランチャーから http://localhost への handoff は受信側 origin ホワイトリストにより許可
+- ランチャー displayName 表示調整は後続バージョンで改善予定
 
 ## v0.9.1 (2026-05-24)
 
