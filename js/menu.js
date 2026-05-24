@@ -115,6 +115,7 @@ const menuActions = {
     'file.export.tdts': () => window.exportTDTS({ saveAs: true }),
     'file.export.xdts': () => window.exportXDTS({ saveAs: true }),
     'file.export.projectJson': () => { if (window.projectHtml && typeof window.projectHtml.exportJSON === 'function') window.projectHtml.exportJSON(); },
+    'file.export.projectHtml': () => { if (window.projectHtml && typeof window.projectHtml.exportHTML === 'function') window.projectHtml.exportHTML(); },
     'file.export.png': () => exportTemplateImage('png'),
     'file.export.jpg': () => exportTemplateImage('jpg'),
     'file.export.psd': () => exportTemplateImage('psd'),

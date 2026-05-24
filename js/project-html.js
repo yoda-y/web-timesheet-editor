@@ -1,4 +1,4 @@
-// === プロジェクトHTML 形式 シリアライザ/デシリアライザ (P1-a) ===
+﻿// === プロジェクトHTML 形式 シリアライザ/デシリアライザ (P1-a) ===
 // docs/project_html_spec.md (v1) を参照。
 //
 // P1-a の範囲: 通常データ (外部テンプレ無し / 手書き無し / assets 無し) のラウンドトリップ。
@@ -514,15 +514,190 @@ function importProjectJSON() {
     input.click();
 }
 
+// ─── HTML 生成 (P1-d): 最小ランチャ ─────────────────────────────────────────
+
+const DEFAULT_APP_URL = 'https://yoda-y.github.io/web-timesheet-editor/';
+
+// HTML エスケープ (タグ閉じ防止)。JSON 用には embedJsonForScript() を使う。
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// <script type="application/json"> に安全に埋め込むためのエスケープ。
+// `</script>` / `<!--` / `]]>` を壊さないよう '<' を < に置換。
+function embedJsonForScript(jsonText) {
+    return String(jsonText)
+        .replace(/</g, '\\u003c')
+        .replace(/-->/g, '--\\u003e')
+        .replace(//g, '\\u2028')
+        .replace(//g, '\\u2029');
+}
+
+function suggestProjectHTMLFileName(projectData) {
+    const raw = (projectData && projectData.meta && projectData.meta.displayName) || 'project';
+    const safe = String(raw).replace(/[^A-Za-z0-9_\-぀-ヿ一-鿿]/g, '_').slice(0, 60) || 'project';
+    return `${safe}.wtproj.html`;
+}
+
+// ランチャ HTML を組み立てて文字列で返す。
+// options.appUrl: 「アプリを開く」ボタンの遷移先 (デフォルト: GitHub Pages)
+function buildProjectHTML(projectData, options) {
+    options = options || {};
+    const appUrl = (typeof options.appUrl === 'string' && options.appUrl) ? options.appUrl : DEFAULT_APP_URL;
+
+    // メタ表示用に projectData から要点を抽出
+    const meta = projectData.meta || {};
+    const doc = (projectData.documents && projectData.documents[0]) || {};
+    const sheet0 = (doc.sheets && doc.sheets[0]) || {};
+    const sheetMeta = sheet0.metaData || {};
+    const displayName = meta.displayName || doc.name || 'project';
+    const title = sheetMeta.title || '';
+    const cut = sheetMeta.cut || '';
+    const createdAt = meta.createdAt || '';
+    const savedAt = meta.savedAt || '';
+    const appVersion = projectData.appVersion || '';
+    const formatVersion = projectData.formatVersion || '';
+
+    const jsonText = JSON.stringify(projectData);
+    const embedded = embedJsonForScript(jsonText);
+
+    // テンプレ。スタイルもインラインで自己完結。
+    const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Web Timesheet Project: ${escapeHtml(displayName)}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 24px; background: #f5f5f5; color: #222; }
+  @media (prefers-color-scheme: dark) { body { background: #1e1e1e; color: #ddd; } .card { background: #2a2a2a !important; border-color: #444 !important; } th, td { border-color: #444 !important; } button { background: #3a3a3a; color: #ddd; border-color: #555; } button.primary { background: #2469d4; color: #fff; border-color: #2469d4; } }
+  .card { max-width: 720px; margin: 0 auto; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  h1 { font-size: 18px; margin: 0 0 4px 0; }
+  .sub { color: #888; font-size: 12px; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0 20px 0; }
+  th, td { border: 1px solid #e0e0e0; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: rgba(0,0,0,0.04); width: 30%; font-weight: 600; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  button { font-size: 14px; padding: 8px 16px; border-radius: 4px; border: 1px solid #bbb; background: #fafafa; cursor: pointer; }
+  button.primary { background: #2469d4; color: #fff; border-color: #2469d4; }
+  button:hover { filter: brightness(1.05); }
+  .footnote { margin-top: 16px; font-size: 11px; color: #999; line-height: 1.5; }
+  code { background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Web Timesheet Project</h1>
+  <div class="sub">${escapeHtml(displayName)}</div>
+
+  <table>
+    <tr><th>プロジェクト名</th><td>${escapeHtml(displayName)}</td></tr>
+    <tr><th>タイトル</th><td>${escapeHtml(title)}</td></tr>
+    <tr><th>カット</th><td>${escapeHtml(cut)}</td></tr>
+    <tr><th>作成日時</th><td>${escapeHtml(createdAt)}</td></tr>
+    <tr><th>保存日時</th><td>${escapeHtml(savedAt)}</td></tr>
+    <tr><th>appVersion</th><td>${escapeHtml(appVersion)}</td></tr>
+    <tr><th>formatVersion</th><td>${escapeHtml(String(formatVersion))}</td></tr>
+  </table>
+
+  <div class="actions">
+    <button class="primary" id="btn-open-app" type="button">アプリを開く</button>
+    <button id="btn-export-json" type="button">JSONを書き出し</button>
+  </div>
+
+  <div class="footnote">
+    このファイルは Web Timesheet Editor のプロジェクトデータを含む単独HTMLです。<br>
+    P1: 「アプリを開く」は GitHub Pages 版エディタを新タブで開きます。データ転送は手動です。<br>
+    必要に応じて「JSONを書き出し」で <code>.wtproj.json</code> を保存し、エディタの「ファイル &gt; インポート &gt; プロジェクトJSON」から読み込んでください。<br>
+    自動データ転送 (postMessage ハンドシェイク) は将来バージョン (P2) で対応予定です。
+  </div>
+</div>
+
+<script type="application/json" id="wt-project-data">${embedded}</script>
+<script>
+(function(){
+  var APP_URL = ${JSON.stringify(appUrl)};
+  function getProjectData() {
+    var el = document.getElementById('wt-project-data');
+    if (!el) throw new Error('wt-project-data が見つかりません');
+    return JSON.parse(el.textContent);
+  }
+  function suggestedJsonName(data) {
+    var raw = (data && data.meta && data.meta.displayName) || 'project';
+    var safe = String(raw).replace(/[^A-Za-z0-9_\\-぀-ヿ一-鿿]/g, '_').slice(0, 60) || 'project';
+    return safe + '.wtproj.json';
+  }
+  document.getElementById('btn-open-app').addEventListener('click', function(){
+    window.open(APP_URL, '_blank', 'noopener');
+  });
+  document.getElementById('btn-export-json').addEventListener('click', function(){
+    try {
+      var data = getProjectData();
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = suggestedJsonName(data);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    } catch (err) {
+      alert('JSON書き出しに失敗しました: ' + (err && err.message || err));
+    }
+  });
+})();
+</script>
+</body>
+</html>
+`;
+    return html;
+}
+
+// 現在の state を HTML ファイルとして書き出す
+async function exportProjectHTML(options) {
+    options = options || {};
+    const data = buildProjectData();
+    const html = buildProjectHTML(data, options);
+    const suggestedName = suggestProjectHTMLFileName(data);
+    if (window.showSaveFilePicker) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName,
+                types: [{ description: 'Web Timesheet Project (HTML)', accept: { 'text/html': ['.html'] } }]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(html);
+            await writable.close();
+        } catch (err) {
+            if (err && err.name !== 'AbortError') alert('プロジェクトHTMLの書き出しに失敗しました: ' + (err.message || err));
+        }
+    } else {
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = suggestedName; a.click();
+        URL.revokeObjectURL(url);
+    }
+}
+
 // ─── window 公開 (デバッグ/将来UI配線用) ─────────────────────────────────────
 
 window.projectHtml = {
     FORMAT: PROJECT_HTML_FORMAT,
     FORMAT_VERSION: PROJECT_HTML_FORMAT_VERSION,
+    DEFAULT_APP_URL,
     build: buildProjectData,
     load: loadProjectData,
     validate: validateProjectData,
     generateProjectId,
     exportJSON: exportProjectJSON,
-    importJSON: importProjectJSON
+    importJSON: importProjectJSON,
+    buildHTML: buildProjectHTML,
+    exportHTML: exportProjectHTML
 };
