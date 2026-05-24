@@ -778,8 +778,14 @@ function _buildTDTSTimeTable(sheetData, checks) {
     const exportName = checks.meta ? (sheetData.name || md.sheetName || "sheet1") : "sheet1";
     const exportCreator = checks.meta ? (md.creator || "") : "";
     const exportDirection = checks.direction ? (md.memo || "") : "";
-    const headDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.headMargin === 'number') ? settings.draw.headMargin : 24;
-    const footDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.tailMargin === 'number') ? settings.draw.tailMargin : 24;
+    // headMargin: 「先頭マージン」設定が無効 (headMarginEnabled === false) の時は
+    // 値が残っていても TDTS には 0 を書く。本家TDTSが先頭ダミーコマと解釈して
+    // データ表示開始位置がずれる問題の修正。
+    const headMarginRawNum = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.headMargin === 'number') ? settings.draw.headMargin : 0;
+    const headMarginEnabled = !!(typeof settings !== 'undefined' && settings.draw && settings.draw.headMarginEnabled);
+    const headDummy = headMarginEnabled ? headMarginRawNum : 0;
+    // tailMargin: 有効/無効フラグは存在せず値そのもの (0 のとき無効)
+    const footDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.tailMargin === 'number') ? settings.draw.tailMargin : 0;
     const out = {
         "duration": duration || 144,
         "direction": exportDirection,
