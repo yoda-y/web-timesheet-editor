@@ -39,6 +39,25 @@ function deepCloneJSON(value) {
     return JSON.parse(JSON.stringify(value));
 }
 
+// dialogueBlocks の正規化: dialogueType を保持しつつ、未定義/不正値のみ 'normal' 補完。
+// 既存値 (normal / off / mono / 背) はそのまま維持する。
+// v0.8.1 で 'N' (Narration) を追加。dialogue.js 側の許可リストと一致させること。
+const VALID_DIALOGUE_TYPES = ['normal', 'off', 'mono', 'N', '背'];
+function normalizeDialogueBlocksArray(blocks) {
+    if (!Array.isArray(blocks)) return [];
+    return blocks.map(b => {
+        const clone = deepCloneJSON(b);
+        if (clone && typeof clone === 'object') {
+            const t = clone.dialogueType;
+            if (t === undefined || t === null || t === '' || !VALID_DIALOGUE_TYPES.includes(t)) {
+                clone.dialogueType = 'normal';
+            }
+            // 有効値ならそのまま (off/mono/背 を絶対に上書きしない)
+        }
+        return clone;
+    });
+}
+
 // 現在の appVersion 文字列取得
 function getCurrentAppVersion() {
     return (typeof APP_VERSION === 'string') ? APP_VERSION : '0.0.0';
@@ -110,7 +129,7 @@ function serializeSheet(sheet) {
         cellData: deepCloneJSON(sheet.cellData || {}),
         booksData: deepCloneJSON(sheet.booksData || { ACTION: {}, SOUND: {}, CELL: {}, CAMERA: {} }),
         customRepeats: deepCloneJSON(sheet.customRepeats || []),
-        dialogueBlocks: deepCloneJSON(sheet.dialogueBlocks || []),
+        dialogueBlocks: normalizeDialogueBlocksArray(sheet.dialogueBlocks || []),
         cameraBlocks: deepCloneJSON(sheet.cameraBlocks || []),
         handwritingPages: deepCloneJSON(sheet.handwritingPages || {}),
         sections: deepCloneJSON(sheet.sections || [])
@@ -170,7 +189,7 @@ function deserializeSheet(rawSheet) {
         cellData: deepCloneJSON(rawSheet.cellData || {}),
         booksData: deepCloneJSON(rawSheet.booksData || { ACTION: {}, SOUND: {}, CELL: {}, CAMERA: {} }),
         customRepeats: deepCloneJSON(rawSheet.customRepeats || []),
-        dialogueBlocks: deepCloneJSON(rawSheet.dialogueBlocks || []),
+        dialogueBlocks: normalizeDialogueBlocksArray(rawSheet.dialogueBlocks || []),
         cameraBlocks: deepCloneJSON(rawSheet.cameraBlocks || []),
         handwritingPages: deepCloneJSON(rawSheet.handwritingPages || {}),
         sections: deepCloneJSON(rawSheet.sections || [])
