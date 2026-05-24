@@ -166,6 +166,14 @@ function clearLastSession() {
 
 // 復元確認ダイアログを表示
 function maybeOfferSessionRestore() {
+    // P2: handoff 起動時 (#wtproj=...) は autosave 復元プロンプトをスキップ。
+    // launcher から受信する projectData が優先されるため。
+    // autosave データは破棄せず保持（後続の通常 autosave 更新に任せる）。
+    try {
+        if (/(?:^#|&)wtproj=/.test(String(window.location.hash || ''))) {
+            return;
+        }
+    } catch (e) {}
     const snap = loadLastSession();
     if (!snap) return;
     const date = new Date(snap.savedAt);
