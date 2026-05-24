@@ -116,6 +116,36 @@ function sanitizeSaveFilename(name) {
     return String(name || '').replace(/[\\/:*?"<>|]/g, '_');
 }
 
+// P2-2: project HTML/JSON 用の保存ファイル名を組み立てる。
+// projectData が渡されればそこから title/episode/cut を引く。無ければ現在の metaData。
+// ext: 'html' | 'wtproj.json' など (先頭の '.' は不要)
+function buildProjectSaveFilename(projectData, ext) {
+    const template = (typeof settings !== 'undefined' && settings.preview && settings.preview.projectFilenameTemplate)
+        ? settings.preview.projectFilenameTemplate
+        : '%title_%episode_%cut_ts';
+    const useExt = String(ext || 'html').replace(/^\./, '');
+    let md = null;
+    if (projectData && projectData.documents && projectData.documents[0]
+        && projectData.documents[0].sheets && projectData.documents[0].sheets[0]
+        && projectData.documents[0].sheets[0].metaData) {
+        md = projectData.documents[0].sheets[0].metaData;
+    } else if (typeof metaData !== 'undefined') {
+        md = metaData;
+    } else {
+        md = {};
+    }
+    const displayName = (projectData && projectData.meta && projectData.meta.displayName) || '';
+    let baseName = template
+        .replace(/%title/g, md.title || displayName || 'project')
+        .replace(/%episode/g, md.subTitle || '')
+        .replace(/%scene/g, md.scene || '')
+        .replace(/%cut/g, md.cut || '')
+        .replace(/%sheet/g, md.sheetName || '');
+    baseName = baseName.replace(/\s+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    baseName = sanitizeSaveFilename(baseName || 'project');
+    return `${baseName}.${useExt}`;
+}
+
 function buildTimesheetSaveFilename(formatKey) {
     const ext = String(formatKey || 'tdts').replace(/^\./, '').toLowerCase();
     const template = (typeof settings !== 'undefined' && settings.preview && settings.preview.saveFilenameTemplate)

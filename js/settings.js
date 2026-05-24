@@ -93,6 +93,8 @@ const DEFAULT_SETTINGS = {
         sidebarPosition: 'right',  // 'left' | 'right'
         exportFilenameTemplate: '%title_%scene_%cut',
         saveFilenameTemplate: '%title_%scene_%cut',
+        // P2-2: プロジェクトHTML/JSON 保存時のデフォルトファイル名テンプレート
+        projectFilenameTemplate: '%title_%episode_%cut_ts',
         imageExportFormat: 'png',
         imageExportDpi: 300,
         imageExportIncludeHandwriting: true,
