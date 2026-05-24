@@ -39,6 +39,58 @@ function deepCloneJSON(value) {
     return JSON.parse(JSON.stringify(value));
 }
 
+// ─── Assets (P1-b) ──────────────────────────────────────────────────────────
+
+// asset_<typeShort>_<scope>_<random6>
+function generateAssetId(assetType, scope) {
+    const typeShort = assetType === 'externalTemplate' ? 'tpl'
+                    : assetType === 'handwriting'      ? 'hw'
+                    : 'img';
+    const rand = Array.from(crypto.getRandomValues(new Uint8Array(3)))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+    const s = scope ? `_${String(scope).replace(/[^A-Za-z0-9_]/g, '')}` : '';
+    return `asset_${typeShort}${s}_${rand}`;
+}
+
+function mimeFromDataUrl(dataUrl) {
+    if (typeof dataUrl !== 'string') return 'image/png';
+    const m = /^data:([^;]+);/.exec(dataUrl);
+    return m ? m[1] : 'image/png';
+}
+
+// ビルド側: dataURL を assets に格納し、ID を返す。重複 dataURL は同一IDに集約。
+function createAssetRegistry() {
+    const assets = {};
+    const dataUrlIndex = new Map();
+    return {
+        assets,
+        addImage(dataUrl, assetType, scope, w, h) {
+            if (!dataUrl || typeof dataUrl !== 'string') return null;
+            const existing = dataUrlIndex.get(dataUrl);
+            if (existing) return existing;
+            const id = generateAssetId(assetType, scope);
+            const entry = {
+                type: assetType,
+                mimeType: mimeFromDataUrl(dataUrl),
+                data: dataUrl
+            };
+            if (typeof w === 'number' && w > 0) entry.width = Math.round(w);
+            if (typeof h === 'number' && h > 0) entry.height = Math.round(h);
+            assets[id] = entry;
+            dataUrlIndex.set(dataUrl, id);
+            return id;
+        }
+    };
+}
+
+// 復元側: assets から imageAssetId に対応する dataURL を取り出す
+function resolveAssetDataUrl(assets, id) {
+    if (!assets || !id) return null;
+    const a = assets[id];
+    if (!a || typeof a.data !== 'string') return null;
+    return a.data;
+}
+
 // dialogueBlocks の正規化: dialogueType を保持しつつ、未定義/不正値のみ 'normal' 補完。
 // 既存値 (normal / off / mono / 背) はそのまま維持する。
 // v0.8.1 で 'N' (Narration) を追加。dialogue.js 側の許可リストと一致させること。
@@ -88,6 +140,30 @@ function buildProjectData(extraMeta) {
         ? `cut${sheetsCopy[0].metaData.cut}`
         : 'document';
 
+    // P1-b: assets レジストリ。handwriting / externalTemplate 画像を集約。
+    const registry = createAssetRegistry();
+    const serializedSheets = sheetsCopy.map((sh, idx) => serializeSheet(sh, registry, idx));
+
+    // 外部テンプレ (任意)
+    let externalTemplateBlock = null;
+    if (typeof getCurrentExternalTemplate === 'function') {
+        const tpl = getCurrentExternalTemplate();
+        if (tpl && tpl.image) {
+            const tplAssetId = registry.addImage(
+                tpl.image, 'externalTemplate', 'main',
+                tpl.imageWidth, tpl.imageHeight
+            );
+            externalTemplateBlock = {
+                name: tpl.name || '',
+                imageAssetId: tplAssetId,
+                imageWidth: tpl.imageWidth || 0,
+                imageHeight: tpl.imageHeight || 0,
+                bboxes: deepCloneJSON(tpl.bboxes || {})
+            };
+            if (tpl.id) externalTemplateBlock.sourceTemplateId = tpl.id;
+        }
+    }
+
     const projectData = {
         format: PROJECT_HTML_FORMAT,
         formatVersion: PROJECT_HTML_FORMAT_VERSION,
@@ -108,19 +184,21 @@ function buildProjectData(extraMeta) {
                 id: docId,
                 name: docName,
                 sections: docSections,
-                sheets: sheetsCopy.map(serializeSheet)
+                sheets: serializedSheets
             }
         ],
-        // P1-a では externalTemplate / assets は未対応 (P1-b 以降で追加)
-        assets: {}
+        assets: registry.assets
     };
+
+    if (externalTemplateBlock) projectData.externalTemplate = externalTemplateBlock;
 
     return projectData;
 }
 
-// シート単体のシリアライズ (P1-a では既存構造をほぼそのまま使う)
-// P1-b で handwritingPages 内 image の dataURL → assetId 化を行う
-function serializeSheet(sheet) {
+// シート単体のシリアライズ。
+// P1-b: handwritingPages[].images[].dataUrl を assets に集約し imageAssetId 参照に置換。
+function serializeSheet(sheet, registry, sheetIdx) {
+    const handwritingOut = serializeHandwritingPages(sheet.handwritingPages || {}, registry, sheetIdx);
     return {
         name: sheet.name,
         isSharedCut: !!sheet.isSharedCut,
@@ -131,16 +209,58 @@ function serializeSheet(sheet) {
         customRepeats: deepCloneJSON(sheet.customRepeats || []),
         dialogueBlocks: normalizeDialogueBlocksArray(sheet.dialogueBlocks || []),
         cameraBlocks: deepCloneJSON(sheet.cameraBlocks || []),
-        handwritingPages: deepCloneJSON(sheet.handwritingPages || {}),
+        handwritingPages: handwritingOut,
         sections: deepCloneJSON(sheet.sections || [])
     };
 }
 
+// handwritingPages のシリアライズ。images.dataUrl → imageAssetId に置換。strokes はそのまま。
+function serializeHandwritingPages(pages, registry, sheetIdx) {
+    const out = {};
+    Object.keys(pages || {}).forEach(pageKey => {
+        const page = pages[pageKey] || {};
+        const strokes = Array.isArray(page.strokes) ? deepCloneJSON(page.strokes) : [];
+        const images = Array.isArray(page.images) ? page.images.map((img, imgIdx) => {
+            const copy = deepCloneJSON(img);
+            const scope = `s${sheetIdx}_${String(pageKey).replace(/[^A-Za-z0-9]/g, '')}_i${imgIdx}`;
+            if (typeof copy.dataUrl === 'string' && copy.dataUrl) {
+                const assetId = registry.addImage(copy.dataUrl, 'handwriting', scope, copy.w, copy.h);
+                copy.imageAssetId = assetId;
+                delete copy.dataUrl;
+            }
+            return copy;
+        }) : [];
+        out[pageKey] = { strokes, images };
+    });
+    return out;
+}
+
+// handwritingPages の復元。imageAssetId → dataUrl に再展開。
+function deserializeHandwritingPages(pages, assets) {
+    const out = {};
+    Object.keys(pages || {}).forEach(pageKey => {
+        const page = pages[pageKey] || {};
+        const strokes = Array.isArray(page.strokes) ? deepCloneJSON(page.strokes) : [];
+        const images = Array.isArray(page.images) ? page.images.map(img => {
+            const copy = deepCloneJSON(img);
+            // 新フォーマット (imageAssetId) を優先。旧形式 dataUrl もそのまま許容。
+            if (copy.imageAssetId) {
+                const url = resolveAssetDataUrl(assets, copy.imageAssetId);
+                if (url) copy.dataUrl = url;
+            }
+            return copy;
+        }) : [];
+        out[pageKey] = { strokes, images };
+    });
+    return out;
+}
+
 // ─── loadProjectData: projectData → state ─────────────────────────────────────
 
-// projectData を現在の state に反映する
-// 戻り値: { ok: boolean, warnings: string[], error?: string }
-function loadProjectData(projectData) {
+// projectData を現在の state に反映する。
+// P1-b: 外部テンプレ画像の Image load があるため async。
+// 戻り値: Promise<{ ok: boolean, warnings: string[], error?: string }>
+async function loadProjectData(projectData) {
     const result = { ok: false, warnings: [] };
     const v = validateProjectData(projectData);
     if (!v.ok) {
@@ -149,19 +269,18 @@ function loadProjectData(projectData) {
     }
 
     const doc = projectData.documents[0];
+    const assets = projectData.assets || {};
 
-    // sheets を loadAllSheetsData 経由で反映
     if (typeof loadAllSheetsData !== 'function') {
         result.error = 'loadAllSheetsData が利用できません';
         return result;
     }
-    const sheetsArr = (doc.sheets || []).map(deserializeSheet);
+    const sheetsArr = (doc.sheets || []).map(rs => deserializeSheet(rs, assets));
     if (sheetsArr.length === 0) {
         result.error = 'documents[0].sheets が空です';
         return result;
     }
 
-    // activeSheetIndex
     let activeIdx = (projectData.workspace && typeof projectData.workspace.activeSheetIndex === 'number')
         ? projectData.workspace.activeSheetIndex
         : 0;
@@ -170,17 +289,38 @@ function loadProjectData(projectData) {
         activeIdx = 0;
     }
 
+    // 外部テンプレ復元 (sheets 読み込み前に走らせて、後続の drawAll で反映)
+    if (projectData.externalTemplate && typeof applyProjectExternalTemplate === 'function') {
+        const et = projectData.externalTemplate;
+        const dataUrl = resolveAssetDataUrl(assets, et.imageAssetId);
+        if (!dataUrl) {
+            result.warnings.push(`externalTemplate.imageAssetId=${et.imageAssetId} が assets に見つかりません`);
+            await applyProjectExternalTemplate(null);
+        } else {
+            await applyProjectExternalTemplate({
+                id: et.sourceTemplateId || null,
+                name: et.name || '',
+                image: dataUrl,
+                imageWidth: et.imageWidth || 0,
+                imageHeight: et.imageHeight || 0,
+                bboxes: deepCloneJSON(et.bboxes || {})
+            });
+        }
+    } else if (typeof applyProjectExternalTemplate === 'function') {
+        // 外部テンプレなしのプロジェクトを開いた時は現在のテンプレを解除
+        await applyProjectExternalTemplate(null);
+    }
+
     loadAllSheetsData(sheetsArr, activeIdx);
 
     // 既存 TDTS/XDTS 保存挙動への影響を避けるため、currentFileHandle は触らない
-    // (呼出側が必要に応じて setCurrentFileName 等を呼ぶ)
-
     result.ok = true;
     return result;
 }
 
-// シート単体のデシリアライズ (P1-a では既存構造ベース)
-function deserializeSheet(rawSheet) {
+// シート単体のデシリアライズ。
+// P1-b: handwritingPages の imageAssetId を assets から dataUrl に再展開。
+function deserializeSheet(rawSheet, assets) {
     return {
         name: rawSheet.name || 'sheet1',
         isSharedCut: !!rawSheet.isSharedCut,
@@ -191,7 +331,7 @@ function deserializeSheet(rawSheet) {
         customRepeats: deepCloneJSON(rawSheet.customRepeats || []),
         dialogueBlocks: normalizeDialogueBlocksArray(rawSheet.dialogueBlocks || []),
         cameraBlocks: deepCloneJSON(rawSheet.cameraBlocks || []),
-        handwritingPages: deepCloneJSON(rawSheet.handwritingPages || {}),
+        handwritingPages: deserializeHandwritingPages(rawSheet.handwritingPages || {}, assets),
         sections: deepCloneJSON(rawSheet.sections || [])
     };
 }

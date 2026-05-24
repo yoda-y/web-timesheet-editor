@@ -267,6 +267,37 @@ window.getCurrentExternalTemplate = getCurrentExternalTemplate;
 window.getCurrentExternalTemplateImage = getCurrentExternalTemplateImage;
 window.setCurrentExternalTemplate = setCurrentExternalTemplate;
 
+// プロジェクトHTML (P1-b) からのインメモリ復元用。
+// IndexedDB には書き込まず、現在のテンプレ状態だけを差し替える。
+// tpl: { id?, name, image (dataURL), imageWidth, imageHeight, bboxes }
+async function applyProjectExternalTemplate(tpl) {
+    if (!tpl) {
+        currentExternalTemplate = null;
+        currentExternalTemplateImage = null;
+        if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
+        if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
+        return;
+    }
+    currentExternalTemplate = tpl;
+    if (tpl.image) {
+        try {
+            currentExternalTemplateImage = await new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = tpl.image;
+            });
+        } catch (e) {
+            currentExternalTemplateImage = null;
+        }
+    } else {
+        currentExternalTemplateImage = null;
+    }
+    if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
+    if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
+}
+window.applyProjectExternalTemplate = applyProjectExternalTemplate;
+
 // ─── Phase 3d: カスタムフィールド サイドバー更新 ──────────────────────────────
 
 function refreshCustomFieldsSidebar() {
