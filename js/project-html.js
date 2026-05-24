@@ -530,11 +530,13 @@ function escapeHtml(s) {
 // <script type="application/json"> に安全に埋め込むためのエスケープ。
 // `</script>` / `<!--` / `]]>` を壊さないよう '<' を < に置換。
 function embedJsonForScript(jsonText) {
+    var LS = String.fromCharCode(0x2028);
+    var PS = String.fromCharCode(0x2029);
     return String(jsonText)
         .replace(/</g, '\\u003c')
         .replace(/-->/g, '--\\u003e')
-        .replace(//g, '\\u2028')
-        .replace(//g, '\\u2029');
+        .split(LS).join('\\u2028')
+        .split(PS).join('\\u2029');
 }
 
 function suggestProjectHTMLFileName(projectData) {
