@@ -656,6 +656,15 @@ function buildProjectHTML(projectData, options) {
   button:hover { filter: brightness(1.05); }
   .footnote { margin-top: 16px; font-size: 11px; color: #999; line-height: 1.5; }
   code { background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+  .status { margin-top: 12px; min-height: 1.4em; font-size: 13px; padding: 8px 12px; border-radius: 4px; display: none; }
+  .status.info { display: block; background: rgba(36,105,212,0.08); color: #2469d4; border: 1px solid rgba(36,105,212,0.3); }
+  .status.ok { display: block; background: rgba(46,160,67,0.08); color: #2ea043; border: 1px solid rgba(46,160,67,0.3); }
+  .status.err { display: block; background: rgba(218,54,51,0.08); color: #da3633; border: 1px solid rgba(218,54,51,0.3); }
+  @media (prefers-color-scheme: dark) {
+    .status.info { background: rgba(36,105,212,0.18); color: #8ab4ff; }
+    .status.ok { background: rgba(46,160,67,0.18); color: #7ee787; }
+    .status.err { background: rgba(218,54,51,0.18); color: #ffa198; }
+  }
 </style>
 </head>
 <body>
@@ -674,15 +683,16 @@ function buildProjectHTML(projectData, options) {
   </table>
 
   <div class="actions">
-    <button class="primary" id="btn-open-app" type="button">アプリを開く</button>
+    <button class="primary" id="btn-open-app" type="button">アプリで開く</button>
     <button id="btn-export-json" type="button">JSONを書き出し</button>
   </div>
 
+  <div id="handoff-status" class="status"></div>
+
   <div class="footnote">
     このファイルは Web Timesheet Editor のプロジェクトデータを含む単独HTMLです。<br>
-    P1: 「アプリを開く」は GitHub Pages 版エディタを新タブで開きます。データ転送は手動です。<br>
-    必要に応じて「JSONを書き出し」で <code>.wtproj.json</code> を保存し、エディタの「ファイル &gt; インポート &gt; プロジェクトJSON」から読み込んでください。<br>
-    自動データ転送 (postMessage ハンドシェイク) は将来バージョン (P2) で対応予定です。
+    「アプリで開く」を押すと、新しいタブでエディタを開き、プロジェクトデータを自動転送します。<br>
+    転送に失敗した場合は「JSONを書き出し」で <code>.wtproj.json</code> を保存し、エディタの「ファイル &gt; インポート &gt; プロジェクトJSON」から読み込んでください。
   </div>
 </div>
 
@@ -690,6 +700,19 @@ function buildProjectHTML(projectData, options) {
 <script>
 (function(){
   var APP_URL = ${JSON.stringify(appUrl)};
+  var HANDOFF_TIMEOUT_MS = 30 * 1000;
+  var APP_ORIGIN = '';
+  try { APP_ORIGIN = new URL(APP_URL).origin; } catch (e) { APP_ORIGIN = ''; }
+
+  var statusEl = document.getElementById('handoff-status');
+  var btnOpen = document.getElementById('btn-open-app');
+  var btnExport = document.getElementById('btn-export-json');
+
+  function setStatus(kind, message) {
+    statusEl.className = 'status ' + kind;
+    statusEl.textContent = message;
+  }
+
   function getProjectData() {
     var el = document.getElementById('wt-project-data');
     if (!el) throw new Error('wt-project-data が見つかりません');
@@ -700,10 +723,78 @@ function buildProjectHTML(projectData, options) {
     var safe = String(raw).replace(/[^A-Za-z0-9_\\-぀-ヿ一-鿿]/g, '_').slice(0, 60) || 'project';
     return safe + '.wtproj.json';
   }
-  document.getElementById('btn-open-app').addEventListener('click', function(){
-    window.open(APP_URL, '_blank', 'noopener');
-  });
-  document.getElementById('btn-export-json').addEventListener('click', function(){
+  function generateNonce() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    return 'n-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function startHandoff() {
+    var data;
+    try { data = getProjectData(); }
+    catch (err) { setStatus('err', 'プロジェクトデータの解析に失敗しました: ' + (err && err.message || err)); return; }
+
+    var nonce = generateNonce();
+    var url = APP_URL + (APP_URL.indexOf('#') >= 0 ? '' : '') + '#wtproj=' + encodeURIComponent(nonce);
+    var appWin;
+    try { appWin = window.open(url, '_blank'); } catch (e) { appWin = null; }
+    if (!appWin) {
+      setStatus('err', 'ポップアップがブロックされました。ブラウザ設定でこのページのポップアップを許可するか、下の「JSONを書き出し」をご利用ください。');
+      return;
+    }
+
+    setStatus('info', 'アプリを開いています…');
+    btnOpen.disabled = true;
+
+    var handled = false;
+    var timeoutId = setTimeout(function(){
+      if (handled) return;
+      cleanup();
+      setStatus('err', 'アプリからの応答がありません (30秒タイムアウト)。「JSONを書き出し」で手動読み込みをお試しください。');
+    }, HANDOFF_TIMEOUT_MS);
+
+    function cleanup() {
+      handled = true;
+      window.removeEventListener('message', onMessage);
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+      btnOpen.disabled = false;
+    }
+
+    function onMessage(event) {
+      if (handled) return;
+      // origin チェック（APP_ORIGIN と一致のみ受理。file:// の app は想定しない）
+      if (APP_ORIGIN && event.origin !== APP_ORIGIN) return;
+      var msg = event.data;
+      if (!msg || typeof msg !== 'object' || msg.nonce !== nonce) return;
+
+      if (msg.type === 'wt-app-ready') {
+        setStatus('info', '接続成功。プロジェクトを転送中…');
+        try {
+          appWin.postMessage({ type: 'wt-project-data', nonce: nonce, projectData: data }, APP_ORIGIN || '*');
+        } catch (e) {
+          cleanup();
+          setStatus('err', 'データ送信に失敗しました: ' + (e && e.message || e));
+        }
+        return;
+      }
+      if (msg.type === 'wt-project-loaded') {
+        cleanup();
+        if (msg.ok) {
+          setStatus('ok', '✓ アプリへ読み込みました。');
+        } else if (msg.error === 'cancelled') {
+          setStatus('err', 'アプリ側で読み込みがキャンセルされました。');
+        } else {
+          var detail = msg.message ? ' (' + msg.message + ')' : '';
+          setStatus('err', '読み込みに失敗しました' + detail + '。「JSONを書き出し」で手動読み込みをお試しください。');
+        }
+        return;
+      }
+    }
+
+    window.addEventListener('message', onMessage);
+  }
+
+  btnOpen.addEventListener('click', startHandoff);
+  btnExport.addEventListener('click', function(){
     try {
       var data = getProjectData();
       var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
