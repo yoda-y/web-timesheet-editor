@@ -115,8 +115,28 @@ const menuActions = {
             window.exportTDTS({ saveAs: false });
         }
     },
-    'file.saveAs': () => {
-        // P2-2c: 別名保存も同じ分岐方針
+    'file.saveAs': async () => {
+        // P2-2d: 形式選択モーダルで保存形式を選択 → 対応するエクスポータを呼ぶ
+        if (typeof window.openSaveFormatChooser === 'function') {
+            const chosen = await window.openSaveFormatChooser({ defaultFormat: currentFileFormat });
+            if (!chosen) return;
+            switch (chosen) {
+                case 'tdts':        return window.exportTDTS({ saveAs: true });
+                case 'xdts':        return window.exportXDTS({ saveAs: true });
+                case 'wtproj-html':
+                    if (window.projectHtml && typeof window.projectHtml.exportHTML === 'function') {
+                        return window.projectHtml.exportHTML({ saveAs: true });
+                    }
+                    break;
+                case 'wtproj-json':
+                    if (window.projectHtml && typeof window.projectHtml.exportJSON === 'function') {
+                        return window.projectHtml.exportJSON();
+                    }
+                    break;
+            }
+            return;
+        }
+        // フォールバック (chooser 未読込): 従来の分岐
         if (currentFileFormat === 'tdts') window.exportTDTS({ saveAs: true });
         else if (currentFileFormat === 'xdts') window.exportXDTS({ saveAs: true });
         else if (window.projectHtml && typeof window.projectHtml.exportHTML === 'function') {

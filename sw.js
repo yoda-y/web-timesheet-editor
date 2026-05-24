@@ -43,6 +43,8 @@ const ASSETS_TO_CACHE = [
   './js/image-splitter.js',
   // v0.10.0 追加 (P2-1): プロジェクトHTMLからの postMessage 受信
   './js/project-handoff.js',
+  // v0.12.0 追加 (P2-2d): 別名保存の形式選択モーダル
+  './js/save-format-chooser.js',
   './js/version.js'
 ];
 
