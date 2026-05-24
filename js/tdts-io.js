@@ -20,9 +20,11 @@ function _parseTDTSSingleTable(header, table, opts) {
     }
     const direction = table.direction || "";
     // headDummykomas/footDummykomas をマージン設定として記録
+    // headMarginEnabled は header.showHeadDummy から復元（本家標準は24固定なので値ではなく表示フラグを使う）
     if (typeof settings !== 'undefined' && settings.draw) {
         if (typeof table.headDummykomas === 'number') settings.draw.headMargin = table.headDummykomas;
         if (typeof table.footDummykomas === 'number') settings.draw.tailMargin = table.footDummykomas;
+        if (typeof header.showHeadDummy === 'boolean') settings.draw.headMarginEnabled = header.showHeadDummy;
     }
 
     // セクション(レイヤー名/数)
@@ -793,13 +795,11 @@ function _buildTDTSTimeTable(sheetData, checks) {
     const exportName = checks.meta ? (sheetData.name || md.sheetName || "sheet1") : "sheet1";
     const exportCreator = checks.meta ? (md.creator || "") : "";
     const exportDirection = checks.direction ? (md.memo || "") : "";
-    // headDummykomas: 本家TDTSの標準値は24。headMarginEnabled=false のときも
-    // 24 を書く（0にすると本家ビューアが先頭24コマを非表示にしてしまう）。
-    const headMarginRawNum = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.headMargin === 'number') ? settings.draw.headMargin : 24;
-    const headMarginEnabled = !!(typeof settings !== 'undefined' && settings.draw && settings.draw.headMarginEnabled);
-    const headDummy = headMarginEnabled ? headMarginRawNum : 24;
-    // footDummykomas: 本家TDTSの標準値は24。
-    const footDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.tailMargin === 'number') ? settings.draw.tailMargin : 24;
+    // headDummykomas/footDummykomas: 本家TDTSの先頭/末尾ダミー領域は24コマ固定。
+    // Web側の settings.draw.headMargin は表示用設定として扱い、TDTS互換出力では常に24を書く。
+    // 先頭ダミー領域の表示/非表示は header.showHeadDummy で制御する。
+    const headDummy = 24;
+    const footDummy = 24;
     const out = {
         "duration": duration || 144,
         "direction": exportDirection,
@@ -829,11 +829,14 @@ function _buildTDTSTimeTable(sheetData, checks) {
 function _buildTDTSTimeSheetHeader(md, checks) {
     let combinedEpisode = md.title || "";
     if (md.subTitle) combinedEpisode += (combinedEpisode ? " / " : "") + md.subTitle;
+    // showHeadDummy: Web側の headMarginEnabled を反映。
+    // true なら本家ビューアで先頭24コマのダミー領域を表示、false なら非表示。
+    const showHeadDummy = !!(typeof settings !== 'undefined' && settings.draw && settings.draw.headMarginEnabled);
     return {
         "cut": checks.meta ? (md.cut || "") : "",
         "episode": checks.meta ? combinedEpisode : "",
         "scene": checks.meta ? (md.scene || "") : "",
-        "showHeadDummy": false,
+        "showHeadDummy": showHeadDummy,
         "timeTableFontColors": [[0,0,0],[224,0,0],[32,128,32],[32,32,192],[192,32,192],[255,128,32]]
     };
 }
