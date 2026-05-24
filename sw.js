@@ -41,6 +41,8 @@ const ASSETS_TO_CACHE = [
   './js/project-html.js',
   // v0.9.1 追加: 読み込み画像の自動分割
   './js/image-splitter.js',
+  // v0.10.0 追加 (P2-1): プロジェクトHTMLからの postMessage 受信
+  './js/project-handoff.js',
   './js/version.js'
 ];
 
