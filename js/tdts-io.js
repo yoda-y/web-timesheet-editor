@@ -793,7 +793,12 @@ function _buildTDTSTimeTable(sheetData, checks) {
     const exportName = checks.meta ? (sheetData.name || md.sheetName || "sheet1") : "sheet1";
     const exportCreator = checks.meta ? (md.creator || "") : "";
     const exportDirection = checks.direction ? (md.memo || "") : "";
-    const headDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.headMargin === 'number') ? settings.draw.headMargin : 24;
+    // headDummykomas: 本家TDTSの標準値は24。headMarginEnabled=false のときも
+    // 24 を書く（0にすると本家ビューアが先頭24コマを非表示にしてしまう）。
+    const headMarginRawNum = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.headMargin === 'number') ? settings.draw.headMargin : 24;
+    const headMarginEnabled = !!(typeof settings !== 'undefined' && settings.draw && settings.draw.headMarginEnabled);
+    const headDummy = headMarginEnabled ? headMarginRawNum : 24;
+    // footDummykomas: 本家TDTSの標準値は24。
     const footDummy = (typeof settings !== 'undefined' && settings.draw && typeof settings.draw.tailMargin === 'number') ? settings.draw.tailMargin : 24;
     const out = {
         "duration": duration || 144,
