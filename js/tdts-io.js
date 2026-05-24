@@ -354,7 +354,7 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
         }
     };
     reader.readAsText(file);
-    e.target.accept = '.tdts,.xdts,.json';
+    e.target.accept = '.tdts,.xdts,.json,.html,.htm';
     e.target.value = '';
 });
 
