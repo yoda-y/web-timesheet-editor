@@ -1597,7 +1597,11 @@ function drawCellDataInBlock(ctx, x, y, colW, colCount, rowH, colType, startFram
                 for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
                 const reps = checkRepeatColumns(colData, totalF, ci);
                 reps.forEach(r => {
-                    if (r.isHold) return;
+                    if (r.isHold) {
+                        autoRepSkipSet.add(`${ci}-1`);
+                        autoRepSkipSet.add(`${ci}-2`);
+                        return;
+                    }
                     for (let f = r.startF + r.chunkLen; f < r.endF; f++) {
                         autoRepSkipSet.add(`${ci}-${f}`);
                     }
@@ -1876,7 +1880,11 @@ function drawBarLines(ctx, x, y, colW, colCount, rowH, colType, absoluteStart, s
                 for (let f = 0; f < totalF; f++) colDataArr[f] = cellData[`ACTION-${ci}-${f}`] || null;
                 const reps = checkRepeatColumns(colDataArr, totalF, ci);
                 reps.forEach(r => {
-                    if (r.isHold) return;
+                    if (r.isHold) {
+                        autoRepSkipSet.add(`${ci}-1`);
+                        autoRepSkipSet.add(`${ci}-2`);
+                        return;
+                    }
                     for (let f = r.startF + r.chunkLen; f < r.endF; f++) {
                         autoRepSkipSet.add(`${ci}-${f}`);
                     }
@@ -2188,7 +2196,8 @@ function drawDialogueBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteSta
         if (isPrimaryPage && block.speakerName && !isShort) {
             let speakerFontSize = m(2.5) * getFontScale('dialogue');
             ctx.font = `bold ${speakerFontSize}px sans-serif`;
-            while (ctx.measureText(block.speakerName).width > colW - m(1) && speakerFontSize > m(1.5) * getFontScale('dialogue')) {
+            const speakerMaxWidth = Math.max(colW - m(1), colW * 1.6);
+            while (ctx.measureText(block.speakerName).width > speakerMaxWidth && speakerFontSize > m(1.5) * getFontScale('dialogue')) {
                 speakerFontSize -= m(0.2);
                 ctx.font = `bold ${speakerFontSize}px sans-serif`;
             }
@@ -4040,8 +4049,9 @@ function drawSoundInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd,
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
             const nameW = ctx.measureText(block.speakerName).width;
-            if (nameW > innerW) {
-                nameFont = nameFont * (innerW / nameW);
+            const nameMaxW = Math.max(innerW, cellW * 1.6);
+            if (nameW > nameMaxW) {
+                nameFont = nameFont * (nameMaxW / nameW);
                 ctx.font = `bold ${nameFont}px sans-serif`;
             }
             ctx.fillText(block.speakerName, bx + cellW / 2, by + 2);

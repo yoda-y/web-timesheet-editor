@@ -289,13 +289,19 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
                 opts._forceLength = true;
             }
             if (!raw) { alert("読み込みエラー: ファイル構造が無効です。"); return; }
+            if (fmt === 'tdts' && ((raw.memos && raw.memos.length) || raw.headerMemo)) {
+                const msg = (typeof t === 'function')
+                    ? t('confirm.importTdtsMemos')
+                    : 'このTDTSには本家TDTSの手描きメモが含まれています。手書きレイヤーとして読み込みますか？';
+                opts._importTdtsMemos = confirm(msg);
+            }
             if (opts.merge === 'new' && typeof createDocumentTabForIncomingDocument === 'function') {
                 createDocumentTabForIncomingDocument(fileName, fmt, null, null);
             } else {
                 // 取込前の状態をUndoスタックに積む（Ctrl+Zで戻れるように）
                 pushHistory();
             }
-            applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength });
+            applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength, importTdtsMemos: opts._importTdtsMemos });
             // 完全新規(new)のときだけ現在ファイル名/ハンドルを切替。それ以外は既存ドキュメント名を維持。
             if (opts.merge === 'new') {
                 currentFileHandle = null;
@@ -393,12 +399,18 @@ async function openTimesheetFromFolder() {
             alert('ファイルを読み込めませんでした。');
             return;
         }
+        if (fmt === 'tdts' && ((raw.memos && raw.memos.length) || raw.headerMemo)) {
+            const msg = (typeof t === 'function')
+                ? t('confirm.importTdtsMemos')
+                : 'このTDTSには本家TDTSの手描きメモが含まれています。手書きレイヤーとして読み込みますか？';
+            opts._importTdtsMemos = confirm(msg);
+        }
         if (opts.merge === 'new' && typeof createDocumentTabForIncomingDocument === 'function') {
             createDocumentTabForIncomingDocument(selected.name, fmt, selected.handle, directoryHandle);
         } else {
             pushHistory();
         }
-        applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength });
+        applyImportData(raw, opts.checks, opts.merge, { forceLength: opts._forceLength, importTdtsMemos: opts._importTdtsMemos });
         redoStack = [];
         selectionStart = null; selectionEnd = null; selectedMeta = null;
         selectedDialogueId = null; selectedCameraId = null;
