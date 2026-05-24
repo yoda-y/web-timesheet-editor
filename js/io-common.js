@@ -729,7 +729,8 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
 
     function isValidFile(file) {
         const name = file.name.toLowerCase();
-        return name.endsWith('.tdts') || name.endsWith('.xdts') || name.endsWith('.json');
+        return name.endsWith('.tdts') || name.endsWith('.xdts') || name.endsWith('.json')
+            || name.endsWith('.html') || name.endsWith('.htm');
     }
 
     function isImageFile(file) {
@@ -747,6 +748,20 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
             }
         }
         const text = await file.text();
+        // P1-e: プロジェクトHTML / プロジェクトJSON を先に short-circuit
+        const lowerName = (file.name || '').toLowerCase();
+        const isHtml = lowerName.endsWith('.html') || lowerName.endsWith('.htm');
+        const looksProj = (window.projectHtml && (window.projectHtml.looksLikeProjectHTML(text) || window.projectHtml.looksLikeProjectJSON(text)));
+        if (isHtml || looksProj) {
+            if (typeof isDirty !== 'undefined' && isDirty) {
+                if (!confirm('未保存の変更があります。破棄してプロジェクトを読み込みますか？')) return;
+            }
+            const r = await window.projectHtml.loadFromTextAuto(text, file.name);
+            if (!r.ok) { alert('プロジェクト読み込み失敗: ' + (r.error || '')); return; }
+            if (r.warnings && r.warnings.length) console.warn('[projectHtml] warnings:', r.warnings);
+            if (typeof showToast === 'function') showToast(`${file.name} を読み込みました`);
+            return;
+        }
         const fmt = typeof detectFileFormat === 'function' ? detectFileFormat(text) : null;
         if (!fmt) {
             alert('対応していないファイル形式です。');

@@ -514,6 +514,72 @@ function importProjectJSON() {
     input.click();
 }
 
+// ─── HTML パース (P1-e): 埋め込み JSON 抽出 ──────────────────────────────────
+
+// プロジェクトHTML 内の <script type="application/json" id="wt-project-data"> を取り出す。
+// 戻り値: { ok: true, data } | { ok: false, error }
+function extractEmbeddedProjectJSON(htmlText) {
+    if (typeof htmlText !== 'string' || !htmlText) {
+        return { ok: false, error: 'HTML テキストが空です' };
+    }
+    const re = /<script\b[^>]*\bid\s*=\s*["']wt-project-data["'][^>]*>([\s\S]*?)<\/script\s*>/i;
+    const m = re.exec(htmlText);
+    if (!m) {
+        return { ok: false, error: 'プロジェクト埋め込みデータ (wt-project-data) が見つかりません' };
+    }
+    const raw = m[1].trim();
+    if (!raw) return { ok: false, error: '埋め込み JSON が空です' };
+    try {
+        const data = JSON.parse(raw);
+        return { ok: true, data };
+    } catch (err) {
+        return { ok: false, error: 'JSON 解析エラー: ' + (err && err.message || err) };
+    }
+}
+
+// テキストがプロジェクト HTML かの軽量判定 (拡張子非依存)
+function looksLikeProjectHTML(text) {
+    if (typeof text !== 'string') return false;
+    return /id\s*=\s*["']wt-project-data["']/.test(text);
+}
+
+// テキストがプロジェクト JSON 本体かの軽量判定 (parse 前)
+function looksLikeProjectJSON(text) {
+    if (typeof text !== 'string') return false;
+    return text.includes('"web-timesheet-project"') && text.includes('"formatVersion"');
+}
+
+// プロジェクト HTML または JSON のテキストを受け取り loadProjectData まで通す共通ハンドラ。
+// 戻り値: Promise<{ ok, warnings?, error? }>
+async function loadProjectFromTextAuto(text, sourceFileName) {
+    if (looksLikeProjectHTML(text)) {
+        const ex = extractEmbeddedProjectJSON(text);
+        if (!ex.ok) return { ok: false, error: ex.error };
+        const r = await loadProjectData(ex.data);
+        if (r.ok) {
+            if (typeof currentFileHandle !== 'undefined') currentFileHandle = null;
+            if (typeof currentFileFormat !== 'undefined') currentFileFormat = null;
+            if (typeof setCurrentFileName === 'function') setCurrentFileName(sourceFileName || '', null);
+            if (typeof markClean === 'function') markClean();
+        }
+        return r;
+    }
+    if (looksLikeProjectJSON(text)) {
+        let parsed;
+        try { parsed = JSON.parse(text); }
+        catch (err) { return { ok: false, error: 'JSON 解析エラー: ' + err.message }; }
+        const r = await loadProjectData(parsed);
+        if (r.ok) {
+            if (typeof currentFileHandle !== 'undefined') currentFileHandle = null;
+            if (typeof currentFileFormat !== 'undefined') currentFileFormat = null;
+            if (typeof setCurrentFileName === 'function') setCurrentFileName(sourceFileName || '', null);
+            if (typeof markClean === 'function') markClean();
+        }
+        return r;
+    }
+    return { ok: false, error: 'プロジェクトHTML/JSON ではありません' };
+}
+
 // ─── HTML 生成 (P1-d): 最小ランチャ ─────────────────────────────────────────
 
 const DEFAULT_APP_URL = 'https://yoda-y.github.io/web-timesheet-editor/';
@@ -701,5 +767,9 @@ window.projectHtml = {
     exportJSON: exportProjectJSON,
     importJSON: importProjectJSON,
     buildHTML: buildProjectHTML,
-    exportHTML: exportProjectHTML
+    exportHTML: exportProjectHTML,
+    extractEmbeddedJSON: extractEmbeddedProjectJSON,
+    looksLikeProjectHTML,
+    looksLikeProjectJSON,
+    loadFromTextAuto: loadProjectFromTextAuto
 };

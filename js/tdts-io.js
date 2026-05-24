@@ -262,6 +262,21 @@ document.getElementById('fileInput').addEventListener('change', function(e) {
     reader.onload = async function(evt) {
         try {
             const text = evt.target.result;
+            // P1-e: プロジェクトHTML / プロジェクトJSON を先に short-circuit
+            const lowerName = (file.name || '').toLowerCase();
+            const isHtml = lowerName.endsWith('.html') || lowerName.endsWith('.htm');
+            const looksProj = (window.projectHtml && (window.projectHtml.looksLikeProjectHTML(text) || window.projectHtml.looksLikeProjectJSON(text)));
+            if (isHtml || looksProj) {
+                if (typeof isDirty !== 'undefined' && isDirty) {
+                    if (!confirm('未保存の変更があります。破棄してプロジェクトを読み込みますか？')) { e.target.value = ''; return; }
+                }
+                const r = await window.projectHtml.loadFromTextAuto(text, file.name);
+                if (!r.ok) { alert('プロジェクト読み込み失敗: ' + (r.error || '')); return; }
+                if (r.warnings && r.warnings.length) console.warn('[projectHtml] warnings:', r.warnings);
+                if (typeof showToast === 'function') showToast(`${file.name} を読み込みました`);
+                e.target.value = '';
+                return;
+            }
             const fmt = detectFileFormat(text);
             if (!fmt) { alert("読み込みエラー: 対応していないファイル形式です。"); return; }
             const fileName = file.name;
