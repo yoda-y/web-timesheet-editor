@@ -438,12 +438,17 @@ function syncTemplateSelectorAfterProjectLoad(externalTemplateBlock) {
 
 // 提案ファイル名: <displayName>.wtproj.json (英数+_-のみに浄化)
 function suggestProjectJSONFileName(projectData) {
+    if (typeof buildProjectSaveFilename === 'function') {
+        return buildProjectSaveFilename(projectData, 'wtproj.json');
+    }
     const raw = (projectData && projectData.meta && projectData.meta.displayName) || 'project';
     const safe = String(raw).replace(/[^A-Za-z0-9_\-぀-ヿ一-鿿]/g, '_').slice(0, 60) || 'project';
     return `${safe}.wtproj.json`;
 }
 
 // 現在の state を JSON ファイルとして書き出す
+// P2-2b: メニュー「書き出し > プロジェクトJSON」専用。Ctrl+S からは呼ばない。
+// 明示的な書き出しなので毎回ピッカー (saveAs に依存しない)。
 async function exportProjectJSON() {
     const data = buildProjectData();
     const fileContent = JSON.stringify(data, null, 2);
@@ -452,7 +457,7 @@ async function exportProjectJSON() {
         try {
             const handle = await window.showSaveFilePicker({
                 suggestedName,
-                types: [{ description: 'Web Timesheet Project (JSON)', accept: { 'application/json': ['.json'] } }]
+                types: [{ description: 'Web Timesheet Project (JSON)', accept: { 'application/json': ['.json', '.wtproj.json'] } }]
             });
             const writable = await handle.createWritable();
             await writable.write(fileContent);
@@ -557,9 +562,9 @@ async function loadProjectFromTextAuto(text, sourceFileName) {
         if (!ex.ok) return { ok: false, error: ex.error };
         const r = await loadProjectData(ex.data);
         if (r.ok) {
+            // P2-2a: project HTML として開いたことを記録。handle は input経由では取れないので null。
             if (typeof currentFileHandle !== 'undefined') currentFileHandle = null;
-            if (typeof currentFileFormat !== 'undefined') currentFileFormat = null;
-            if (typeof setCurrentFileName === 'function') setCurrentFileName(sourceFileName || '', null);
+            if (typeof setCurrentFileName === 'function') setCurrentFileName(sourceFileName || '', 'wtproj-html');
             if (typeof markClean === 'function') markClean();
         }
         return r;
@@ -570,9 +575,9 @@ async function loadProjectFromTextAuto(text, sourceFileName) {
         catch (err) { return { ok: false, error: 'JSON 解析エラー: ' + err.message }; }
         const r = await loadProjectData(parsed);
         if (r.ok) {
+            // P2-2a: project JSON として開いたことを記録。Ctrl+S 時は HTML に昇格保存する仕様。
             if (typeof currentFileHandle !== 'undefined') currentFileHandle = null;
-            if (typeof currentFileFormat !== 'undefined') currentFileFormat = null;
-            if (typeof setCurrentFileName === 'function') setCurrentFileName(sourceFileName || '', null);
+            if (typeof setCurrentFileName === 'function') setCurrentFileName(sourceFileName || '', 'wtproj-json');
             if (typeof markClean === 'function') markClean();
         }
         return r;
@@ -606,9 +611,12 @@ function embedJsonForScript(jsonText) {
 }
 
 function suggestProjectHTMLFileName(projectData) {
+    if (typeof buildProjectSaveFilename === 'function') {
+        return buildProjectSaveFilename(projectData, 'html');
+    }
     const raw = (projectData && projectData.meta && projectData.meta.displayName) || 'project';
     const safe = String(raw).replace(/[^A-Za-z0-9_\-぀-ヿ一-鿿]/g, '_').slice(0, 60) || 'project';
-    return `${safe}.wtproj.html`;
+    return `${safe}.html`;
 }
 
 // ランチャ HTML を組み立てて文字列で返す。
@@ -819,20 +827,41 @@ function buildProjectHTML(projectData, options) {
 }
 
 // 現在の state を HTML ファイルとして書き出す
+// P2-2b: exportProjectHTML を silent 上書き対応に拡張。
+// options.saveAs:false 時、currentFileHandle が project-html 由来であれば確認なしで上書き。
 async function exportProjectHTML(options) {
     options = options || {};
+    const saveAs = options.saveAs === true;
     const data = buildProjectData();
     const html = buildProjectHTML(data, options);
     const suggestedName = suggestProjectHTMLFileName(data);
+
+    // silent 上書き: 同一形式のハンドルを保持している場合のみ
+    if (!saveAs && typeof currentFileHandle !== 'undefined' && currentFileHandle
+        && typeof currentFileFormat !== 'undefined' && currentFileFormat === 'wtproj-html') {
+        try {
+            const ok = await silentSaveToHandle(currentFileHandle, html);
+            if (ok) {
+                setCurrentFileName(currentFileHandle.name || currentFileName || suggestedName, 'wtproj-html');
+                if (typeof markClean === 'function') markClean();
+                return;
+            }
+        } catch (e) { /* fallthrough to picker */ }
+    }
+
     if (window.showSaveFilePicker) {
         try {
             const handle = await window.showSaveFilePicker({
                 suggestedName,
-                types: [{ description: 'Web Timesheet Project (HTML)', accept: { 'text/html': ['.html'] } }]
+                types: [{ description: 'Web Timesheet Project (HTML)', accept: { 'text/html': ['.html', '.htm'] } }]
             });
             const writable = await handle.createWritable();
             await writable.write(html);
             await writable.close();
+            // 保存後の状態更新（次回 Ctrl+S で silent 上書き可能になる）
+            currentFileHandle = handle;
+            setCurrentFileName(handle.name || suggestedName, 'wtproj-html');
+            if (typeof markClean === 'function') markClean();
         } catch (err) {
             if (err && err.name !== 'AbortError') alert('プロジェクトHTMLの書き出しに失敗しました: ' + (err.message || err));
         }
@@ -842,6 +871,9 @@ async function exportProjectHTML(options) {
         const a = document.createElement('a');
         a.href = url; a.download = suggestedName; a.click();
         URL.revokeObjectURL(url);
+        // ハンドル非対応環境では名前だけ反映
+        setCurrentFileName(suggestedName, 'wtproj-html');
+        if (typeof markClean === 'function') markClean();
     }
 }
 

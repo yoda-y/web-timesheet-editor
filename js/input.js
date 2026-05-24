@@ -1165,11 +1165,15 @@ window.addEventListener('keydown', (e) => {
         // ファイル操作
         if (matchShortcut(e, 'file.save')) {
             e.preventDefault();
-            if (currentFileFormat === 'xdts') window.exportXDTS({ saveAs: false });
-            else window.exportTDTS({ saveAs: false });
+            // P2-2c: menu.js の file.save と同じ分岐ロジックを使う
+            if (typeof window.runMenuAction === 'function') window.runMenuAction('file.save');
             return;
         }
-        if (matchShortcut(e, 'file.saveAs')) { e.preventDefault(); window.exportTDTS({ saveAs: true }); return; }
+        if (matchShortcut(e, 'file.saveAs')) {
+            e.preventDefault();
+            if (typeof window.runMenuAction === 'function') window.runMenuAction('file.saveAs');
+            return;
+        }
         if (matchShortcut(e, 'file.new')) { e.preventDefault(); window.runMenuAction && window.runMenuAction('file.new'); return; }
         if (matchShortcut(e, 'file.open')) { e.preventDefault(); document.getElementById('fileInput').click(); return; }
         // ズーム

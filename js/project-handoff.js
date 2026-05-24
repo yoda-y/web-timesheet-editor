@@ -104,12 +104,12 @@
             try {
                 const r = await window.projectHtml.load(projectData);
                 if (r && r.ok) {
-                    // 受信由来は元ファイル参照を持たない
+                    // 受信由来は元ファイル参照を持たない（保存先は新規ピッカーで選ぶ）
                     try { if (typeof currentFileHandle !== 'undefined') currentFileHandle = null; } catch (e) {}
-                    try { if (typeof currentFileFormat !== 'undefined') currentFileFormat = null; } catch (e) {}
                     const dispName = (projectData && projectData.meta && projectData.meta.displayName) ? projectData.meta.displayName : '';
+                    // P2-2a: handoff 由来は project HTML として保存する意図を持つ
                     if (typeof setCurrentFileName === 'function') {
-                        try { setCurrentFileName(dispName || 'handoff.wtproj.json', null); } catch (e) {}
+                        try { setCurrentFileName(dispName || 'handoff', 'wtproj-html'); } catch (e) {}
                     }
                     if (typeof markClean === 'function') { try { markClean(); } catch (e) {} }
                     reply({ type: 'wt-project-loaded', nonce, ok: true });

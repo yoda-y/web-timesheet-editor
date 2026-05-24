@@ -101,13 +101,29 @@ const menuActions = {
         if (typeof openTimesheetFromFolder === 'function') openTimesheetFromFolder();
     },
     'file.save': () => {
-        // 上書き保存: 現在のフォーマットに応じて分岐。未保存なら TDTS で保存
-        if (currentFileFormat === 'xdts') window.exportXDTS({ saveAs: false });
-        else window.exportTDTS({ saveAs: false });
+        // P2-2c: 現在のフォーマットに応じて保存先を分岐
+        // - tdts/xdts: 従来通り互換書き出しで上書き
+        // - wtproj-html: project HTML として上書き (silent or picker)
+        // - wtproj-json: project HTML に昇格保存
+        // - null (新規/handoff/不明): project HTML として保存ピッカー
+        if (currentFileFormat === 'tdts') window.exportTDTS({ saveAs: false });
+        else if (currentFileFormat === 'xdts') window.exportXDTS({ saveAs: false });
+        else if (window.projectHtml && typeof window.projectHtml.exportHTML === 'function') {
+            window.projectHtml.exportHTML({ saveAs: false });
+        } else {
+            // フォールバック (project-html.js 未読込)
+            window.exportTDTS({ saveAs: false });
+        }
     },
     'file.saveAs': () => {
-        if (currentFileFormat === 'xdts') window.exportXDTS({ saveAs: true });
-        else window.exportTDTS({ saveAs: true });
+        // P2-2c: 別名保存も同じ分岐方針
+        if (currentFileFormat === 'tdts') window.exportTDTS({ saveAs: true });
+        else if (currentFileFormat === 'xdts') window.exportXDTS({ saveAs: true });
+        else if (window.projectHtml && typeof window.projectHtml.exportHTML === 'function') {
+            window.projectHtml.exportHTML({ saveAs: true });
+        } else {
+            window.exportTDTS({ saveAs: true });
+        }
     },
     'file.import.tdts': () => document.getElementById('fileInput').click(),
     'file.import.xdts': () => document.getElementById('fileInput').click(),
