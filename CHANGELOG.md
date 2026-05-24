@@ -6,6 +6,27 @@
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
 
+## v0.9.0 (2026-05-24)
+
+### 追加
+- **プロジェクト保存/読込 (P1)**: Web Timesheet Editor 専用形式
+  - `.wtproj.json`: 全エディタ状態を1ファイルで保存（メタ・セル・ブロック・customFields・dialogueType・外部テンプレ・手書き画像/ストローク）
+  - `.wtproj.html`: 単体で開ける自己完結型HTML（埋め込みJSON + ランチャー）
+  - `.wtproj.html` / `.wtproj.json` をファイル > 開く・ドラッグ&ドロップで読込可能
+  - 外部テンプレート画像・手書き画像はassetsマップに集約しdataURL重複排除
+  - 埋め込みJSONはXSS対策のため `<` / `-->` / U+2028 / U+2029 をエスケープ
+- TDTS出力で `headDummykomas` / `footDummykomas` を本家標準の24固定に
+- TDTS出力で `header.showHeadDummy` を `headMarginEnabled` 設定に連動
+- TDTS読込で `headMarginEnabled` を `header.showHeadDummy` から復元
+
+### 修正
+- TDTS出力時、先頭マージン無効でも残値が `headDummykomas` に書かれ本家ビューアで表示開始位置がずれていた問題
+
+### 既知の制限
+- `.wtproj.html` を直接開いた場合、現状はランチャーから「JSONダウンロード」または「アプリを開く」操作が必要（HTMLからアプリへの自動転送はP2予定）
+- `Ctrl+S` のプロジェクト形式保存への切替は未実装（P2予定）
+- ランチャーのプロジェクト名動的表示の調整は今後対応予定
+
 ## v0.8.1 (2026-05-24)
 
 ### 追加

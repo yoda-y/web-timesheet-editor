@@ -10,6 +10,8 @@
 |------|----------|------|
 | TDTS (toeiDigitalTimeSheet) | ○ | ○ |
 | XDTS (exchangeDigitalTimeSheet) | ○ | ○ |
+| Web Timesheet Project JSON (`.wtproj.json`) | ○ | ○ |
+| Web Timesheet Project HTML (`.wtproj.html`) | ○ | ○ |
 
 ## 主な機能
 
@@ -54,9 +56,19 @@
 - セリフタイプ (normal/off/mono/背) 対応
 - 設定のインポート/エクスポート
 
+## プロジェクトファイル (v0.9.0〜)
+
+Web Timesheet Editor 専用形式として `.wtproj.json` / `.wtproj.html` をサポート。
+全エディタ状態（メタ・セル・ブロック・customFields・dialogueType・外部テンプレ・手書き画像/ストローク）を1ファイルに保存できます。
+
+- **`.wtproj.json`**: テキスト形式。差分管理や軽量配布向け
+- **`.wtproj.html`**: 自己完結型HTML。ブラウザで直接開けるランチャー付き
+  - 現状はランチャーから「JSONをダウンロード」または「アプリを開く」操作で読込（HTMLからアプリへの自動転送は今後対応予定）
+
 ## 既知の制限
 
-- HTMLプロジェクト保存は未実装（将来対応予定）
+- `.wtproj.html` を直接開いた場合、ランチャー経由でJSONダウンロードまたはアプリを開く操作が必要
+- `Ctrl+S` のプロジェクト形式保存への切替は未実装
 - XDTSではセリフタイプ・外部テンプレ紐付け・カスタム項目は保持されません（書出時に警告）
 - 外部テンプレートライブラリはブラウザ内 (IndexedDB) 保存。共有はJSONエクスポートで対応
 - Firefox / iPad Safari はFile System Access API非対応のため、上書き保存や手書きPNG/INI自動保存はダウンロード保存になります
