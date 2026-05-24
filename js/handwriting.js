@@ -864,17 +864,19 @@ async function importHandwritingBundleFromDirectory(directoryHandle, folderName)
             if (!targetSheet) continue;
             if (!targetSheet.handwritingPages) targetSheet.handwritingPages = {};
             const key = getHandwritingPageKey(pageIndex);
-            targetSheet.handwritingPages[key] = {
-                strokes: [],
-                images: [{
-                    id: `bundle-${Date.now()}-${imported}`,
-                    dataUrl,
-                    x: 0,
-                    y: 0,
-                    w: Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4),
-                    h: Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
-                }]
-            };
+            const fw = Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4);
+            const fh = Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4);
+            let imgObjs;
+            if (typeof window.splitImageToHandwritingObjects === 'function') {
+                imgObjs = await window.splitImageToHandwritingObjects(dataUrl, {
+                    baseX: 0, baseY: 0, fallbackW: fw, fallbackH: fh,
+                    targetW: fw, targetH: fh,
+                    idPrefix: `bundle-${imported}`
+                });
+            } else {
+                imgObjs = [{ id: `bundle-${Date.now()}-${imported}`, dataUrl, x: 0, y: 0, w: fw, h: fh }];
+            }
+            targetSheet.handwritingPages[key] = { strokes: [], images: imgObjs };
             imported++;
         } catch (e) {}
     }
@@ -973,6 +975,18 @@ async function importHandwritingPngFiles() {
                 const dataUrl = await readFileAsDataUrl(pngFile);
                 const sheetIndex = Math.max(0, (entry.sheet || 1) - 1);
                 const pageIndex = Math.max(0, (entry.page || 1) - 1);
+                const fwIni = Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4);
+                const fhIni = Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4);
+                let iniImgObjs;
+                if (typeof window.splitImageToHandwritingObjects === 'function') {
+                    iniImgObjs = await window.splitImageToHandwritingObjects(dataUrl, {
+                        baseX: 0, baseY: 0, fallbackW: fwIni, fallbackH: fhIni,
+                        targetW: fwIni, targetH: fhIni,
+                        idPrefix: `ini-${importedFromIni}`
+                    });
+                } else {
+                    iniImgObjs = [{ id: `ini-${Date.now()}-${importedFromIni}`, dataUrl, x: 0, y: 0, w: fwIni, h: fhIni }];
+                }
                 if (typeof sheets !== 'undefined' && sheets[sheetIndex]) {
                     if (!sheets[sheetIndex].handwritingPages) sheets[sheetIndex].handwritingPages = {};
                     const key = getHandwritingPageKey(pageIndex);
@@ -981,14 +995,7 @@ async function importHandwritingPngFiles() {
                         sheets[sheetIndex].handwritingPages[key] = { strokes: [], images: [] };
                         touchedPages.add(touchKey);
                     }
-                    sheets[sheetIndex].handwritingPages[key].images.push({
-                        id: `ini-${Date.now()}-${importedFromIni}`,
-                        dataUrl,
-                        x: 0,
-                        y: 0,
-                        w: Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4),
-                        h: Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
-                    });
+                    iniImgObjs.forEach(o => sheets[sheetIndex].handwritingPages[key].images.push(o));
                 } else {
                     const page = getHandwritingPage(pageIndex);
                     if (!touchedPages.has(pageIndex)) {
@@ -996,14 +1003,7 @@ async function importHandwritingPngFiles() {
                         page.images = [];
                         touchedPages.add(pageIndex);
                     }
-                    page.images.push({
-                        id: `ini-${Date.now()}-${importedFromIni}`,
-                        dataUrl,
-                        x: 0,
-                        y: 0,
-                        w: handwritingCanvas?.width || Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4),
-                        h: handwritingCanvas?.height || Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
-                    });
+                    iniImgObjs.forEach(o => page.images.push(o));
                 }
                 importedFromIni++;
             }
@@ -1032,6 +1032,18 @@ async function importHandwritingPngFiles() {
 
             const dataUrl = await readFileAsDataUrl(file);
 
+            const fwP = Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4);
+            const fhP = Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4);
+            let perFileObjs;
+            if (typeof window.splitImageToHandwritingObjects === 'function') {
+                perFileObjs = await window.splitImageToHandwritingObjects(dataUrl, {
+                    baseX: 0, baseY: 0, fallbackW: fwP, fallbackH: fhP,
+                    targetW: fwP, targetH: fhP,
+                    idPrefix: `import-${importedCount}`
+                });
+            } else {
+                perFileObjs = [{ id: `import-${Date.now()}-${importedCount}`, dataUrl, x: 0, y: 0, w: fwP, h: fhP }];
+            }
             // シートデータに直接追加
             if (typeof sheets !== 'undefined' && sheets[targetSheet]) {
                 if (!sheets[targetSheet].handwritingPages) sheets[targetSheet].handwritingPages = {};
@@ -1039,28 +1051,14 @@ async function importHandwritingPngFiles() {
                 if (!sheets[targetSheet].handwritingPages[key]) {
                     sheets[targetSheet].handwritingPages[key] = { strokes: [], images: [] };
                 }
-                sheets[targetSheet].handwritingPages[key].images.push({
-                    id: `import-${Date.now()}-${importedCount}`,
-                    dataUrl,
-                    x: 0,
-                    y: 0,
-                    w: Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4),
-                    h: Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
-                });
+                perFileObjs.forEach(o => sheets[targetSheet].handwritingPages[key].images.push(o));
                 importResults.push({ file: file.name, sheet: targetSheet + 1, page: targetPage + 1 });
                 importedCount++;
             } else {
                 // sheetsがない場合は現在のページに追加
                 pushHandwritingHistory();
                 const page = getHandwritingPage(targetPage);
-                page.images.push({
-                    id: `import-${Date.now()}-${importedCount}`,
-                    dataUrl,
-                    x: 0,
-                    y: 0,
-                    w: handwritingCanvas?.width || Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4),
-                    h: handwritingCanvas?.height || Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
-                });
+                perFileObjs.forEach(o => page.images.push(o));
                 importResults.push({ file: file.name, sheet: 1, page: targetPage + 1 });
                 importedCount++;
             }
