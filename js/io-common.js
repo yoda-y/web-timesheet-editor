@@ -85,6 +85,11 @@ async function getLastFileHandle(format) {
 }
 
 // 現在編集中のファイル（最後に開いた/保存したハンドル）
+// currentFileFormat: 'tdts' | 'xdts' | 'wtproj-html' | 'wtproj-json' | null
+//   - 'tdts'/'xdts': 互換書き出しファイル
+//   - 'wtproj-html': Project HTML (.html / .wtproj.html) — Ctrl+S は HTML 上書き保存
+//   - 'wtproj-json': Project JSON (.wtproj.json) — Ctrl+S は HTML に昇格保存
+//   - null: 新規作成 or 形式不明 — Ctrl+S は Project HTML として保存ピッカー
 let currentFileHandle = null;
 let currentFileFormat = null;
 let currentDirectoryHandle = null;

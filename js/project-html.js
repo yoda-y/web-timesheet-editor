@@ -557,9 +557,9 @@ async function loadProjectFromTextAuto(text, sourceFileName) {
         if (!ex.ok) return { ok: false, error: ex.error };
         const r = await loadProjectData(ex.data);
         if (r.ok) {
+            // P2-2a: project HTML として開いたことを記録。handle は input経由では取れないので null。
             if (typeof currentFileHandle !== 'undefined') currentFileHandle = null;
-            if (typeof currentFileFormat !== 'undefined') currentFileFormat = null;
-            if (typeof setCurrentFileName === 'function') setCurrentFileName(sourceFileName || '', null);
+            if (typeof setCurrentFileName === 'function') setCurrentFileName(sourceFileName || '', 'wtproj-html');
             if (typeof markClean === 'function') markClean();
         }
         return r;
@@ -570,9 +570,9 @@ async function loadProjectFromTextAuto(text, sourceFileName) {
         catch (err) { return { ok: false, error: 'JSON 解析エラー: ' + err.message }; }
         const r = await loadProjectData(parsed);
         if (r.ok) {
+            // P2-2a: project JSON として開いたことを記録。Ctrl+S 時は HTML に昇格保存する仕様。
             if (typeof currentFileHandle !== 'undefined') currentFileHandle = null;
-            if (typeof currentFileFormat !== 'undefined') currentFileFormat = null;
-            if (typeof setCurrentFileName === 'function') setCurrentFileName(sourceFileName || '', null);
+            if (typeof setCurrentFileName === 'function') setCurrentFileName(sourceFileName || '', 'wtproj-json');
             if (typeof markClean === 'function') markClean();
         }
         return r;
