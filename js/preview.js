@@ -222,6 +222,13 @@ function exportTDTSSidebar() {
     if (typeof window.exportTDTS === 'function') window.exportTDTS({ saveAs: false, directoryWorkflow: true });
 }
 
+// P4: サイドバーから Project HTML 保存。Ctrl+S と同じ挙動 (handle あれば silent、無ければピッカー)
+function saveProjectHtmlSidebar() {
+    if (window.projectHtml && typeof window.projectHtml.exportHTML === 'function') {
+        window.projectHtml.exportHTML({ saveAs: false });
+    }
+}
+
 // サイドバーセクション折りたたみ
 function toggleSidebarSection(sectionName) {
     const section = document.querySelector(`.sidebar-section[data-section="${sectionName}"]`);
