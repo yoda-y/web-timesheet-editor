@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.12.0';
+const APP_VERSION = '0.13.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,19 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.13.0 (2026-05-24)
+
+### 追加 (P3-w)
+- TDTS/XDTS 保存後、Web独自情報がある場合にプロジェクトHTML保存を案内
+- 手書き / 外部テンプレート / customFields / セリフタイプ の検出
+- 警告トーストに「プロジェクトHTMLとしても保存…」「閉じる」「今後表示しない」を実装
+- \`settings.preview.suppressProjectSaveWarning\` 設定キー追加
+
+### 既知の制限
+- 警告はセッション内60秒で抑制（連続保存対策）
+- 「今後表示しない」を有効にした場合、設定UIからの解除はまだ提供していない
+  (settings.preview.suppressProjectSaveWarning を直接 false に戻すこと)
 
 ## v0.12.0 (2026-05-24)
 
