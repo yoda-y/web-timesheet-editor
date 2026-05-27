@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.11.0';
+const APP_VERSION = '0.12.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,26 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.12.0 (2026-05-24)
+
+### 追加 (P2-2d)
+- Ctrl+Shift+S / ファイル > 別名で保存 で形式選択モーダルを表示
+  - Project HTML / Project JSON / TDTS / XDTS から選択可能
+  - デフォルト選択は現在の formatに応じる (JSON→HTMLは昇格)
+  - Esc/Enter キー対応、ダーク/ライトテーマ対応
+
+### 変更 (Launcher polish)
+- ランチャーHTML表示項目を整理
+  - 主要: TITLE / EPISODE / SCENE / CUT / NAME
+  - 詳細 (折りたたみ): appVersion / formatVersion / 作成日時 / 保存日時
+- プロジェクト名の自動解決: extraMeta.displayName → currentFileName →
+  title+cut → docName のフォールバック
+- handoff 成功後にランチャータブの自動 close を試行
+  - ブラウザ制限で閉じられない場合は「閉じて構いません」と案内に切替
+
+### 既知の制限
+- ユーザー直接開きのランチャータブは window.close() がブロックされる場合あり
 
 ## v0.11.0 (2026-05-24)
 
