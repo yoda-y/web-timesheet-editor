@@ -938,6 +938,10 @@ window.exportTDTS = async function(arg) {
                 }
             }
             if (typeof markClean === 'function') markClean();
+            // P3-w: TDTS保存成功後、独自拡張あれば警告
+            if (typeof maybeWarnProjectFeaturesAfterSave === 'function') {
+                try { maybeWarnProjectFeaturesAfterSave('TDTS'); } catch (e) {}
+            }
             return;
         }
         const savedHandle = await saveFileWithPicker('tdts', fileName, fileContent, {
@@ -978,5 +982,9 @@ window.exportTDTS = async function(arg) {
             }
         }
         if (typeof markClean === 'function') markClean();
+        // P3-w: TDTS保存成功後、独自拡張あれば警告
+        if (typeof maybeWarnProjectFeaturesAfterSave === 'function') {
+            try { maybeWarnProjectFeaturesAfterSave('TDTS'); } catch (e) {}
+        }
     } catch (err) { if (err.name !== 'AbortError') alert("保存に失敗しました。"); }
 };

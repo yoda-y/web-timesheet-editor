@@ -344,6 +344,10 @@ window.exportXDTS = async function(arg) {
                 await saveHandwritingBundleForFile(fileName, allSheetData, { dpi: 150 });
             }
             if (typeof markClean === 'function') markClean();
+            // P3-w: XDTS保存成功後、独自拡張あれば警告
+            if (typeof maybeWarnProjectFeaturesAfterSave === 'function') {
+                try { maybeWarnProjectFeaturesAfterSave('XDTS'); } catch (e) {}
+            }
             return;
         }
         const savedHandle = await saveFileWithPicker('xdts', fileName, fileContent, {
@@ -360,5 +364,9 @@ window.exportXDTS = async function(arg) {
             }
         }
         if (typeof markClean === 'function') markClean();
+        // P3-w: XDTS保存成功後、独自拡張あれば警告
+        if (typeof maybeWarnProjectFeaturesAfterSave === 'function') {
+            try { maybeWarnProjectFeaturesAfterSave('XDTS'); } catch (e) {}
+        }
     } catch (err) { if (err.name !== 'AbortError') alert("XDTS 保存に失敗しました。"); }
 };
