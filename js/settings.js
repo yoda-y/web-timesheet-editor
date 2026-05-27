@@ -95,6 +95,8 @@ const DEFAULT_SETTINGS = {
         saveFilenameTemplate: '%title_%scene_%cut',
         // P2-2: プロジェクトHTML/JSON 保存時のデフォルトファイル名テンプレート
         projectFilenameTemplate: '%title_%episode_%cut_ts',
+        // P3-w: TDTS/XDTS 保存時の独自拡張警告を抑制するフラグ
+        suppressProjectSaveWarning: false,
         imageExportFormat: 'png',
         imageExportDpi: 300,
         imageExportIncludeHandwriting: true,

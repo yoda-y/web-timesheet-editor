@@ -45,6 +45,8 @@ const ASSETS_TO_CACHE = [
   './js/project-handoff.js',
   // v0.12.0 追加 (P2-2d): 別名保存の形式選択モーダル
   './js/save-format-chooser.js',
+  // v0.13.0 追加 (P3-w): TDTS/XDTS保存時の独自拡張警告
+  './js/project-features.js',
   './js/version.js'
 ];
 
