@@ -173,6 +173,24 @@ function buildProjectData(extraMeta) {
         }
     }
 
+    // displayName のフォールバック (Launcher 表示用):
+    //   1. extraMeta.displayName (明示指定)
+    //   2. 現在のファイル名 (拡張子除去)
+    //   3. title + cut の組み合わせ
+    //   4. docName ("cutNNN" or "document")
+    let resolvedDisplayName = extraMeta.displayName || '';
+    if (!resolvedDisplayName) {
+        const cfn = (typeof currentFileName === 'string') ? currentFileName : '';
+        if (cfn) resolvedDisplayName = cfn.replace(/\.(html?|wtproj\.json|wtproj\.html|tdts|xdts|json)$/i, '');
+    }
+    if (!resolvedDisplayName) {
+        const m0 = sheetsCopy[0] && sheetsCopy[0].metaData ? sheetsCopy[0].metaData : null;
+        if (m0 && (m0.title || m0.cut)) {
+            resolvedDisplayName = [m0.title, m0.cut ? `cut${m0.cut}` : ''].filter(Boolean).join('_');
+        }
+    }
+    if (!resolvedDisplayName) resolvedDisplayName = docName;
+
     const projectData = {
         format: PROJECT_HTML_FORMAT,
         formatVersion: PROJECT_HTML_FORMAT_VERSION,
@@ -182,7 +200,7 @@ function buildProjectData(extraMeta) {
             createdAt: extraMeta.createdAt || now,
             savedAt: now,
             originalFileName: extraMeta.originalFileName || null,
-            displayName: extraMeta.displayName || docName
+            displayName: resolvedDisplayName
         },
         workspace: {
             activeDocumentId: docId,
@@ -632,7 +650,10 @@ function buildProjectHTML(projectData, options) {
     const sheetMeta = sheet0.metaData || {};
     const displayName = meta.displayName || doc.name || 'project';
     const title = sheetMeta.title || '';
+    const episode = sheetMeta.subTitle || '';
+    const scene = sheetMeta.scene || '';
     const cut = sheetMeta.cut || '';
+    const sheetName = sheetMeta.sheetName || sheet0.name || '';
     const createdAt = meta.createdAt || '';
     const savedAt = meta.savedAt || '';
     const appVersion = projectData.appVersion || '';
@@ -673,6 +694,10 @@ function buildProjectHTML(projectData, options) {
     .status.ok { background: rgba(46,160,67,0.18); color: #7ee787; }
     .status.err { background: rgba(218,54,51,0.18); color: #ffa198; }
   }
+  details.meta-details { margin: 8px 0 16px 0; font-size: 12px; color: #888; }
+  details.meta-details summary { cursor: pointer; padding: 4px 0; user-select: none; }
+  table.meta-sub { font-size: 11px; margin: 8px 0 0 0; }
+  table.meta-sub th { width: 35%; }
 </style>
 </head>
 <body>
@@ -682,13 +707,22 @@ function buildProjectHTML(projectData, options) {
 
   <table>
     <tr><th>プロジェクト名</th><td>${escapeHtml(displayName)}</td></tr>
-    <tr><th>タイトル</th><td>${escapeHtml(title)}</td></tr>
-    <tr><th>カット</th><td>${escapeHtml(cut)}</td></tr>
-    <tr><th>作成日時</th><td>${escapeHtml(createdAt)}</td></tr>
-    <tr><th>保存日時</th><td>${escapeHtml(savedAt)}</td></tr>
-    <tr><th>appVersion</th><td>${escapeHtml(appVersion)}</td></tr>
-    <tr><th>formatVersion</th><td>${escapeHtml(String(formatVersion))}</td></tr>
+    <tr><th>TITLE</th><td>${escapeHtml(title)}</td></tr>
+    <tr><th>EPISODE</th><td>${escapeHtml(episode)}</td></tr>
+    <tr><th>SCENE</th><td>${escapeHtml(scene)}</td></tr>
+    <tr><th>CUT</th><td>${escapeHtml(cut)}</td></tr>
+    <tr><th>NAME</th><td>${escapeHtml(sheetName)}</td></tr>
   </table>
+
+  <details class="meta-details">
+    <summary>詳細情報</summary>
+    <table class="meta-sub">
+      <tr><th>作成日時</th><td>${escapeHtml(createdAt)}</td></tr>
+      <tr><th>保存日時</th><td>${escapeHtml(savedAt)}</td></tr>
+      <tr><th>appVersion</th><td>${escapeHtml(appVersion)}</td></tr>
+      <tr><th>formatVersion</th><td>${escapeHtml(String(formatVersion))}</td></tr>
+    </table>
+  </details>
 
   <div class="actions">
     <button class="primary" id="btn-open-app" type="button">アプリで開く</button>
@@ -787,7 +821,19 @@ function buildProjectHTML(projectData, options) {
       if (msg.type === 'wt-project-loaded') {
         cleanup();
         if (msg.ok) {
-          setStatus('ok', '✓ アプリへ読み込みました。');
+          setStatus('ok', '✓ アプリへ読み込みました。このタブは自動的に閉じます…');
+          // 成功後にランチャータブを閉じる試行。
+          // ブラウザ制限で script で開かれたタブ以外は閉じられないケースがある。
+          // 閉じられなかった場合は手動で閉じるよう案内表示に切り替え。
+          setTimeout(function() {
+            try { window.close(); } catch (e) {}
+            // 1秒後にまだ閉じてなければ案内に切替
+            setTimeout(function() {
+              if (!window.closed) {
+                setStatus('ok', '✓ アプリへ読み込みました。このタブは閉じて構いません。');
+              }
+            }, 1000);
+          }, 1500);
         } else if (msg.error === 'cancelled') {
           setStatus('err', 'アプリ側で読み込みがキャンセルされました。');
         } else {
