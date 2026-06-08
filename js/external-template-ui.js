@@ -61,10 +61,17 @@ async function refreshExternalTemplateList() {
                 if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
             } else if (action === 'delete') {
                 if (!confirm(_ei18n('extTpl.confirmDelete', '削除してよろしいですか？'))) return;
+                // 削除対象が現在 Preview に適用中のテンプレなら、削除後に標準A3へ戻す
+                const applied = (typeof window.getCurrentExternalTemplate === 'function')
+                    ? window.getCurrentExternalTemplate() : null;
+                const wasApplied = !!(applied && applied.id === id);
                 await window.externalTemplate.delete(id);
                 if (extTplCurrentId === id) showExternalTemplateDetail(null);
                 await refreshExternalTemplateList();
                 if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
+                if (wasApplied && typeof window.resetToStandardTemplate === 'function') {
+                    await window.resetToStandardTemplate();
+                }
             } else if (action === 'export') {
                 const tpl = await window.externalTemplate.get(id);
                 const blob = window.externalTemplate.exportJSON(tpl);

@@ -60,8 +60,8 @@ const I18N = {
         'projectSaveWarning.feature.generic': '独自拡張情報',
         'file.handwriting.import': '手書きPNG読み込み...',
         'file.handwriting.export': '手書きPNG書き出し...',
-        'file.settings.export': '設定をエクスポート (JSON)',
-        'file.settings.import': '設定をインポート (JSON)',
+        'file.settings.export': '設定を書き出し (JSON)',
+        'file.settings.import': '設定を読み込み (JSON)',
         // 編集メニュー
         'edit.undo': '元に戻す',
         'edit.redo': 'やり直し',
