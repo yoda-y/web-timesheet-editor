@@ -6,6 +6,15 @@
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
 
+## v0.14.2 (2026-06-08)
+
+### 修正
+- 「文字色を変更」メニュー (edit.color) が実装済みなのに disabled だった問題を有効化
+- ライトモードでボタンの視認性が悪い問題を改善
+  - `--highlight` を少し濃く (#f0f0f0 → #e6e6e6) し、白背景とのコントラスト確保
+  - border-color / grid-medium を調整し、有効ボタン・hover・active・disabled の差を明確化
+- (据え置き) edit.selectAll / edit.repeatDelete は未実装のため disabled 維持
+
 ## v0.14.1 (2026-06-08)
 
 ### 修正
