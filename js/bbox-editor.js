@@ -5,6 +5,7 @@
 
 let bboxEditorTemplate = null;     // 編集中テンプレートの作業コピー
 let bboxEditorSelectedTag = null;  // 選択中タグ名
+let bboxEditorInMemory = false;    // インメモリ編集モード (IDB未保存の一時/Project由来テンプレ)
 
 // ── Undo履歴 ──
 let bboxEditorHistory = [];
@@ -28,9 +29,20 @@ window.bboxEditorUndo = undoBBox;
 
 const _bi18n = (key, fallback) => (typeof t === 'function' ? t(key) : null) || fallback;
 
-function openBBoxEditor(templateId) {
+// openBBoxEditor(templateId)                      … 従来通り IDB から読み込んで編集
+// openBBoxEditor(null, { inMemoryTemplate: tpl }) … IDB を引かず渡されたテンプレを編集
+//                                                    (一時テンプレ / Project HTML由来)
+function openBBoxEditor(templateId, options) {
+    options = options || {};
     return (async () => {
-        const tpl = await window.externalTemplate.get(templateId);
+        let tpl;
+        if (options.inMemoryTemplate) {
+            bboxEditorInMemory = true;
+            tpl = options.inMemoryTemplate;
+        } else {
+            bboxEditorInMemory = false;
+            tpl = await window.externalTemplate.get(templateId);
+        }
         if (!tpl) { alert(_bi18n('bbox.alert.notFound', 'テンプレートが見つかりません')); return; }
         bboxEditorTemplate = JSON.parse(JSON.stringify(tpl));
         if (!bboxEditorTemplate.bboxes) bboxEditorTemplate.bboxes = {};
@@ -70,6 +82,7 @@ function closeBBoxEditor() {
     document.getElementById('bbox-editor-modal').style.display = 'none';
     bboxEditorTemplate = null;
     bboxEditorSelectedTag = null;
+    bboxEditorInMemory = false;
 }
 
 function renderBBoxEditorTagList() {
@@ -422,6 +435,29 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('bbox-editor-save-btn').addEventListener('click', async () => {
         if (!bboxEditorTemplate) return;
         try {
+            if (bboxEditorInMemory) {
+                // インメモリ編集 (一時テンプレ / Project HTML由来): IDB へ保存しない。
+                // currentExternalTemplate.bboxes に書き戻して Preview へ反映。
+                const bboxesCopy = JSON.parse(JSON.stringify(bboxEditorTemplate.bboxes || {}));
+                const cur = (typeof window.getCurrentExternalTemplate === 'function')
+                    ? window.getCurrentExternalTemplate() : null;
+                if (cur) {
+                    cur.bboxes = bboxesCopy;
+                    // 再適用 (currentExternalTemplateImage 等を含め同期)
+                    if (typeof window.applyProjectExternalTemplate === 'function') {
+                        await window.applyProjectExternalTemplate(cur);
+                    }
+                }
+                if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
+                if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
+                if (typeof currentMode !== 'undefined' && currentMode === 'preview'
+                    && typeof updateTemplatePreview === 'function') updateTemplatePreview();
+                if (typeof drawAll === 'function') drawAll();
+                if (typeof markDirty === 'function') markDirty();
+                if (typeof showToast === 'function') showToast(_bi18n('bbox.alert.savedToast', 'BBox設定を保存しました'), 2000);
+                closeBBoxEditor();
+                return;
+            }
             bboxEditorTemplate.updatedAt = Date.now();
             // ディープコピーを保存（参照経由の改変を避ける）
             const toSave = JSON.parse(JSON.stringify(bboxEditorTemplate));
