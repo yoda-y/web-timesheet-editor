@@ -262,31 +262,53 @@ function toggleSidebarSection(sectionName) {
 }
 
 // マウスホイールでズーム（カーソル位置を起点）
-// 修正3: クライアント座標(マウス位置)を中心にズーム。
-// transform対象の previewStage 基準で content座標を求め、
-// ズーム後も同じ画面位置に来るよう pan を再計算する。
-// container が flex で stage が中央寄せ等されていてもズレない。
+// 修正(v0.20.2): Preview座標変換を全ズーム経路で統一。
+// stage の画面上位置 = containerRect.(left/top) - container.scroll + stage.offset(Left/Top) + pan
+// transform は translate(pan) scale(zoom*baseScale) (transform-origin: 0 0)。
+// pan は「stageレイアウト位置からの画面px移動」を表す前提で全式を揃える。
+
+// stage の未transformレイアウト位置 (container内、scroll込み)
+function getPreviewStageLayoutOffset() {
+    if (!previewContainer || !previewStage) return { x: 0, y: 0 };
+    return {
+        x: previewStage.offsetLeft - previewContainer.scrollLeft,
+        y: previewStage.offsetTop - previewContainer.scrollTop
+    };
+}
+
+// client座標 → stage内 content座標 (論理px)
+function previewClientToContentPoint(clientX, clientY) {
+    if (!previewContainer || !previewStage) return { x: 0, y: 0 };
+    const containerRect = previewContainer.getBoundingClientRect();
+    const baseScale = parseFloat(previewStage.dataset.baseScale || '1');
+    const eff = previewZoom * baseScale;
+    const off = getPreviewStageLayoutOffset();
+    if (eff <= 0) return { x: 0, y: 0 };
+    return {
+        x: (clientX - containerRect.left - off.x - previewPanX) / eff,
+        y: (clientY - containerRect.top - off.y - previewPanY) / eff
+    };
+}
+
+// client位置を固定したままズーム
 function zoomPreviewAroundClientPoint(clientX, clientY, newZoom) {
     if (!previewContainer) return;
     if (!previewStage) previewStage = document.getElementById('preview-stage');
     if (!previewStage) return;
-    const stageRect = previewStage.getBoundingClientRect();
+    const containerRect = previewContainer.getBoundingClientRect();
     const baseScale = parseFloat(previewStage.dataset.baseScale || '1');
-    const oldEff = previewZoom * baseScale;
-    if (oldEff <= 0) return;
-    // 画面上のポインタ位置を stage内の論理座標へ
-    const contentX = (clientX - stageRect.left) / oldEff;
-    const contentY = (clientY - stageRect.top) / oldEff;
+
+    const pt = previewClientToContentPoint(clientX, clientY);
 
     previewZoom = Math.max(0.25, Math.min(5, newZoom));
     const newEff = previewZoom * baseScale;
+    const off = getPreviewStageLayoutOffset();
 
-    const containerRect = previewContainer.getBoundingClientRect();
-    // contentX/contentY が同じ clientX/clientY に来るよう pan 再計算
-    previewPanX = (clientX - containerRect.left) - contentX * newEff;
-    previewPanY = (clientY - containerRect.top) - contentY * newEff;
+    previewPanX = (clientX - containerRect.left) - off.x - pt.x * newEff;
+    previewPanY = (clientY - containerRect.top) - off.y - pt.y * newEff;
     applyPreviewTransform();
 }
+window.zoomPreviewAroundClientPoint = zoomPreviewAroundClientPoint;
 
 function handlePreviewWheel(e) {
     e.preventDefault();
@@ -444,11 +466,16 @@ function fitPreviewToContainer() {
     if (contentW <= 0 || contentH <= 0) return;
     const fitZoom = Math.min(availableW / contentW, availableH / contentH, 1) * 0.96;
     previewZoom = Math.max(0.25, Math.min(5, fitZoom));
-    // 中央寄せ: container 中央に content 中央を合わせる
+    // scroll をリセットしてから stage の offset を考慮して中央寄せ
+    previewContainer.scrollLeft = 0;
+    previewContainer.scrollTop = 0;
     const scaledW = contentW * previewZoom;
     const scaledH = contentH * previewZoom;
-    previewPanX = Math.max(0, (previewContainer.clientWidth - scaledW) / 2);
-    previewPanY = Math.max(0, (previewContainer.clientHeight - scaledH) / 2);
+    const off = getPreviewStageLayoutOffset();
+    const desiredX = Math.max(0, (previewContainer.clientWidth - scaledW) / 2);
+    const desiredY = Math.max(0, (previewContainer.clientHeight - scaledH) / 2);
+    previewPanX = desiredX - off.x;
+    previewPanY = desiredY - off.y;
     applyPreviewTransform();
     schedulePreviewViewSave();
 }

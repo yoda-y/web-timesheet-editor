@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.20.1';
+const APP_VERSION = '0.20.2';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,15 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.20.2 (2026-06-08)
+
+### 修正
+- Preview ズーム時に表示が画面外へ飛ぶ不具合を修正 (v0.20.1 の座標系バグ)
+  - previewStage の offsetLeft/Top・container scroll・pan を同一座標系に揃えた
+  - getPreviewStageLayoutOffset() / previewClientToContentPoint() を追加
+  - ホイールズーム / +/- ボタン / Space+Ctrlドラッグズーム / fit を全て統一
+  - Space+Ctrlドラッグズーム (handwriting.js) も共通ヘルパー経由に
 
 ## v0.20.1 (2026-06-08)
 
