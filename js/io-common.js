@@ -780,7 +780,10 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
     }
 
     function isImageFile(file) {
-        return file.type.startsWith('image/');
+        if (file.type && file.type.startsWith('image/')) return true;
+        // TGA は MIME が付かないことがあるので拡張子でも判定
+        const n = (file.name || '').toLowerCase();
+        return n.endsWith('.tga');
     }
 
     async function handleDroppedFile(file) {
@@ -892,6 +895,20 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
         }
     }
 
+    // 画像 File → dataURL (TGA は PNG dataURL に変換)
+    async function imageFileToDataUrl(file) {
+        if (typeof window.tgaIo !== 'undefined' && window.tgaIo.isTgaFile && window.tgaIo.isTgaFile(file)) {
+            const r = await window.tgaIo.tgaFileToPngData(file);
+            return r.dataUrl;
+        }
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
     async function handleDroppedImage(file) {
         if (typeof currentMode === 'undefined' || currentMode !== 'preview') {
             showToast('画像は プレビューモード でドロップしてください');
@@ -901,42 +918,40 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
             showToast('手書きレイヤーが利用できません');
             return;
         }
+        let dataUrl;
+        try { dataUrl = await imageFileToDataUrl(file); }
+        catch (e) { showToast('画像の読み込みに失敗しました'); return; }
 
-        const reader = new FileReader();
-        reader.onload = async () => {
-            const dataUrl = reader.result;
-            const page = getHandwritingPage();
-            if (!page.images) page.images = [];
-            // ドラッグ画像もファイル読込と同様にテンプレ全面 (A3 @ 150dpi) にフィット
-            const fitW = (typeof TEMPLATE !== 'undefined' && typeof HANDWRITING_BASE_DPI !== 'undefined')
-                ? Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4)
-                : (handwritingCanvas?.width || 1754);
-            const fitH = (typeof TEMPLATE !== 'undefined' && typeof HANDWRITING_BASE_DPI !== 'undefined')
-                ? Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
-                : (handwritingCanvas?.height || 2480);
-            let added = 0;
-            if (typeof window.splitImageToHandwritingObjects === 'function') {
-                const objs = await window.splitImageToHandwritingObjects(dataUrl, {
-                    baseX: 0, baseY: 0, fallbackW: fitW, fallbackH: fitH,
-                    targetW: fitW, targetH: fitH,
-                    idPrefix: 'drop'
-                });
-                objs.forEach(o => page.images.push(o));
-                added = objs.length;
-            } else {
-                page.images.push({
-                    id: `drop-${Date.now()}`, dataUrl, x: 0, y: 0,
-                    w: fitW, h: fitH
-                });
-                added = 1;
-            }
-            renderHandwritingLayer();
-            if (typeof drawHandwritingUi === 'function') drawHandwritingUi();
-            if (typeof markDirty === 'function') markDirty();
-            if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
-            showToast(added > 1 ? `画像を${added}パーツに分割して追加しました` : `画像を手書きレイヤーに追加しました`);
-        };
-        reader.readAsDataURL(file);
+        const page = getHandwritingPage();
+        if (!page.images) page.images = [];
+        // ドラッグ画像もファイル読込と同様にテンプレ全面 (A3 @ 150dpi) にフィット
+        const fitW = (typeof TEMPLATE !== 'undefined' && typeof HANDWRITING_BASE_DPI !== 'undefined')
+            ? Math.round(TEMPLATE.WIDTH_MM * HANDWRITING_BASE_DPI / 25.4)
+            : (handwritingCanvas?.width || 1754);
+        const fitH = (typeof TEMPLATE !== 'undefined' && typeof HANDWRITING_BASE_DPI !== 'undefined')
+            ? Math.round(TEMPLATE.HEIGHT_MM * HANDWRITING_BASE_DPI / 25.4)
+            : (handwritingCanvas?.height || 2480);
+        let added = 0;
+        if (typeof window.splitImageToHandwritingObjects === 'function') {
+            const objs = await window.splitImageToHandwritingObjects(dataUrl, {
+                baseX: 0, baseY: 0, fallbackW: fitW, fallbackH: fitH,
+                targetW: fitW, targetH: fitH,
+                idPrefix: 'drop'
+            });
+            objs.forEach(o => page.images.push(o));
+            added = objs.length;
+        } else {
+            page.images.push({
+                id: `drop-${Date.now()}`, dataUrl, x: 0, y: 0,
+                w: fitW, h: fitH
+            });
+            added = 1;
+        }
+        renderHandwritingLayer();
+        if (typeof drawHandwritingUi === 'function') drawHandwritingUi();
+        if (typeof markDirty === 'function') markDirty();
+        if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
+        showToast(added > 1 ? `画像を${added}パーツに分割して追加しました` : `画像を手書きレイヤーに追加しました`);
     }
 
     let dragCounter = 0;
@@ -964,6 +979,97 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
         e.dataTransfer.dropEffect = 'copy';
     });
 
+    // 軽量選択ダイアログ。options: [{label, value}]。Promise<value|null> を返す。
+    function showDropChoiceDialog(title, options) {
+        return new Promise((resolve) => {
+            const isDark = !!(document.body && document.body.classList.contains('dark'));
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100000;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;`;
+            const dialog = document.createElement('div');
+            dialog.style.cssText = `background:${isDark ? '#2a2a2a' : '#fff'};color:${isDark ? '#ddd' : '#222'};border:1px solid ${isDark ? '#444' : '#ccc'};border-radius:8px;padding:20px 22px;min-width:300px;max-width:460px;box-shadow:0 4px 20px rgba(0,0,0,0.3);`;
+            const h = document.createElement('h3');
+            h.textContent = title;
+            h.style.cssText = 'margin:0 0 14px 0;font-size:15px;font-weight:600;';
+            dialog.appendChild(h);
+            const btnWrap = document.createElement('div');
+            btnWrap.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+            function close(val) { document.removeEventListener('keydown', onKey); if (overlay.parentNode) overlay.parentNode.removeChild(overlay); resolve(val); }
+            options.forEach((opt, i) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = opt.label;
+                const primary = (i === 0);
+                b.style.cssText = `padding:9px 14px;border-radius:4px;cursor:pointer;font-size:13px;text-align:left;border:1px solid ${primary ? '#2469d4' : (isDark ? '#555' : '#bbb')};background:${primary ? '#2469d4' : (isDark ? '#3a3a3a' : '#fafafa')};color:${primary ? '#fff' : (isDark ? '#ddd' : '#222')};${primary ? 'font-weight:600;' : ''}`;
+                b.addEventListener('click', () => close(opt.value));
+                btnWrap.appendChild(b);
+            });
+            dialog.appendChild(btnWrap);
+            overlay.appendChild(dialog);
+            overlay.addEventListener('click', (ev) => { if (ev.target === overlay) close(null); });
+            function onKey(ev) { if (ev.key === 'Escape') { ev.preventDefault(); close(null); } }
+            document.addEventListener('keydown', onKey);
+            document.body.appendChild(overlay);
+        });
+    }
+
+    // ファイル名末尾の数字列をページ番号(1-based)として抽出。無効なら null。
+    function inferPageNumberFromFilename(name) {
+        const base = String(name || '').replace(/\.[^.]+$/, '');
+        const matches = base.match(/\d+/g);
+        if (!matches || matches.length === 0) return null;
+        const n = parseInt(matches[matches.length - 1], 10);
+        if (!isFinite(n) || n <= 0) return null; // 0 は無効
+        return n;
+    }
+
+    // 一時テンプレ用: 画像File群を pageImages エントリへ変換して適用
+    async function applyImagesAsTemporaryTemplate(imageFiles) {
+        if (typeof window.pickTemplateImageEntry !== 'function'
+            || typeof window.applyTemporaryTemplatePageEntries !== 'function') {
+            showToast('一時テンプレ機能が利用できません');
+            return;
+        }
+        const startPage = (typeof currentPage === 'number' && currentPage >= 0) ? currentPage : 0;
+        let assignMode = 'sequential';
+        if (imageFiles.length > 1) {
+            const t2 = (typeof t === 'function') ? t : (k, fb) => fb;
+            const mode = await showDropChoiceDialog(
+                t2('tempDrop.assignTitle', '一時テンプレ画像をどのページに配置しますか？'),
+                [
+                    { label: t2('tempDrop.assignSequential', '現在ページから順番に配置'), value: 'sequential' },
+                    { label: t2('tempDrop.assignFilename', 'ファイル名からページ番号を推定'), value: 'filename' },
+                    { label: t2('tempDrop.cancel', 'キャンセル'), value: null }
+                ]
+            );
+            if (!mode) return;
+            assignMode = mode;
+        }
+        // エントリ生成 (TGA含む)
+        const entries = [];
+        let seqCursor = startPage;
+        const usedPages = new Set();
+        for (const f of imageFiles) {
+            let entry;
+            try { entry = await window.pickTemplateImageEntry(f); }
+            catch (e) { console.warn('一時テンプレ画像変換失敗:', f.name, e); continue; }
+            let pageIndex;
+            if (assignMode === 'filename') {
+                const num = inferPageNumberFromFilename(f.name);
+                pageIndex = (num != null) ? (num - 1) : null;
+            }
+            if (pageIndex == null) {
+                // 順番配置 (filename推定で数字なしもここで補完)。空きページへ。
+                while (usedPages.has(seqCursor)) seqCursor++;
+                pageIndex = seqCursor;
+            }
+            usedPages.add(pageIndex);
+            entry.pageIndex = pageIndex;
+            entries.push(entry);
+        }
+        if (entries.length === 0) { showToast('画像の読み込みに失敗しました'); return; }
+        await window.applyTemporaryTemplatePageEntries(entries);
+    }
+
     document.addEventListener('drop', async e => {
         e.preventDefault();
         dragCounter = 0;
@@ -972,13 +1078,39 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
         const files = Array.from(e.dataTransfer.files);
         if (files.length === 0) return;
 
-        for (const file of files) {
-            if (isValidFile(file)) {
-                await handleDroppedFile(file);
-                break; // 1ファイルのみ処理
-            } else if (isImageFile(file)) {
-                await handleDroppedImage(file);
+        // 既存ファイル形式 (TDTS/XDTS/JSON/HTML) が含まれていれば最初の1つを処理
+        const dataFile = files.find(f => isValidFile(f));
+        if (dataFile) {
+            await handleDroppedFile(dataFile);
+            return;
+        }
+
+        // 画像ファイル群 (TGA含む)
+        const imageFiles = files.filter(f => isImageFile(f));
+        if (imageFiles.length === 0) return;
+
+        if (typeof currentMode === 'undefined' || currentMode !== 'preview') {
+            showToast('画像は プレビューモード でドロップしてください');
+            return;
+        }
+
+        const t2 = (typeof t === 'function') ? t : (k, fb) => fb;
+        const use = await showDropChoiceDialog(
+            t2('imageDrop.title', '画像の読み込み方法'),
+            [
+                { label: t2('imageDrop.handwriting', '手書き画像として追加'), value: 'handwriting' },
+                { label: t2('imageDrop.tempTemplate', '一時テンプレ画像として使用'), value: 'temp' },
+                { label: t2('imageDrop.cancel', 'キャンセル'), value: null }
+            ]
+        );
+        if (!use) return;
+
+        if (use === 'handwriting') {
+            for (const f of imageFiles) {
+                await handleDroppedImage(f);
             }
+        } else if (use === 'temp') {
+            await applyImagesAsTemporaryTemplate(imageFiles);
         }
     });
 })();

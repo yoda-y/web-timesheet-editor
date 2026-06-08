@@ -1,6 +1,6 @@
 // Service Worker for Web Timesheet Editor
 // CACHE_NAME を更新するとクライアントが旧キャッシュを破棄してリロード
-const CACHE_NAME = 'timesheet-editor-v2-0.19.0';
+const CACHE_NAME = 'timesheet-editor-v2-0.20.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -41,6 +41,8 @@ const ASSETS_TO_CACHE = [
   './js/project-html.js',
   // v0.9.1 追加: 読み込み画像の自動分割
   './js/image-splitter.js',
+  // v0.20.0 追加 (Phase 3): TGA 読み込み
+  './js/tga-io.js',
   // v0.10.0 追加 (P2-1): プロジェクトHTMLからの postMessage 受信
   './js/project-handoff.js',
   // v0.12.0 追加 (P2-2d): 別名保存の形式選択モーダル
