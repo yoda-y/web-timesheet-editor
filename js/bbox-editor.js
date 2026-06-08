@@ -91,11 +91,27 @@ function renderBBoxEditorTagList() {
         extra:    _bi18n('bbox.cat.extra',    '拡張'),
         other:    _bi18n('bbox.cat.other',    'その他'),
     };
+    const lblAllOn  = _bi18n('bbox.bulk.allOn',  '全てON');
+    const lblAllOff = _bi18n('bbox.bulk.allOff', '全てOFF');
+    const lblOn     = _bi18n('bbox.bulk.on',     'ON');
+    const lblOff    = _bi18n('bbox.bulk.off',    'OFF');
+
     let html = '';
+    // 一括操作ヘッダー (全体 ON/OFF)
+    html += `<div class="bbox-editor-tag-bulk-header">
+        <button type="button" class="bbox-bulk-btn" data-bulk-scope="all" data-bulk-enabled="1">${lblAllOn}</button>
+        <button type="button" class="bbox-bulk-btn" data-bulk-scope="all" data-bulk-enabled="0">${lblAllOff}</button>
+    </div>`;
     Object.keys(catLabels).forEach(cat => {
         if (!cats[cat]) return;
         html += `<div class="bbox-editor-tag-category">`;
-        html += `<div class="bbox-editor-tag-category-label">${catLabels[cat]}</div>`;
+        html += `<div class="bbox-editor-tag-category-label">
+            <span>${catLabels[cat]}</span>
+            <span class="bbox-editor-tag-category-bulk">
+                <button type="button" class="bbox-bulk-btn small" data-bulk-scope="${cat}" data-bulk-enabled="1">${lblOn}</button>
+                <button type="button" class="bbox-bulk-btn small" data-bulk-scope="${cat}" data-bulk-enabled="0">${lblOff}</button>
+            </span>
+        </div>`;
         cats[cat].forEach(t => {
             const bbox = bboxEditorTemplate.bboxes[t.key];
             const enabled = !!(bbox && bbox.enabled);
@@ -109,6 +125,15 @@ function renderBBoxEditorTagList() {
         html += `</div>`;
     });
     listEl.innerHTML = html;
+    // 一括操作ボタン
+    listEl.querySelectorAll('.bbox-bulk-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const scope = btn.dataset.bulkScope;
+            const enabled = btn.dataset.bulkEnabled === '1';
+            bulkToggleBBoxEnabled(scope, enabled);
+        });
+    });
     // チェックボックス: ON/OFF
     listEl.querySelectorAll('input[data-tag-toggle]').forEach(cb => {
         cb.addEventListener('change', (e) => {
@@ -125,6 +150,32 @@ function renderBBoxEditorTagList() {
             selectBBoxTag(el.dataset.tag);
         });
     });
+}
+
+// 一括 ON/OFF: scope='all' or カテゴリ名。enabled のみ変更し、locked/ジオメトリは触らない。
+function bulkToggleBBoxEnabled(scope, enabled) {
+    if (!bboxEditorTemplate) return;
+    const tags = window.externalTemplate.tags;
+    const targetKeys = [];
+    for (const key in tags) {
+        const cat = tags[key].category || 'other';
+        if (scope === 'all' || cat === scope) targetKeys.push(key);
+    }
+    if (targetKeys.length === 0) return;
+
+    pushBBoxHistory(); // 一括操作につき1回だけ
+    targetKeys.forEach(key => {
+        if (!bboxEditorTemplate.bboxes[key]) {
+            bboxEditorTemplate.bboxes[key] = window.externalTemplate.defaultBBox(key);
+        }
+        // enabled のみ変更 (locked / x/y/w/h/fontSize/label/prefix/type 等は不変)
+        bboxEditorTemplate.bboxes[key].enabled = enabled;
+    });
+
+    // 選択中タグが OFF になっても選択状態は維持 (キャンバス非表示・プロパティは閲覧可)
+    renderBBoxEditorTagList();
+    if (typeof renderBBoxEditorPropsForm === 'function') renderBBoxEditorPropsForm();
+    if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
 }
 
 function toggleBBoxEnabled(tagKey, enabled) {

@@ -6,6 +6,15 @@
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
 
+## v0.16.0 (2026-06-08)
+
+### 追加
+- BBoxエディタにタグの一括ON/OFF機能
+  - タグ一覧ヘッダーに「全てON / 全てOFF」
+  - 各カテゴリ見出し横に「ON / OFF」(meta/staff/timeline/custom/extra/other)
+  - enabled のみ変更し、locked・座標・fontSize・label 等は不変
+  - 一括操作は Undo 1回分にまとまる
+
 ## v0.15.1 (2026-06-08)
 
 ### 修正
