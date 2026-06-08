@@ -458,6 +458,9 @@ function updateTemplatePreview() {
     // ズーム率表示更新
     const zoomDisplay = document.getElementById('preview-zoom-display');
     if (zoomDisplay) zoomDisplay.textContent = Math.round(previewZoom * 100) + '%';
+
+    // ページ内画像リスト同期 (改善7)
+    if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
 }
 
 // プレビュー更新（モード切替時やデータ変更時に呼ばれる）

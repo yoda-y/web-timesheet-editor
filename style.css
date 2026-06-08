@@ -336,6 +336,50 @@ button:hover { background: var(--border-color); }
   pointer-events: none;
 }
 
+/* ページ内画像リスト (改善7) */
+.page-image-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  margin-top: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background: var(--highlight);
+}
+.page-image-row.selected {
+  border-color: var(--select-border);
+  background: var(--select-bg);
+}
+.page-image-thumb {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+}
+.page-image-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.page-image-label {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.page-image-size {
+  font-size: 10px;
+  color: var(--grid-medium);
+}
+.page-image-row .sidebar-btn.small {
+  flex: 0 0 auto;
+}
+
 
 .sidebar-tool-grid {
   display: grid;
