@@ -697,6 +697,7 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
             splitter(dataUrl, { baseX: cellX, baseY: cellY, idPrefix: `tdts-memo-${i}` }).then(objs => {
                 objs.forEach(o => handwritingPages[key].images.push(o));
                 if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
+                if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
             }).catch(() => {});
         } else {
             const tmpImg = new Image();
@@ -706,6 +707,7 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
                     dataUrl, x: cellX, y: cellY, w: tmpImg.width, h: tmpImg.height
                 });
                 if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
+                if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
             };
             tmpImg.src = dataUrl;
         }
@@ -720,6 +722,7 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
             splitter(dataUrl, { baseX: marginTopPx, baseY: marginTopPx, idPrefix: 'tdts-headermemo' }).then(objs => {
                 objs.forEach(o => handwritingPages[key].images.push(o));
                 if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
+                if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
             }).catch(() => {});
         } else {
             const tmpImg = new Image();
@@ -729,6 +732,7 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
                     dataUrl, x: marginTopPx, y: marginTopPx, w: tmpImg.width, h: tmpImg.height
                 });
                 if (typeof renderHandwritingLayer === 'function') renderHandwritingLayer();
+                if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
             };
             tmpImg.src = dataUrl;
         }
@@ -929,6 +933,7 @@ function applyTdtsMemosToHandwriting(memos, headerMemo) {
             renderHandwritingLayer();
             if (typeof drawHandwritingUi === 'function') drawHandwritingUi();
             if (typeof markDirty === 'function') markDirty();
+            if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
             showToast(added > 1 ? `画像を${added}パーツに分割して追加しました` : `画像を手書きレイヤーに追加しました`);
         };
         reader.readAsDataURL(file);

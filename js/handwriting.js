@@ -884,6 +884,7 @@ async function importHandwritingBundleFromDirectory(directoryHandle, folderName)
     if (imported > 0 && typeof currentSheetIndex !== 'undefined' && typeof sheets !== 'undefined' && sheets[currentSheetIndex]) {
         importHandwritingData(sheets[currentSheetIndex].handwritingPages || {});
     }
+    if (imported > 0 && typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
     return imported;
 }
 
@@ -1015,6 +1016,7 @@ async function importHandwritingPngFiles() {
                     drawHandwritingUi();
                 }
                 markHandwritingDirty();
+                if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
                 showToast && showToast(`${importedFromIni}件の手書きPNGをINIから読み込みました`);
             } else {
                 alert('INIに記載されたPNGが見つかりませんでした。handwriting.ini と参照PNGを一緒に選択してください。');
@@ -1073,6 +1075,7 @@ async function importHandwritingPngFiles() {
         }
 
         markHandwritingDirty();
+        if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
 
         // 結果を通知
         if (importedCount > 0) {
@@ -1300,7 +1303,110 @@ function deleteSelectedStrokes() {
     renderHandwritingLayer();
     drawHandwritingUi();
     markHandwritingDirty();
+    if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
 }
+
+// ─── ページ内画像リスト (改善7: 読み込んだPNGの可視化・個別削除) ───────────────
+
+// 画像 id の prefix からソース種別ラベルを推定
+function getHandwritingImageSourceLabel(id) {
+    const s = String(id || '');
+    const tr = (typeof t === 'function') ? t : (k, fb) => fb;
+    if (s.startsWith('import')) return tr('pageImages.src.import', '読込PNG');
+    if (s.startsWith('drop')) return tr('pageImages.src.drop', 'ドロップ');
+    if (s.startsWith('ini')) return tr('pageImages.src.ini', 'INI');
+    if (s.startsWith('bundle')) return tr('pageImages.src.bundle', 'バンドル');
+    if (s.startsWith('tdts-headermemo')) return tr('pageImages.src.tdtsMemo', 'TDTS memo');
+    if (s.startsWith('tdts-memo')) return tr('pageImages.src.tdtsMemo', 'TDTS memo');
+    return tr('pageImages.src.unknown', '画像');
+}
+
+// 現在ページの画像配列を返す
+function listHandwritingImagesOnPage() {
+    const page = getHandwritingPage();
+    return (page && Array.isArray(page.images)) ? page.images : [];
+}
+
+// 指定 id の画像だけを選択
+function selectHandwritingImageById(id) {
+    const page = getHandwritingPage();
+    if (!page || !Array.isArray(page.images)) return;
+    if (!page.images.some(img => img.id === id)) return;
+    endTransformSession(false);
+    selectedStrokeIds = new Set([id]);
+    renderHandwritingLayer();
+    drawHandwritingUi();
+    if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
+}
+
+// 指定 id の画像だけを削除 (確認ダイアログ付き、Undo対応)
+function deleteHandwritingImageById(id) {
+    const page = getHandwritingPage();
+    if (!page || !Array.isArray(page.images)) return;
+    if (!page.images.some(img => img.id === id)) return;
+    const tr = (typeof t === 'function') ? t : (k, fb) => fb;
+    if (!confirm(tr('pageImages.confirmDelete', 'この画像を削除しますか？この操作はUndoできます。'))) return;
+    pushHandwritingHistory();
+    page.images = page.images.filter(img => img.id !== id);
+    if (selectedStrokeIds.has(id)) selectedStrokeIds.delete(id);
+    renderHandwritingLayer();
+    drawHandwritingUi();
+    markHandwritingDirty();
+    if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
+}
+
+// サイドバーの「ページ内画像」リストを再描画
+function refreshHandwritingImageList() {
+    const section = document.getElementById('sidebar-page-images');
+    const content = document.getElementById('sidebar-page-images-content');
+    const countEl = document.getElementById('sidebar-page-images-count');
+    if (!section || !content) return;
+    // プレビューモード以外、または画像が無ければ非表示
+    const inPreview = (typeof currentMode !== 'undefined' && currentMode === 'preview');
+    const images = inPreview ? listHandwritingImagesOnPage() : [];
+    if (countEl) countEl.textContent = String(images.length);
+    if (!inPreview || images.length === 0) {
+        section.style.display = 'none';
+        content.innerHTML = '';
+        return;
+    }
+    section.style.display = '';
+
+    const tr = (typeof t === 'function') ? t : (k, fb) => fb;
+    const lblSelect = tr('pageImages.select', '選択');
+    const lblDelete = tr('pageImages.delete', '削除');
+    content.innerHTML = images.map(img => {
+        const label = getHandwritingImageSourceLabel(img.id);
+        const w = Math.round(img.w || 0), h = Math.round(img.h || 0);
+        const isSel = selectedStrokeIds.has(img.id);
+        const thumb = img.dataUrl ? `<img class="page-image-thumb" src="${img.dataUrl}" alt="">` : '<span class="page-image-thumb"></span>';
+        return `<div class="page-image-row ${isSel ? 'selected' : ''}" data-img-id="${img.id}">
+            ${thumb}
+            <div class="page-image-meta">
+                <div class="page-image-label">${label}</div>
+                <div class="page-image-size">${w}×${h}</div>
+            </div>
+            <button type="button" class="sidebar-btn small page-image-select" data-img-id="${img.id}">${lblSelect}</button>
+            <button type="button" class="sidebar-btn small page-image-delete" data-img-id="${img.id}">${lblDelete}</button>
+        </div>`;
+    }).join('');
+
+    content.querySelectorAll('.page-image-select').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectHandwritingImageById(btn.dataset.imgId);
+        });
+    });
+    content.querySelectorAll('.page-image-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteHandwritingImageById(btn.dataset.imgId);
+        });
+    });
+}
+window.refreshHandwritingImageList = refreshHandwritingImageList;
+window.deleteHandwritingImageById = deleteHandwritingImageById;
+window.selectHandwritingImageById = selectHandwritingImageById;
 
 function updateHandwritingActionPopover() {
     if (!handwritingActionPopover) return;
