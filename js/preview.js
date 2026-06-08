@@ -13,6 +13,8 @@ let previewDragStartY = 0;
 let previewPanStartX = 0;
 let previewPanStartY = 0;
 let previewViewSaveTimer = null;
+// 修正2: ブラウザ更新後の初回Preview表示で全体fitするフラグ (ロード後1回のみ)
+let previewFirstShowAfterLoad = true;
 
 // プレビューショートカット設定（settings.preview で上書き可能）
 function getPreviewShortcuts() {
@@ -153,6 +155,13 @@ function enablePreviewMode() {
     // プレビュー生成
     updateTemplatePreview();
 
+    // 修正2: ブラウザ更新後の初回Preview表示は用紙全体が見える fit にする
+    if (previewFirstShowAfterLoad) {
+        previewFirstShowAfterLoad = false;
+        // 画像読込完了でサイズ確定後に fit (img.width は属性で即時確定済みだが念のため)
+        fitPreviewToContainer();
+    }
+
     // イベントリスナー追加（重複防止）
     previewContainer.removeEventListener('wheel', handlePreviewWheel);
     previewContainer.removeEventListener('mousedown', handlePreviewMouseDown);
@@ -253,21 +262,37 @@ function toggleSidebarSection(sectionName) {
 }
 
 // マウスホイールでズーム（カーソル位置を起点）
+// 修正3: クライアント座標(マウス位置)を中心にズーム。
+// transform対象の previewStage 基準で content座標を求め、
+// ズーム後も同じ画面位置に来るよう pan を再計算する。
+// container が flex で stage が中央寄せ等されていてもズレない。
+function zoomPreviewAroundClientPoint(clientX, clientY, newZoom) {
+    if (!previewContainer) return;
+    if (!previewStage) previewStage = document.getElementById('preview-stage');
+    if (!previewStage) return;
+    const stageRect = previewStage.getBoundingClientRect();
+    const baseScale = parseFloat(previewStage.dataset.baseScale || '1');
+    const oldEff = previewZoom * baseScale;
+    if (oldEff <= 0) return;
+    // 画面上のポインタ位置を stage内の論理座標へ
+    const contentX = (clientX - stageRect.left) / oldEff;
+    const contentY = (clientY - stageRect.top) / oldEff;
+
+    previewZoom = Math.max(0.25, Math.min(5, newZoom));
+    const newEff = previewZoom * baseScale;
+
+    const containerRect = previewContainer.getBoundingClientRect();
+    // contentX/contentY が同じ clientX/clientY に来るよう pan 再計算
+    previewPanX = (clientX - containerRect.left) - contentX * newEff;
+    previewPanY = (clientY - containerRect.top) - contentY * newEff;
+    applyPreviewTransform();
+}
+
 function handlePreviewWheel(e) {
     e.preventDefault();
-    const rect = previewContainer.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.max(0.25, Math.min(5, previewZoom * delta));
-
-    // カーソル位置を起点にズーム
-    previewPanX = mouseX - (mouseX - previewPanX) * (newZoom / previewZoom);
-    previewPanY = mouseY - (mouseY - previewPanY) * (newZoom / previewZoom);
-
-    previewZoom = newZoom;
-    applyPreviewTransform();
+    zoomPreviewAroundClientPoint(e.clientX, e.clientY, newZoom);
     schedulePreviewViewSave();
 }
 
@@ -373,11 +398,12 @@ function resetPreviewZoom() {
     updateTemplatePreview();
 }
 
-// マウス位置追跡（ショートカットズーム用）
-let lastPreviewMouseX = 0;
-let lastPreviewMouseY = 0;
+// マウス位置追跡（ショートカットズーム用、client座標で保持）
+let lastPreviewMouseClientX = 0;
+let lastPreviewMouseClientY = 0;
+let hasPreviewMousePos = false;
 
-// プレビューズームイン/アウト（マウス位置を起点）
+// プレビューズームイン/アウト（マウス位置を起点。無ければ container中央）
 function previewZoomIn() {
     const newZoom = Math.min(5, previewZoom * 1.2);
     adjustZoomAroundMouse(newZoom);
@@ -388,22 +414,45 @@ function previewZoomOut() {
 }
 function adjustZoomAroundMouse(newZoom) {
     if (!previewContainer) return;
-    const rect = previewContainer.getBoundingClientRect();
-    // マウス位置が有効ならマウス起点、なければ画面中央
-    let pivotX = lastPreviewMouseX || rect.width / 2;
-    let pivotY = lastPreviewMouseY || rect.height / 2;
-    previewPanX = pivotX - (pivotX - previewPanX) * (newZoom / previewZoom);
-    previewPanY = pivotY - (pivotY - previewPanY) * (newZoom / previewZoom);
-    previewZoom = newZoom;
-    applyPreviewTransform();
+    let cx = lastPreviewMouseClientX, cy = lastPreviewMouseClientY;
+    if (!hasPreviewMousePos) {
+        const rect = previewContainer.getBoundingClientRect();
+        cx = rect.left + rect.width / 2;
+        cy = rect.top + rect.height / 2;
+    }
+    zoomPreviewAroundClientPoint(cx, cy, newZoom);
     schedulePreviewViewSave();
 }
 function updatePreviewMousePosition(e) {
-    if (!previewContainer) return;
-    const rect = previewContainer.getBoundingClientRect();
-    lastPreviewMouseX = e.clientX - rect.left;
-    lastPreviewMouseY = e.clientY - rect.top;
+    lastPreviewMouseClientX = e.clientX;
+    lastPreviewMouseClientY = e.clientY;
+    hasPreviewMousePos = true;
 }
+
+// 修正2: 用紙全体がコンテナ内に収まるよう fit する
+function fitPreviewToContainer() {
+    if (!previewContainer) previewContainer = document.getElementById('preview-container');
+    if (!previewStage) previewStage = document.getElementById('preview-stage');
+    if (!previewImage) previewImage = document.getElementById('preview-image');
+    if (!previewContainer || !previewStage || !previewImage) return;
+    const baseScale = parseFloat(previewStage.dataset.baseScale || '1');
+    const padding = 40;
+    const availableW = Math.max(1, previewContainer.clientWidth - padding);
+    const availableH = Math.max(1, previewContainer.clientHeight - padding);
+    const contentW = (previewImage.width || 1) * baseScale;
+    const contentH = (previewImage.height || 1) * baseScale;
+    if (contentW <= 0 || contentH <= 0) return;
+    const fitZoom = Math.min(availableW / contentW, availableH / contentH, 1) * 0.96;
+    previewZoom = Math.max(0.25, Math.min(5, fitZoom));
+    // 中央寄せ: container 中央に content 中央を合わせる
+    const scaledW = contentW * previewZoom;
+    const scaledH = contentH * previewZoom;
+    previewPanX = Math.max(0, (previewContainer.clientWidth - scaledW) / 2);
+    previewPanY = Math.max(0, (previewContainer.clientHeight - scaledH) / 2);
+    applyPreviewTransform();
+    schedulePreviewViewSave();
+}
+window.fitPreviewToContainer = fitPreviewToContainer;
 
 // テンプレートプレビュー更新（固定高解像度）
 function updateTemplatePreview() {

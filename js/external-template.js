@@ -339,12 +339,43 @@ window.applyProjectExternalTemplate = applyProjectExternalTemplate;
 // 改善9: 画像ファイルから一時テンプレ (IDB未保存・Project内のみ) を生成して適用する。
 // 既存の Project由来テンプレ機構 (applyProjectExternalTemplate) を流用。
 // IDB には保存せず、必要なら後から「ライブラリに保存」で saveProjectTemplateToLibrary() できる。
+// dataURL を長辺 maxLong 以下にリサイズ。超過しない場合はそのまま返す。
+// 戻り値: { dataUrl, width, height }。出力は mimeType (デフォルト image/png、alpha維持)。
+async function resizeTemplateImageDataUrl(dataUrl, options) {
+    options = options || {};
+    const maxLong = options.maxLong || 4000;
+    const mimeType = options.mimeType || 'image/png';
+    const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = dataUrl;
+    });
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const longSide = Math.max(w, h);
+    if (longSide <= maxLong) {
+        return { dataUrl, width: w, height: h };
+    }
+    const scale = maxLong / longSide;
+    w = Math.round(w * scale);
+    h = Math.round(h * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    const out = canvas.toDataURL(mimeType, mimeType === 'image/jpeg' ? 0.85 : undefined);
+    return { dataUrl: out, width: w, height: h };
+}
+window.resizeTemplateImageDataUrl = resizeTemplateImageDataUrl;
+
 // File → { image (PNG dataURL), imageWidth, imageHeight, name }
-// TGA は tga-io で PNG dataURL に変換、それ以外は pickExternalTemplateImage (自動リサイズ)。
+// TGA は tga-io で PNG dataURL に変換 + 長辺4000px制限、それ以外は pickExternalTemplateImage (自動リサイズ)。
 async function pickTemplateImageEntry(file) {
     if (typeof window.tgaIo !== 'undefined' && window.tgaIo.isTgaFile && window.tgaIo.isTgaFile(file)) {
         const r = await window.tgaIo.tgaFileToPngData(file);
-        return { image: r.dataUrl, imageWidth: r.width || 0, imageHeight: r.height || 0, name: file.name || '' };
+        // 通常画像と同じ長辺4000px制限を通す (Project HTML肥大化防止)
+        const rs = await resizeTemplateImageDataUrl(r.dataUrl, { maxLong: 4000, mimeType: 'image/png' });
+        return { image: rs.dataUrl, imageWidth: rs.width || 0, imageHeight: rs.height || 0, name: file.name || '' };
     }
     if (typeof pickExternalTemplateImage === 'function') {
         const p = await pickExternalTemplateImage(file);
