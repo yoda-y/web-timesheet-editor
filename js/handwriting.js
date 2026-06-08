@@ -437,16 +437,15 @@ function handleHandwritingPointerMove(e) {
     }
 
     if (previewZoomDrag) {
-        const rect = previewContainer.getBoundingClientRect();
-        const mouseX = previewZoomDrag.anchorX - rect.left;
-        const mouseY = previewZoomDrag.anchorY - rect.top;
-        const oldZoom = previewZoom;
         const dy = previewZoomDrag.startY - e.clientY;
         const newZoom = Math.max(0.25, Math.min(5, previewZoomDrag.startZoom * Math.pow(1.01, dy)));
-        previewPanX = mouseX - (mouseX - previewPanX) * (newZoom / oldZoom);
-        previewPanY = mouseY - (mouseY - previewPanY) * (newZoom / oldZoom);
-        previewZoom = newZoom;
-        applyPreviewTransform();
+        // Preview座標系を統一: 共通ヘルパーでアンカー位置を固定したままズーム
+        if (typeof window.zoomPreviewAroundClientPoint === 'function') {
+            window.zoomPreviewAroundClientPoint(previewZoomDrag.anchorX, previewZoomDrag.anchorY, newZoom);
+        } else {
+            previewZoom = newZoom;
+            applyPreviewTransform();
+        }
         return;
     }
     if (previewIsDragging) {
