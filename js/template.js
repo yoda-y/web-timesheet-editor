@@ -90,7 +90,7 @@ function renderExternalTemplateImageOnly(dpi, pageIndex) {
     // まず白背景
     ctx.fillStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.BG_COLOR) || '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage() : null;
+    const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage(pageIndex) : null;
     if (!extImg) return canvas;
     const cw = canvas.width, ch = canvas.height;
     const iw = extImg.naturalWidth || extImg.width;
@@ -114,7 +114,7 @@ function renderExternalTemplateDataOnly(dpi, pageIndex) {
     const ctx = canvas.getContext('2d');
     const scale = dpi / 25.4;
     const extTpl = (typeof getCurrentExternalTemplate === 'function') ? getCurrentExternalTemplate() : null;
-    const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage() : null;
+    const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage(pageIndex) : null;
     if (!extTpl || !extImg) return canvas;
     const cw = canvas.width, ch = canvas.height;
     const iw = extImg.naturalWidth || extImg.width;
@@ -144,7 +144,7 @@ function renderTemplate(dpi, pageIndex = 0) {
 
     // 外部テンプレートが選択されていれば、画像のみを描画してreturn
     const extTpl = (typeof getCurrentExternalTemplate === 'function') ? getCurrentExternalTemplate() : null;
-    const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage() : null;
+    const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage(pageIndex) : null;
     if (extTpl && extImg) {
         ctx.fillStyle = TEMPLATE.BG_COLOR;
         ctx.fillRect(0, 0, canvas.width, canvas.height);

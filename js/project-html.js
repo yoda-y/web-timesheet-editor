@@ -170,6 +170,23 @@ function buildProjectData(extraMeta) {
                 bboxes: deepCloneJSON(tpl.bboxes || {})
             };
             if (tpl.id) externalTemplateBlock.sourceTemplateId = tpl.id;
+            if (tpl.temporary) externalTemplateBlock.temporary = true;
+            // Phase 2: ページ別テンプレ画像 (pageImages)。各画像を assets 化。
+            if (tpl.pageImages && typeof tpl.pageImages === 'object') {
+                const pageImagesOut = {};
+                Object.keys(tpl.pageImages).forEach(k => {
+                    const pi = tpl.pageImages[k];
+                    if (!pi || !pi.image) return;
+                    const aid = registry.addImage(pi.image, 'externalTemplate', `page${k}`, pi.imageWidth, pi.imageHeight);
+                    pageImagesOut[k] = {
+                        imageAssetId: aid,
+                        imageWidth: pi.imageWidth || 0,
+                        imageHeight: pi.imageHeight || 0,
+                        name: pi.name || ''
+                    };
+                });
+                if (Object.keys(pageImagesOut).length > 0) externalTemplateBlock.pageImages = pageImagesOut;
+            }
         }
     }
 
@@ -327,14 +344,36 @@ async function loadProjectData(projectData) {
             result.warnings.push(`externalTemplate.imageAssetId=${et.imageAssetId} が assets に見つかりません`);
             await applyTplFn(null);
         } else {
-            await applyTplFn({
+            const tplToApply = {
                 id: et.sourceTemplateId || null,
                 name: et.name || '',
                 image: dataUrl,
                 imageWidth: et.imageWidth || 0,
                 imageHeight: et.imageHeight || 0,
                 bboxes: deepCloneJSON(et.bboxes || {})
-            });
+            };
+            if (et.temporary) tplToApply.temporary = true;
+            // Phase 2: pageImages 復元 (assetId → dataUrl)
+            if (et.pageImages && typeof et.pageImages === 'object') {
+                const pageImages = {};
+                Object.keys(et.pageImages).forEach(k => {
+                    const pi = et.pageImages[k];
+                    if (!pi || !pi.imageAssetId) return;
+                    const pdu = resolveAssetDataUrl(assets, pi.imageAssetId);
+                    if (!pdu) {
+                        result.warnings.push(`externalTemplate.pageImages[${k}].imageAssetId が assets に見つかりません`);
+                        return;
+                    }
+                    pageImages[k] = {
+                        image: pdu,
+                        imageWidth: pi.imageWidth || 0,
+                        imageHeight: pi.imageHeight || 0,
+                        name: pi.name || ''
+                    };
+                });
+                if (Object.keys(pageImages).length > 0) tplToApply.pageImages = pageImages;
+            }
+            await applyTplFn(tplToApply);
         }
         // Preview / サイドバー selector 同期
         syncTemplateSelectorAfterProjectLoad(et);
