@@ -50,15 +50,18 @@ function openBBoxEditor(templateId, options) {
         if (bboxEditorTemplate.bboxes.sheet) {
             delete bboxEditorTemplate.bboxes.sheet;
         }
-        // 初回（bboxes が空）の場合、基本タグをデフォルトON
+        // 初回（bboxes が空）の場合、基本タグを生成
+        // 通常: enabled=true でデフォルトON
+        // initialAllOff (一時テンプレ新規作成時): defaultBBox は作るが enabled=false
         if (Object.keys(bboxEditorTemplate.bboxes).length === 0) {
             const defaults = ['title', 'episode', 'scene', 'cut', 'currentPage', 'totalPages', 'name', 'direction',
                               'lengthSec', 'lengthFrame',
                               'action1', 'action2', 'sound1', 'sound2', 'cell1', 'cell2', 'camera1', 'camera2'];
+            const enableInit = !options.initialAllOff;
             defaults.forEach(tag => {
                 if (window.externalTemplate.tags[tag]) {
                     const b = window.externalTemplate.defaultBBox(tag);
-                    b.enabled = true;
+                    b.enabled = enableInit;
                     bboxEditorTemplate.bboxes[tag] = b;
                 }
             });

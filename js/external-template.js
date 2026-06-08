@@ -229,17 +229,45 @@ async function importExternalTemplateFromJSON(jsonText) {
 
 let currentExternalTemplate = null;
 let currentExternalTemplateImage = null;
+// Phase 2: ページ別テンプレ画像のデコード済みキャッシュ (pageIndex文字列 → Image)
+let currentExternalTemplatePageImages = {};
 
 function getCurrentExternalTemplate() {
     return currentExternalTemplate;
 }
-function getCurrentExternalTemplateImage() {
+// pageIndex を渡すと、そのページ専用画像があれば返す。無ければ基本画像 (fallback)。
+function getCurrentExternalTemplateImage(pageIndex) {
+    if (pageIndex !== undefined && pageIndex !== null) {
+        const pi = currentExternalTemplatePageImages[String(pageIndex)];
+        if (pi) return pi;
+    }
     return currentExternalTemplateImage;
+}
+
+// pageImages の dataURL を Image にデコードしてキャッシュ
+async function decodeExternalTemplatePageImages(tpl) {
+    currentExternalTemplatePageImages = {};
+    if (!tpl || !tpl.pageImages || typeof tpl.pageImages !== 'object') return;
+    const keys = Object.keys(tpl.pageImages);
+    for (const k of keys) {
+        const pi = tpl.pageImages[k];
+        if (!pi || !pi.image) continue;
+        try {
+            const img = await new Promise((resolve, reject) => {
+                const i = new Image();
+                i.onload = () => resolve(i);
+                i.onerror = reject;
+                i.src = pi.image;
+            });
+            currentExternalTemplatePageImages[String(k)] = img;
+        } catch (e) { /* skip broken page image */ }
+    }
 }
 async function setCurrentExternalTemplate(id) {
     if (!id) {
         currentExternalTemplate = null;
         currentExternalTemplateImage = null;
+        currentExternalTemplatePageImages = {};
         if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
         return;
     }
@@ -247,6 +275,7 @@ async function setCurrentExternalTemplate(id) {
     if (!tpl) {
         currentExternalTemplate = null;
         currentExternalTemplateImage = null;
+        currentExternalTemplatePageImages = {};
         if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
         return;
     }
@@ -261,6 +290,8 @@ async function setCurrentExternalTemplate(id) {
     } else {
         currentExternalTemplateImage = null;
     }
+    // IDB保存済みテンプレは現状単一画像のみ。ページ別キャッシュはクリア。
+    currentExternalTemplatePageImages = {};
     if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
 }
 window.getCurrentExternalTemplate = getCurrentExternalTemplate;
@@ -277,6 +308,7 @@ async function applyProjectExternalTemplate(tpl) {
     if (!tpl) {
         currentExternalTemplate = null;
         currentExternalTemplateImage = null;
+        currentExternalTemplatePageImages = {};
         if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
         if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
         return;
@@ -297,6 +329,8 @@ async function applyProjectExternalTemplate(tpl) {
     } else {
         currentExternalTemplateImage = null;
     }
+    // Phase 2: ページ別画像をデコード
+    await decodeExternalTemplatePageImages(tpl);
     if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
     if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
 }
@@ -334,34 +368,61 @@ async function applyTemporaryExternalTemplateFromImage(file) {
     }
 
     const rawName = (file.name || 'image').replace(/\.[^.]+$/, '');
-    const tpl = {
-        id: null,
-        name: rawName,
+    const tr = (typeof t === 'function') ? t : (k, fb) => fb;
+    const pageIdx = (typeof currentPage === 'number' && currentPage >= 0) ? currentPage : 0;
+    const pageImageEntry = {
         image: picked.dataUrl,
         imageWidth: picked.width || 0,
         imageHeight: picked.height || 0,
-        bboxes: {} // 初期は空。BBoxエディタで必要なタグだけ配置する
+        name: file.name || ''
     };
 
-    // インメモリ適用 (projectLoadedExternalTemplate にもキャッシュされる)
-    await applyProjectExternalTemplate(tpl);
+    // 既に一時/Project由来テンプレが選択中なら「現在ページに別画像を追加」モード
+    const cur = currentExternalTemplate;
+    const addPageMode = !!(cur && isCurrentTemplateProjectDerived());
 
-    // select に (一時テンプレ) <name> option を追加・選択 (dataset.temp='1' で区別)
-    const sel = document.getElementById('template-select');
-    const group = document.getElementById('template-select-external-group') || sel;
-    if (sel && group) {
-        // 既存の仮 option (projectLoaded) は1つに保つため一旦削除
-        Array.from(sel.querySelectorAll('option'))
-            .filter(o => o.dataset && o.dataset.projectLoaded === '1')
-            .forEach(o => o.remove());
-        const opt = document.createElement('option');
-        opt.value = 'ext:__temp_template__';
-        const tr = (typeof t === 'function') ? t : (k, fb) => fb;
-        opt.textContent = `${tr('extTpl.temp.labelPrefix', '(一時テンプレ)')} ${rawName}`.trim();
-        opt.dataset.projectLoaded = '1';
-        opt.dataset.temp = '1';
-        group.appendChild(opt);
-        sel.value = opt.value;
+    let isNewTemplate = false;
+    if (addPageMode) {
+        // 既存 bboxes / 他ページ画像を維持して、現在ページの画像だけ差し替え/追加
+        cur.pageImages = cur.pageImages || {};
+        cur.pageImages[String(pageIdx)] = pageImageEntry;
+        // 基本画像 fallback が無ければ設定 (どのページも未設定だった場合の保険)
+        if (!cur.image) {
+            cur.image = picked.dataUrl;
+            cur.imageWidth = picked.width || 0;
+            cur.imageHeight = picked.height || 0;
+        }
+        await applyProjectExternalTemplate(cur);
+    } else {
+        // 新規一時テンプレ作成
+        isNewTemplate = true;
+        const tpl = {
+            id: null,
+            temporary: true,
+            name: rawName,
+            image: picked.dataUrl,           // fallback (ページ未指定時)
+            imageWidth: picked.width || 0,
+            imageHeight: picked.height || 0,
+            pageImages: { [String(pageIdx)]: pageImageEntry },
+            bboxes: {} // 初期は空。BBoxエディタで全OFFから配置
+        };
+        await applyProjectExternalTemplate(tpl);
+
+        // select に (一時テンプレ) <name> option を追加・選択 (dataset.temp='1')
+        const sel = document.getElementById('template-select');
+        const group = document.getElementById('template-select-external-group') || sel;
+        if (sel && group) {
+            Array.from(sel.querySelectorAll('option'))
+                .filter(o => o.dataset && o.dataset.projectLoaded === '1')
+                .forEach(o => o.remove());
+            const opt = document.createElement('option');
+            opt.value = 'ext:__temp_template__';
+            opt.textContent = `${tr('extTpl.temp.labelPrefix', '(一時テンプレ)')} ${rawName}`.trim();
+            opt.dataset.projectLoaded = '1';
+            opt.dataset.temp = '1';
+            group.appendChild(opt);
+            sel.value = opt.value;
+        }
     }
 
     if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
@@ -370,10 +431,17 @@ async function applyTemporaryExternalTemplateFromImage(file) {
         updateTemplatePreview();
     }
     if (typeof drawAll === 'function') drawAll();
+    if (typeof markDirty === 'function') markDirty();
 
     if (typeof showToast === 'function') {
-        const tr = (typeof t === 'function') ? t : (k, fb) => fb;
-        showToast(tr('extTpl.temp.applied', '一時テンプレートを適用しました'));
+        showToast(addPageMode
+            ? tr('extTpl.temp.pageImageSet', '現在ページに一時テンプレ画像を設定しました')
+            : tr('extTpl.temp.applied', '一時テンプレートを適用しました'));
+    }
+
+    // 新規作成時は BBoxエディタを自動で開く (全タグOFF初期状態)
+    if (isNewTemplate && typeof openBBoxEditor === 'function') {
+        openBBoxEditor(null, { inMemoryTemplate: currentExternalTemplate, initialAllOff: true });
     }
 }
 window.applyTemporaryExternalTemplateFromImage = applyTemporaryExternalTemplateFromImage;

@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.18.0';
+const APP_VERSION = '0.19.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,22 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.19.0 (2026-06-08)
+
+### 追加 (改善9: 一時テンプレ Phase 2)
+- 一時テンプレ新規作成時に BBoxエディタを自動で開く (全タグOFF初期状態)
+  - openBBoxEditor の initialAllOff オプション (defaultBBox は生成するが enabled=false)
+- 一時テンプレでページごとに別のテンプレ画像を設定可能 (pageImages)
+  - 一時/Project由来テンプレ選択中に「一時テンプレ読込」すると現在ページの画像を差し替え
+  - BBox設定はページ共通 (tpl.bboxes)
+  - 描画時、現在ページに pageImages があればそれを使い、無ければ基本画像にフォールバック
+- Project HTML/JSON 保存・読込で pageImages を assets 化して保持
+  - 既存の単一 imageAssetId 形式との後方互換は維持
+
+### 既知の制限
+- IndexedDBライブラリ保存は単一画像前提のまま (複数ページ画像のライブラリ保存は別Phase)
+- ドラッグ&ドロップでの一時テンプレ適用は今後対応
 
 ## v0.18.0 (2026-06-08)
 
