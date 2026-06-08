@@ -267,6 +267,9 @@ window.getCurrentExternalTemplate = getCurrentExternalTemplate;
 window.getCurrentExternalTemplateImage = getCurrentExternalTemplateImage;
 window.setCurrentExternalTemplate = setCurrentExternalTemplate;
 
+// Project HTML 由来テンプレのインメモリキャッシュ (再選択時に IDB を引かず復元するため)
+let projectLoadedExternalTemplate = null;
+
 // プロジェクトHTML (P1-b) からのインメモリ復元用。
 // IndexedDB には書き込まず、現在のテンプレ状態だけを差し替える。
 // tpl: { id?, name, image (dataURL), imageWidth, imageHeight, bboxes }
@@ -278,6 +281,7 @@ async function applyProjectExternalTemplate(tpl) {
         if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
         return;
     }
+    projectLoadedExternalTemplate = tpl; // 再選択用にキャッシュ
     currentExternalTemplate = tpl;
     if (tpl.image) {
         try {
@@ -397,8 +401,17 @@ async function refreshTemplateSelectExternalOptions() {
     // 再構築前の選択値を保持 (optgroup innerHTML 差替でselect.valueが失われるのを防ぐ)
     const sel = document.getElementById('template-select');
     const prevValue = sel ? sel.value : '';
+    // バグ1修正: Project HTML 由来の仮 option (dataset.projectLoaded) を退避し、
+    // innerHTML 差し替えで消えないよう再付与する。
+    const preservedProjectOptions = Array.from(group.querySelectorAll('option'))
+        .filter(o => o.dataset && o.dataset.projectLoaded === '1');
     if (!window.externalTemplate || typeof window.externalTemplate.list !== 'function') {
         group.innerHTML = '';
+        preservedProjectOptions.forEach(o => group.appendChild(o));
+        if (sel && prevValue) {
+            const stillThere = Array.from(sel.options).some(o => o.value === prevValue);
+            if (stillThere) sel.value = prevValue;
+        }
         return;
     }
     try {
@@ -407,16 +420,43 @@ async function refreshTemplateSelectExternalOptions() {
             const esc = (t.name || '無名').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             return `<option value="ext:${t.id}">${esc}</option>`;
         }).join('');
-        // 選択値の復元: 直前が ext:id でその id がまだ存在するなら復元
-        if (sel && prevValue && prevValue.startsWith('ext:')) {
-            const stillExists = items.some(t => `ext:${t.id}` === prevValue);
-            if (stillExists) sel.value = prevValue;
+        // 退避した Project 由来 option を末尾に戻す
+        preservedProjectOptions.forEach(o => group.appendChild(o));
+        // 選択値の復元: 直前値がまだ存在するなら復元 (ext:id / project由来 両対応)
+        if (sel && prevValue) {
+            const stillThere = Array.from(sel.options).some(o => o.value === prevValue);
+            if (stillThere) sel.value = prevValue;
         }
     } catch (err) {
         console.error('外部テンプレート一覧取得失敗:', err);
         group.innerHTML = '';
+        preservedProjectOptions.forEach(o => group.appendChild(o));
+        if (sel && prevValue) {
+            const stillThere = Array.from(sel.options).some(o => o.value === prevValue);
+            if (stillThere) sel.value = prevValue;
+        }
     }
 }
+
+// バグ1修正: 標準A3テンプレートへ確実に復帰する。
+// dropdown 表示と内部状態がズレていても、内部状態・select・preview を強制同期する。
+async function resetToStandardTemplate() {
+    if (typeof setCurrentExternalTemplate === 'function') {
+        await setCurrentExternalTemplate(null);
+    } else {
+        currentExternalTemplate = null;
+        currentExternalTemplateImage = null;
+    }
+    const sel = document.getElementById('template-select');
+    if (sel) sel.value = 'default';
+    if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
+    if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
+    if (typeof updateTemplatePreview === 'function' && typeof currentMode !== 'undefined' && currentMode === 'preview') {
+        updateTemplatePreview();
+    }
+    if (typeof drawAll === 'function') drawAll();
+}
+window.resetToStandardTemplate = resetToStandardTemplate;
 window.refreshTemplateSelectExternalOptions = refreshTemplateSelectExternalOptions;
 
 // サイドバー: 設定/BBox編集 ボタンの有効/表示状態をテンプレ選択に同期
@@ -451,17 +491,23 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         if (v.startsWith('ext:')) {
+            // Project HTML 由来の仮 option はキャッシュから復元 (IDB を引くと取得失敗で消える)
+            const selectedOpt = Array.from(e.target.options).find(o => o.value === v);
+            if (selectedOpt && selectedOpt.dataset && selectedOpt.dataset.projectLoaded === '1'
+                && projectLoadedExternalTemplate) {
+                await applyProjectExternalTemplate(projectLoadedExternalTemplate);
+                updateSidebarTemplateStatus();
+                if (typeof updateTemplatePreview === 'function' && typeof currentMode !== 'undefined' && currentMode === 'preview') updateTemplatePreview();
+                return;
+            }
             const id = v.substring(4);
             await setCurrentExternalTemplate(id);
             updateSidebarTemplateStatus();
             if (typeof updateTemplatePreview === 'function') updateTemplatePreview();
             return;
         }
-        // 標準テンプレート選択時は外部テンプレートを解除
-        await setCurrentExternalTemplate(null);
-        updateSidebarTemplateStatus();
-        if (typeof updateTemplatePreview === 'function') updateTemplatePreview();
-        // 既存の標準テンプレート処理はここでは何もしない（他の箇所で処理）
+        // 標準テンプレート選択時は外部テンプレートを解除 (バグ1修正: 強制同期ヘルパー使用)
+        await resetToStandardTemplate();
     });
 
     // 追加ボタン: 常に有効、外部テンプレ管理モーダルを開く

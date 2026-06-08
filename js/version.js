@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.14.0';
+const APP_VERSION = '0.14.1';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,16 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.14.1 (2026-06-08)
+
+### 修正
+- 外部テンプレ→標準A3に戻せない問題を修正
+  - 外部テンプレ一覧の再構築時に Project HTML 由来の仮 option が消えて状態がズレる不具合
+  - 標準A3への強制復帰ヘルパー resetToStandardTemplate() を追加
+  - Project由来テンプレの再選択を IDB ではなくキャッシュから復元
+- Preview 更新漏れを修正
+  - シート切替時、Preview モード中にプレビューが更新されない不具合
 
 ## v0.14.0 (2026-05-24)
 
