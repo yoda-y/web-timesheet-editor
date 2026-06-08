@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.14.2';
+const APP_VERSION = '0.15.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,16 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.15.0 (2026-06-08)
+
+### 追加
+- Project HTML 由来の外部テンプレを IndexedDB ライブラリへ保存する機能
+  - サイドバーに「ライブラリに保存」ボタン (Project由来テンプレ選択時のみ表示)
+  - 保存後は通常の外部テンプレと同じ扱いになり、再読込後もライブラリに残る
+  - 同名テンプレがある場合: 上書き / 別名(自動連番) / キャンセル を確認
+  - 画像・BBox・fontSize・customFields・frames等を欠落なく保存
+  - 保存後 Preview 表示が崩れないよう正規テンプレとして再ロード
 
 ## v0.14.2 (2026-06-08)
 

@@ -459,11 +459,29 @@ async function resetToStandardTemplate() {
 window.resetToStandardTemplate = resetToStandardTemplate;
 window.refreshTemplateSelectExternalOptions = refreshTemplateSelectExternalOptions;
 
-// サイドバー: 設定/BBox編集 ボタンの有効/表示状態をテンプレ選択に同期
+// 現在のテンプレが Project HTML 由来 (IDB 未保存の仮テンプレ) かどうか判定。
+// template-select の選択 option の dataset.projectLoaded と内部キャッシュを併用。
+function isCurrentTemplateProjectDerived() {
+    if (!currentExternalTemplate) return false;
+    const sel = document.getElementById('template-select');
+    if (sel) {
+        const opt = Array.from(sel.options).find(o => o.value === sel.value);
+        if (opt && opt.dataset && opt.dataset.projectLoaded === '1') return true;
+    }
+    // フォールバック: キャッシュと一致し、IDB 用の正規 id を持たない場合も Project 由来とみなす
+    if (projectLoadedExternalTemplate && currentExternalTemplate === projectLoadedExternalTemplate) {
+        return true;
+    }
+    return false;
+}
+window.isCurrentTemplateProjectDerived = isCurrentTemplateProjectDerived;
+
+// サイドバー: 設定/BBox編集/ローカル保存 ボタンの有効/表示状態をテンプレ選択に同期
 // (現在テンプレの表示は <select> 自体が担うので独立ステータスは設けない)
 function updateSidebarTemplateStatus() {
     const settingsBtn = document.getElementById('sidebar-template-settings-btn');
     const bboxBtn = document.getElementById('sidebar-template-bbox-btn');
+    const saveLocalBtn = document.getElementById('sidebar-template-save-local-btn');
     const tpl = currentExternalTemplate;
     if (tpl) {
         if (settingsBtn) settingsBtn.classList.remove('disabled');
@@ -472,8 +490,97 @@ function updateSidebarTemplateStatus() {
         if (settingsBtn) settingsBtn.classList.add('disabled');
         if (bboxBtn) bboxBtn.style.display = 'none';
     }
+    // ローカル保存ボタンは Project HTML 由来テンプレ選択時のみ表示
+    if (saveLocalBtn) {
+        saveLocalBtn.style.display = isCurrentTemplateProjectDerived() ? '' : 'none';
+    }
 }
 window.updateSidebarTemplateStatus = updateSidebarTemplateStatus;
+
+// Project HTML 由来テンプレを IndexedDB ライブラリへ保存する。
+// 同名がある場合: confirm 2段 (上書き / 別名連番 / キャンセル)。
+async function saveProjectTemplateToLibrary() {
+    const src = currentExternalTemplate;
+    if (!src) return;
+    if (!isCurrentTemplateProjectDerived()) return;
+
+    const tr = (typeof t === 'function') ? t : (k) => k;
+    const baseName = (src.name || '').trim() || tr('extTpl.newTemplateName');
+
+    let existing = [];
+    try { existing = await listExternalTemplates(); } catch (e) { existing = []; }
+    const sameName = existing.filter(x => (x.name || '') === baseName);
+
+    const now = Date.now();
+    let saveId = generateTemplateId();
+    let saveName = baseName;
+    let createdAt = now;
+
+    if (sameName.length > 0) {
+        // 1段目: 上書き確認
+        const overwrite = confirm(tr('extTpl.saveLocal.confirmOverwrite').replace('{name}', baseName));
+        if (overwrite) {
+            saveId = sameName[0].id;
+            createdAt = sameName[0].createdAt || now;
+        } else {
+            // 2段目: 別名保存確認
+            const renameOk = confirm(tr('extTpl.saveLocal.confirmRename'));
+            if (!renameOk) return; // キャンセル
+            // 連番サフィックス: 既存名と衝突しない最初の番号
+            const allNames = new Set(existing.map(x => x.name || ''));
+            let n = 2;
+            while (allNames.has(`${baseName} (${n})`)) n++;
+            saveName = `${baseName} (${n})`;
+            saveId = generateTemplateId();
+            createdAt = now;
+        }
+    }
+
+    const tpl = {
+        id: saveId,
+        name: saveName,
+        image: src.image || null,
+        imageWidth: src.imageWidth || 0,
+        imageHeight: src.imageHeight || 0,
+        createdAt: createdAt,
+        updatedAt: now,
+        bboxes: JSON.parse(JSON.stringify(src.bboxes || {}))
+    };
+
+    try {
+        await saveExternalTemplate(tpl);
+    } catch (e) {
+        alert(tr('extTpl.saveLocal.failed') + (e && e.message ? e.message : e));
+        return;
+    }
+
+    // 仮 projectLoaded option を削除
+    const sel = document.getElementById('template-select');
+    if (sel) {
+        Array.from(sel.querySelectorAll('option'))
+            .filter(o => o.dataset && o.dataset.projectLoaded === '1')
+            .forEach(o => o.remove());
+    }
+    // projectLoaded キャッシュをクリア (もう仮ではない)
+    projectLoadedExternalTemplate = null;
+
+    // 一覧再構築 → 正規 option を選択 → IDB から正規テンプレとして再ロード
+    await refreshTemplateSelectExternalOptions();
+    if (sel) sel.value = `ext:${saveId}`;
+    await setCurrentExternalTemplate(saveId);
+
+    updateSidebarTemplateStatus();
+    if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
+    if (typeof updateTemplatePreview === 'function' && typeof currentMode !== 'undefined' && currentMode === 'preview') {
+        updateTemplatePreview();
+    }
+    if (typeof drawAll === 'function') drawAll();
+
+    if (typeof showToast === 'function') {
+        showToast(tr('extTpl.saveLocal.done').replace('{name}', saveName));
+    }
+}
+window.saveProjectTemplateToLibrary = saveProjectTemplateToLibrary;
 
 // changeイベント: __new_external__ と ext: プレフィックスを処理
 document.addEventListener('DOMContentLoaded', () => {
@@ -532,6 +639,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const tpl = currentExternalTemplate;
             if (!tpl) return;
             if (typeof openBBoxEditor === 'function') openBBoxEditor(tpl.id);
+        });
+    }
+    // ライブラリに保存ボタン: Project HTML 由来テンプレ選択時のみ表示
+    const saveLocalBtn = document.getElementById('sidebar-template-save-local-btn');
+    if (saveLocalBtn) {
+        saveLocalBtn.addEventListener('click', () => {
+            saveProjectTemplateToLibrary();
         });
     }
 });
