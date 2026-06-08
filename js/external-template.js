@@ -302,6 +302,82 @@ async function applyProjectExternalTemplate(tpl) {
 }
 window.applyProjectExternalTemplate = applyProjectExternalTemplate;
 
+// 改善9: 画像ファイルから一時テンプレ (IDB未保存・Project内のみ) を生成して適用する。
+// 既存の Project由来テンプレ機構 (applyProjectExternalTemplate) を流用。
+// IDB には保存せず、必要なら後から「ライブラリに保存」で saveProjectTemplateToLibrary() できる。
+async function applyTemporaryExternalTemplateFromImage(file) {
+    if (!file) return;
+    // 既存の外部テンプレ画像読み込み (自動リサイズ + dataURL化) を流用
+    let picked;
+    try {
+        if (typeof pickExternalTemplateImage === 'function') {
+            picked = await pickExternalTemplateImage(file);
+        } else {
+            const dataUrl = await new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(r.result);
+                r.onerror = reject;
+                r.readAsDataURL(file);
+            });
+            const im = await new Promise((resolve, reject) => {
+                const i = new Image();
+                i.onload = () => resolve(i);
+                i.onerror = reject;
+                i.src = dataUrl;
+            });
+            picked = { dataUrl, width: im.naturalWidth, height: im.naturalHeight };
+        }
+    } catch (e) {
+        const tr = (typeof t === 'function') ? t : (k, fb) => fb;
+        alert(tr('extTpl.temp.loadFailed', '画像の読み込みに失敗しました: ') + (e && e.message ? e.message : e));
+        return;
+    }
+
+    const rawName = (file.name || 'image').replace(/\.[^.]+$/, '');
+    const tpl = {
+        id: null,
+        name: rawName,
+        image: picked.dataUrl,
+        imageWidth: picked.width || 0,
+        imageHeight: picked.height || 0,
+        bboxes: {} // 初期は空。BBoxエディタで必要なタグだけ配置する
+    };
+
+    // インメモリ適用 (projectLoadedExternalTemplate にもキャッシュされる)
+    await applyProjectExternalTemplate(tpl);
+
+    // select に (一時テンプレ) <name> option を追加・選択 (dataset.temp='1' で区別)
+    const sel = document.getElementById('template-select');
+    const group = document.getElementById('template-select-external-group') || sel;
+    if (sel && group) {
+        // 既存の仮 option (projectLoaded) は1つに保つため一旦削除
+        Array.from(sel.querySelectorAll('option'))
+            .filter(o => o.dataset && o.dataset.projectLoaded === '1')
+            .forEach(o => o.remove());
+        const opt = document.createElement('option');
+        opt.value = 'ext:__temp_template__';
+        const tr = (typeof t === 'function') ? t : (k, fb) => fb;
+        opt.textContent = `${tr('extTpl.temp.labelPrefix', '(一時テンプレ)')} ${rawName}`.trim();
+        opt.dataset.projectLoaded = '1';
+        opt.dataset.temp = '1';
+        group.appendChild(opt);
+        sel.value = opt.value;
+    }
+
+    if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
+    if (typeof refreshCustomFieldsSidebar === 'function') refreshCustomFieldsSidebar();
+    if (typeof updateTemplatePreview === 'function' && typeof currentMode !== 'undefined' && currentMode === 'preview') {
+        updateTemplatePreview();
+    }
+    if (typeof drawAll === 'function') drawAll();
+
+    if (typeof showToast === 'function') {
+        const tr = (typeof t === 'function') ? t : (k, fb) => fb;
+        showToast(tr('extTpl.temp.applied', '一時テンプレートを適用しました'));
+    }
+}
+window.applyTemporaryExternalTemplateFromImage = applyTemporaryExternalTemplateFromImage;
+
 // ─── Phase 3d: カスタムフィールド サイドバー更新 ──────────────────────────────
 
 function refreshCustomFieldsSidebar() {
@@ -638,7 +714,13 @@ document.addEventListener('DOMContentLoaded', () => {
         bboxBtn.addEventListener('click', () => {
             const tpl = currentExternalTemplate;
             if (!tpl) return;
-            if (typeof openBBoxEditor === 'function') openBBoxEditor(tpl.id);
+            if (typeof openBBoxEditor !== 'function') return;
+            // Project由来 / 一時テンプレ (IDB未保存) はインメモリ編集モードで開く
+            if (isCurrentTemplateProjectDerived()) {
+                openBBoxEditor(null, { inMemoryTemplate: tpl });
+            } else {
+                openBBoxEditor(tpl.id);
+            }
         });
     }
     // ライブラリに保存ボタン: Project HTML 由来テンプレ選択時のみ表示
@@ -646,6 +728,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (saveLocalBtn) {
         saveLocalBtn.addEventListener('click', () => {
             saveProjectTemplateToLibrary();
+        });
+    }
+    // 一時テンプレ読込ボタン: 常に表示。画像を選んでインメモリ適用 (改善9)
+    const tempLoadBtn = document.getElementById('sidebar-template-temp-load-btn');
+    const tempFileInput = document.getElementById('temp-template-file-input');
+    if (tempLoadBtn && tempFileInput) {
+        tempLoadBtn.addEventListener('click', () => {
+            tempFileInput.value = '';
+            tempFileInput.click();
+        });
+        tempFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            await applyTemporaryExternalTemplateFromImage(file);
+            e.target.value = '';
         });
     }
 });
