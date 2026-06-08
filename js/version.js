@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.20.0';
+const APP_VERSION = '0.20.1';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,17 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.20.1 (2026-06-08)
+
+### 修正
+- TGA読み込み時も通常画像と同じ長辺4000px制限を適用 (Project HTML肥大化防止)
+  - 共通ヘルパー resizeTemplateImageDataUrl() を追加
+- ブラウザ更新後の初回Preview表示で用紙全体が見える fit 表示に
+  - fitPreviewToContainer() を追加 (初回のみ。手動ズーム後の更新では戻らない)
+- Previewホイールズームの中心をマウスポインタ位置に正確化
+  - previewStage 基準で content座標を計算し、スクロール/中央寄せがあってもズレない
+  - +/- ボタンも同じ計算に統一
 
 ## v0.20.0 (2026-06-08)
 
