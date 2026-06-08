@@ -192,6 +192,10 @@ const I18N = {
         // BBoxエディタ
         'bbox.modalTitlePrefix': 'BBoxエディタ - ',
         'bbox.section.tags': 'タグ一覧',
+        'bbox.bulk.allOn': '全てON',
+        'bbox.bulk.allOff': '全てOFF',
+        'bbox.bulk.on': 'ON',
+        'bbox.bulk.off': 'OFF',
         'bbox.section.props': 'プロパティ',
         'bbox.props.empty': 'BBoxを選択してください',
         'bbox.canvas.hint': 'Space+ドラッグ: パン / Space+Ctrl+ドラッグ: ズーム / クリック: 選択 / ドラッグ: 移動・ハンドルでリサイズ',
@@ -752,6 +756,10 @@ const I18N = {
         // BBox Editor
         'bbox.modalTitlePrefix': 'BBox Editor - ',
         'bbox.section.tags': 'Tags',
+        'bbox.bulk.allOn': 'All ON',
+        'bbox.bulk.allOff': 'All OFF',
+        'bbox.bulk.on': 'ON',
+        'bbox.bulk.off': 'OFF',
         'bbox.section.props': 'Properties',
         'bbox.props.empty': 'Select a BBox',
         'bbox.canvas.hint': 'Space+drag: pan / Space+Ctrl+drag: zoom / Click: select / Drag: move or resize handles',
