@@ -93,6 +93,11 @@ function switchToSheet(index) {
     if (typeof cellInput !== 'undefined') cellInput.style.display = 'none';
     if (typeof updateSectionPositions === 'function') updateSectionPositions();
     if (typeof drawAll === 'function') drawAll();
+    // バグ2修正: Preview モード中はシート切替後にプレビューも更新する
+    if (typeof currentMode !== 'undefined' && currentMode === 'preview'
+        && typeof updateTemplatePreview === 'function') {
+        updateTemplatePreview();
+    }
     if (typeof markDirty === 'function') markDirty();
 }
 
