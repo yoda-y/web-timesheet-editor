@@ -339,76 +339,85 @@ window.applyProjectExternalTemplate = applyProjectExternalTemplate;
 // 改善9: 画像ファイルから一時テンプレ (IDB未保存・Project内のみ) を生成して適用する。
 // 既存の Project由来テンプレ機構 (applyProjectExternalTemplate) を流用。
 // IDB には保存せず、必要なら後から「ライブラリに保存」で saveProjectTemplateToLibrary() できる。
-async function applyTemporaryExternalTemplateFromImage(file) {
-    if (!file) return;
-    // 既存の外部テンプレ画像読み込み (自動リサイズ + dataURL化) を流用
-    let picked;
-    try {
-        if (typeof pickExternalTemplateImage === 'function') {
-            picked = await pickExternalTemplateImage(file);
-        } else {
-            const dataUrl = await new Promise((resolve, reject) => {
-                const r = new FileReader();
-                r.onload = () => resolve(r.result);
-                r.onerror = reject;
-                r.readAsDataURL(file);
-            });
-            const im = await new Promise((resolve, reject) => {
-                const i = new Image();
-                i.onload = () => resolve(i);
-                i.onerror = reject;
-                i.src = dataUrl;
-            });
-            picked = { dataUrl, width: im.naturalWidth, height: im.naturalHeight };
-        }
-    } catch (e) {
-        const tr = (typeof t === 'function') ? t : (k, fb) => fb;
-        alert(tr('extTpl.temp.loadFailed', '画像の読み込みに失敗しました: ') + (e && e.message ? e.message : e));
-        return;
+// File → { image (PNG dataURL), imageWidth, imageHeight, name }
+// TGA は tga-io で PNG dataURL に変換、それ以外は pickExternalTemplateImage (自動リサイズ)。
+async function pickTemplateImageEntry(file) {
+    if (typeof window.tgaIo !== 'undefined' && window.tgaIo.isTgaFile && window.tgaIo.isTgaFile(file)) {
+        const r = await window.tgaIo.tgaFileToPngData(file);
+        return { image: r.dataUrl, imageWidth: r.width || 0, imageHeight: r.height || 0, name: file.name || '' };
     }
+    if (typeof pickExternalTemplateImage === 'function') {
+        const p = await pickExternalTemplateImage(file);
+        return { image: p.dataUrl, imageWidth: p.width || 0, imageHeight: p.height || 0, name: file.name || '' };
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+    });
+    const im = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = dataUrl;
+    });
+    return { image: dataUrl, imageWidth: im.naturalWidth, imageHeight: im.naturalHeight, name: file.name || '' };
+}
+window.pickTemplateImageEntry = pickTemplateImageEntry;
 
-    const rawName = (file.name || 'image').replace(/\.[^.]+$/, '');
+// 一時テンプレに pageImages エントリ群を適用するコア。
+// entries: [{ image, imageWidth, imageHeight, name, pageIndex }]
+// - 既存の一時/Project由来テンプレがあれば bboxes 維持で pageImages を追加/差し替え
+// - 無ければ新規一時テンプレ作成 + (一時テンプレ) option 追加 + BBoxエディタ全OFF自動オープン
+async function applyTemporaryTemplatePageEntries(entries) {
+    if (!Array.isArray(entries) || entries.length === 0) return;
     const tr = (typeof t === 'function') ? t : (k, fb) => fb;
-    const pageIdx = (typeof currentPage === 'number' && currentPage >= 0) ? currentPage : 0;
-    const pageImageEntry = {
-        image: picked.dataUrl,
-        imageWidth: picked.width || 0,
-        imageHeight: picked.height || 0,
-        name: file.name || ''
-    };
-
-    // 既に一時/Project由来テンプレが選択中なら「現在ページに別画像を追加」モード
     const cur = currentExternalTemplate;
     const addPageMode = !!(cur && isCurrentTemplateProjectDerived());
-
     let isNewTemplate = false;
+    let target;
+
     if (addPageMode) {
-        // 既存 bboxes / 他ページ画像を維持して、現在ページの画像だけ差し替え/追加
-        cur.pageImages = cur.pageImages || {};
-        cur.pageImages[String(pageIdx)] = pageImageEntry;
-        // 基本画像 fallback が無ければ設定 (どのページも未設定だった場合の保険)
-        if (!cur.image) {
-            cur.image = picked.dataUrl;
-            cur.imageWidth = picked.width || 0;
-            cur.imageHeight = picked.height || 0;
-        }
-        await applyProjectExternalTemplate(cur);
+        target = cur;
+        target.pageImages = target.pageImages || {};
     } else {
-        // 新規一時テンプレ作成
         isNewTemplate = true;
-        const tpl = {
+        const baseName = (entries[0].name || 'image').replace(/\.[^.]+$/, '');
+        target = {
             id: null,
             temporary: true,
-            name: rawName,
-            image: picked.dataUrl,           // fallback (ページ未指定時)
-            imageWidth: picked.width || 0,
-            imageHeight: picked.height || 0,
-            pageImages: { [String(pageIdx)]: pageImageEntry },
-            bboxes: {} // 初期は空。BBoxエディタで全OFFから配置
+            name: baseName,
+            image: entries[0].image,            // fallback
+            imageWidth: entries[0].imageWidth || 0,
+            imageHeight: entries[0].imageHeight || 0,
+            pageImages: {},
+            bboxes: {}
         };
-        await applyProjectExternalTemplate(tpl);
+    }
 
-        // select に (一時テンプレ) <name> option を追加・選択 (dataset.temp='1')
+    entries.forEach(en => {
+        const pi = Math.max(0, en.pageIndex | 0);
+        const key = String(pi);
+        if (target.pageImages[key]) {
+            try { console.warn(`[temp-template] page ${pi} の画像を上書きします`); } catch (e) {}
+        }
+        target.pageImages[key] = {
+            image: en.image,
+            imageWidth: en.imageWidth || 0,
+            imageHeight: en.imageHeight || 0,
+            name: en.name || ''
+        };
+    });
+    if (!target.image) {
+        target.image = entries[0].image;
+        target.imageWidth = entries[0].imageWidth || 0;
+        target.imageHeight = entries[0].imageHeight || 0;
+    }
+
+    await applyProjectExternalTemplate(target);
+
+    if (isNewTemplate) {
         const sel = document.getElementById('template-select');
         const group = document.getElementById('template-select-external-group') || sel;
         if (sel && group) {
@@ -417,7 +426,7 @@ async function applyTemporaryExternalTemplateFromImage(file) {
                 .forEach(o => o.remove());
             const opt = document.createElement('option');
             opt.value = 'ext:__temp_template__';
-            opt.textContent = `${tr('extTpl.temp.labelPrefix', '(一時テンプレ)')} ${rawName}`.trim();
+            opt.textContent = `${tr('extTpl.temp.labelPrefix', '(一時テンプレ)')} ${target.name}`.trim();
             opt.dataset.projectLoaded = '1';
             opt.dataset.temp = '1';
             group.appendChild(opt);
@@ -434,15 +443,31 @@ async function applyTemporaryExternalTemplateFromImage(file) {
     if (typeof markDirty === 'function') markDirty();
 
     if (typeof showToast === 'function') {
-        showToast(addPageMode
-            ? tr('extTpl.temp.pageImageSet', '現在ページに一時テンプレ画像を設定しました')
-            : tr('extTpl.temp.applied', '一時テンプレートを適用しました'));
+        showToast(isNewTemplate
+            ? tr('extTpl.temp.applied', '一時テンプレートを適用しました')
+            : tr('extTpl.temp.pageImageSet', '現在ページの一時テンプレ画像を更新しました'));
     }
-
-    // 新規作成時は BBoxエディタを自動で開く (全タグOFF初期状態)
+    // 新規作成時のみ BBoxエディタを自動で開く (全タグOFF)
     if (isNewTemplate && typeof openBBoxEditor === 'function') {
         openBBoxEditor(null, { inMemoryTemplate: currentExternalTemplate, initialAllOff: true });
     }
+}
+window.applyTemporaryTemplatePageEntries = applyTemporaryTemplatePageEntries;
+
+// 単一ファイル → 現在ページに一時テンプレ画像を設定 (サイドバーボタン / 単数D&D)
+async function applyTemporaryExternalTemplateFromImage(file) {
+    if (!file) return;
+    let entry;
+    try {
+        entry = await pickTemplateImageEntry(file);
+    } catch (e) {
+        const tr = (typeof t === 'function') ? t : (k, fb) => fb;
+        alert(tr('extTpl.temp.loadFailed', '画像の読み込みに失敗しました: ') + (e && e.message ? e.message : e));
+        return;
+    }
+    const pageIdx = (typeof currentPage === 'number' && currentPage >= 0) ? currentPage : 0;
+    entry.pageIndex = pageIdx;
+    await applyTemporaryTemplatePageEntries([entry]);
 }
 window.applyTemporaryExternalTemplateFromImage = applyTemporaryExternalTemplateFromImage;
 
