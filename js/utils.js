@@ -4,6 +4,56 @@ function getStyle(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// 現在の実効テーマがライトかどうか (data-theme 優先、無ければ system=matchMedia)
+function isLightThemeActive() {
+    const dt = document.documentElement.dataset.theme;
+    if (dt === 'light') return true;
+    if (dt === 'dark') return false;
+    // system: prefers-color-scheme
+    return !(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+
+// 改善8: ライトモード Editキャンバスの標準インク色 ('auto' 時のデフォルト)
+const EDIT_LIGHT_MAIN_DEFAULT = '#2f5f3a';
+
+// #rrggbb → rgba(r,g,b,alpha)
+function hexToRgba(hex, alpha) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || '').trim());
+    if (!m) return hex;
+    const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getEditLightMainColor() {
+    const v = (typeof settings !== 'undefined' && settings.colors && settings.colors.editLightMain) || 'auto';
+    return (v === 'auto' || !v) ? EDIT_LIGHT_MAIN_DEFAULT : v;
+}
+
+// Editキャンバス用インク色取得。
+// role: 'text' | 'border' | 'thick' | 'medium' | 'thin'
+// ライトモード時のみ editLightMain ベース。ダーク/system-dark は従来CSS変数。
+function getEditInk(role) {
+    if (!isLightThemeActive()) {
+        switch (role) {
+            case 'text':   return getStyle('--text-color');
+            case 'border': return getStyle('--border-color');
+            case 'thick':  return getStyle('--grid-thick');
+            case 'medium': return getStyle('--grid-medium');
+            case 'thin':   return getStyle('--grid-thin');
+            default:       return getStyle('--text-color');
+        }
+    }
+    const main = getEditLightMainColor();
+    switch (role) {
+        case 'text':
+        case 'border':
+        case 'thick':  return main;
+        case 'medium': return hexToRgba(main, 0.55);
+        case 'thin':   return hexToRgba(main, 0.28);
+        default:       return main;
+    }
+}
+
 // セルデータキー "TYPE-COL-FRAME" を分解（FRAMEが負数でも正しく動作）
 function parseCellKey(k) {
     const a = k.indexOf('-');

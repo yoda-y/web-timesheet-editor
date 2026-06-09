@@ -33,7 +33,9 @@ const DEFAULT_SETTINGS = {
         selectBorder: 'auto',
         gridThick: 'auto',
         handwritingSelect: '#00a8ff',
-        handwritingTransform: '#d81b60'
+        handwritingTransform: '#d81b60',
+        // 改善8: ライトモード Editキャンバスの標準インク色 ('auto' = デフォルト)
+        editLightMain: 'auto'
     },
     editor: {
         sharedMetaKeys: ['title', 'subTitle', 'scene', 'lengthSec', 'lengthFrame', 'creator']
