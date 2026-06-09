@@ -259,7 +259,7 @@ window.openCameraModal = function() {
     let tgtContainer = document.getElementById('camera-target-suggestions'); tgtContainer.innerHTML = '';
     let addTgt = (val, inputId) => {
         let btn = document.createElement('span'); btn.innerText = val;
-        btn.style.cssText = "font-size:11px; padding:3px 8px; background:var(--select-bg); color:#fff; border-radius:3px; cursor:pointer;";
+        btn.style.cssText = "font-size:11px; padding:3px 8px; background:var(--select-border); color:#fff; border-radius:3px; cursor:pointer;";
         btn.onclick = () => { let input = document.getElementById(inputId); if (input.value.trim()) input.value += ", " + val; else input.value = val; };
         tgtContainer.appendChild(btn);
     };
