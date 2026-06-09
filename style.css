@@ -808,9 +808,12 @@ button:hover { background: var(--border-color); }
   padding: 6px 16px;
 }
 .settings-actions button.primary {
-  background: var(--select-bg);
+  background: var(--select-border);
   color: #fff;
   border-color: var(--select-border);
+}
+.settings-actions button.primary:hover {
+  filter: brightness(1.08);
 }
 
 .settings-hub-inner {

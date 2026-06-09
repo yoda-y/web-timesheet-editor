@@ -105,18 +105,18 @@ function drawMetadata() {
     ctx.fillStyle = getStyle('--bg-color'); ctx.fillRect(0, 0, baseWidth, metadataH);
     ctx.lineWidth = 1;
     metaFields.forEach(f => {
-        ctx.strokeStyle = (selectedMeta === f.id) ? getStyle('--select-border') : getStyle('--border-color');
+        ctx.strokeStyle = (selectedMeta === f.id) ? getStyle('--select-border') : getEditInk('border');
         ctx.lineWidth = (selectedMeta === f.id) ? 2 : 1;
         if (f.id === 'page') ctx.fillStyle = "rgba(100, 100, 100, 0.1)"; else ctx.fillStyle = "transparent";
         ctx.fillRect(f.x, f.y, f.w, f.h); ctx.strokeRect(f.x, f.y, f.w, f.h);
-        ctx.fillStyle = getStyle('--grid-medium'); ctx.font = "bold 9px sans-serif";
+        ctx.fillStyle = getEditInk('medium'); ctx.font = "bold 9px sans-serif";
         ctx.fillText(f.label, f.x + 5, f.y + 11);
-        ctx.fillStyle = getStyle('--text-color'); ctx.font = "bold 14px sans-serif";
+        ctx.fillStyle = getEditInk('text'); ctx.font = "bold 14px sans-serif";
         if (f.id === 'cut' && Array.isArray(metaData.sharedCuts) && metaData.sharedCuts.length > 1) {
             const cuts = metaData.sharedCuts;
             const currentCut = String(metaData.cut || '');
             ctx.font = "bold 14px sans-serif";
-            ctx.fillStyle = getStyle('--text-color');
+            ctx.fillStyle = getEditInk('text');
             ctx.fillText(currentCut, f.x + 8, f.y + 30);
 
             const otherCuts = cuts.filter(cut => String(cut) !== currentCut);
@@ -145,24 +145,24 @@ function drawMetadata() {
     });
     const lines = (metaData.memo || "").split(/\r?\n/);
     const memoH = isMemoExpanded ? Math.max(87, lines.length * 18 + 15) : 105;
-    ctx.strokeStyle = (selectedMeta === "memo") ? getStyle('--select-border') : getStyle('--border-color');
+    ctx.strokeStyle = (selectedMeta === "memo") ? getStyle('--select-border') : getEditInk('border');
     ctx.lineWidth = (selectedMeta === "memo") ? 2 : 1;
     ctx.strokeRect(25, 60, baseWidth - 50, memoH);
-    ctx.fillStyle = getStyle('--grid-medium'); ctx.font = "bold 9px sans-serif";
+    ctx.fillStyle = getEditInk('medium'); ctx.font = "bold 9px sans-serif";
     ctx.fillText("DIRECTION (指示)", 30, 71);
-    ctx.fillStyle = getStyle('--text-color'); ctx.font = "bold 13px sans-serif";
+    ctx.fillStyle = getEditInk('text'); ctx.font = "bold 13px sans-serif";
     const maxDraw = isMemoExpanded ? lines.length : Math.min(5, lines.length);
     for (let i = 0; i < maxDraw; i++) if (memoScrollLine + i < lines.length) ctx.fillText(lines[memoScrollLine + i], 33, 90 + i * 18);
     if (!isMemoExpanded && lines.length > 5) {
-        ctx.fillStyle = getStyle('--border-color'); ctx.fillRect(baseWidth - 35, 62, 8, memoH - 4);
-        ctx.fillStyle = getStyle('--grid-thick'); ctx.fillRect(baseWidth - 35, 62 + (memoH - 24) * (memoScrollLine / Math.max(1, lines.length - 5)), 8, 15);
+        ctx.fillStyle = getEditInk('border'); ctx.fillRect(baseWidth - 35, 62, 8, memoH - 4);
+        ctx.fillStyle = getEditInk('thick'); ctx.fillRect(baseWidth - 35, 62 + (memoH - 24) * (memoScrollLine / Math.max(1, lines.length - 5)), 8, 15);
         ctx.fillStyle = getStyle('--select-bg'); ctx.fillRect(baseWidth - 85, 60 + memoH - 22, 55, 18);
-        ctx.fillStyle = getStyle('--text-color'); ctx.textAlign = "center"; ctx.font = "10px sans-serif";
+        ctx.fillStyle = getEditInk('text'); ctx.textAlign = "center"; ctx.font = "10px sans-serif";
         ctx.fillText("▼ 展開", baseWidth - 57, 60 + memoH - 9);
         ctx.textAlign = "left";
     } else if (isMemoExpanded && lines.length > 4) {
         ctx.fillStyle = getStyle('--select-bg'); ctx.fillRect(baseWidth - 85, 60 + memoH - 22, 55, 18);
-        ctx.fillStyle = getStyle('--text-color'); ctx.textAlign = "center"; ctx.font = "10px sans-serif";
+        ctx.fillStyle = getEditInk('text'); ctx.textAlign = "center"; ctx.font = "10px sans-serif";
         ctx.fillText("▲ 閉じる", baseWidth - 57, 60 + memoH - 9);
         ctx.textAlign = "left";
     }
@@ -172,13 +172,13 @@ function drawColumnHeader() {
     const ctx = hCtx;
     ctx.fillStyle = getStyle('--bg-color'); ctx.fillRect(0, 0, baseWidth, colHeaderH);
     sections.forEach(s => {
-        ctx.strokeStyle = getStyle('--border-color'); ctx.lineWidth = 2;
+        ctx.strokeStyle = getEditInk('border'); ctx.lineWidth = 2;
         ctx.strokeRect(s.x, colHeaderH - 50, s.cols * s.cw, 25);
-        ctx.textAlign = "center"; ctx.fillStyle = getStyle('--text-color'); ctx.font = "bold 10px sans-serif";
+        ctx.textAlign = "center"; ctx.fillStyle = getEditInk('text'); ctx.font = "bold 10px sans-serif";
         ctx.fillText(s.type, s.x + (s.cols * s.cw) / 2, colHeaderH - 35);
         for (let i = 0; i < s.cols; i++) {
             ctx.fillText(s.chars[i], s.x + s.cw * i + s.cw / 2, colHeaderH - 8);
-            ctx.strokeStyle = getStyle('--grid-thin'); ctx.lineWidth = (i === 0) ? 2 : 1;
+            ctx.strokeStyle = getEditInk('thin'); ctx.lineWidth = (i === 0) ? 2 : 1;
             ctx.beginPath(); ctx.moveTo(s.x + i * s.cw, colHeaderH - 25); ctx.lineTo(s.x + i * s.cw, colHeaderH); ctx.stroke();
         }
         ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s.x + s.cols * s.cw, colHeaderH - 25); ctx.lineTo(s.x + s.cols * s.cw, colHeaderH); ctx.stroke();
@@ -206,7 +206,7 @@ function drawColumnHeader() {
             ctx.beginPath(); ctx.moveTo(nearest.x + 12, snappedY); ctx.lineTo(nearest.x, snappedY); ctx.stroke();
             ctx.fillStyle = getStyle('--select-bg'); ctx.strokeStyle = getStyle('--book-line'); ctx.lineWidth = 2;
             ctx.beginPath(); ctx.roundRect(nearest.x + 12, snappedY - 9, 40, 18, 4); ctx.fill(); ctx.stroke();
-            ctx.fillStyle = getStyle('--text-color'); ctx.textAlign = "center"; ctx.font = "bold 10px sans-serif";
+            ctx.fillStyle = getEditInk('text'); ctx.textAlign = "center"; ctx.font = "bold 10px sans-serif";
             ctx.fillText(draggingBook.text, nearest.x + 32, snappedY + 4);
         }
     }
@@ -236,7 +236,7 @@ function drawGrid() {
     }
     sections.forEach(s => {
         for (let i = 0; i <= s.cols; i++) {
-            ctx.strokeStyle = (i === 0 || i === s.cols) ? getStyle('--border-color') : getStyle('--grid-thin');
+            ctx.strokeStyle = (i === 0 || i === s.cols) ? getEditInk('border') : getEditInk('thin');
             ctx.lineWidth = (i === 0 || i === s.cols) ? 2 : 1;
             ctx.beginPath(); ctx.moveTo(s.x + i * s.cw, 0); ctx.lineTo(s.x + i * s.cw, numFrames * rowHeight); ctx.stroke();
         }
@@ -247,7 +247,7 @@ function drawGrid() {
         // フレーム番号表示はカット相対（先頭マージンより前は負数）
         const cutFrame = i - _headM;
         if (cutFrame !== 0 && cutFrame % 2 === 0) {
-            ctx.fillStyle = getStyle('--grid-medium');
+            ctx.fillStyle = getEditInk('medium');
             ctx.font = "8px monospace";
             ctx.textAlign = "left";
             let dispText;
@@ -256,9 +256,9 @@ function drawGrid() {
             ctx.fillText(dispText, lastActX + 3, y - 3);
         }
         // グリッド線：太線/中線/細線
-        if (cutFrame === 0 || cutFrame % 24 === 0) { ctx.lineWidth = 2; ctx.strokeStyle = getStyle('--grid-thick'); }
-        else if (cutFrame % 6 === 0) { ctx.lineWidth = 1; ctx.strokeStyle = getStyle('--grid-medium'); }
-        else { ctx.lineWidth = 0.5; ctx.strokeStyle = getStyle('--grid-thin'); }
+        if (cutFrame === 0 || cutFrame % 24 === 0) { ctx.lineWidth = 2; ctx.strokeStyle = getEditInk('thick'); }
+        else if (cutFrame % 6 === 0) { ctx.lineWidth = 1; ctx.strokeStyle = getEditInk('medium'); }
+        else { ctx.lineWidth = 0.5; ctx.strokeStyle = getEditInk('thin'); }
         ctx.beginPath(); ctx.moveTo(actStartX, y); ctx.lineTo(actEndX, y); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(cellStartX, y); ctx.lineTo(camEndX, y); ctx.stroke();
     }
@@ -343,7 +343,7 @@ function drawGrid() {
                             const startColorId = (startCell && startCell.fontColorId) || 0;
                             const lineColor = (startColorId > 0 && typeof getFontColorById === 'function')
                                 ? getFontColorById(startColorId)
-                                : getStyle('--text-color');
+                                : getEditInk('text');
                             ctx.strokeStyle = lineColor;
                             ctx.lineWidth = 1.5;
                             if (startVal === "×") {
@@ -454,7 +454,7 @@ function drawGrid() {
         const colorId = data.fontColorId || 0;
         const useColor = (colorId > 0 && typeof getFontColorById === 'function')
             ? getFontColorById(colorId)
-            : getStyle('--text-color');
+            : getEditInk('text');
         ctx.fillStyle = useColor;
         if (data.value === "●") { ctx.beginPath(); ctx.arc(tx, ty - 4, 2.5, 0, Math.PI * 2); ctx.fill(); }
         else if (data.value === "―") {
@@ -469,7 +469,7 @@ function drawGrid() {
             ctx.save();
             const prevAlpha = ctx.globalAlpha;
             ctx.globalAlpha = prevAlpha * 0.5;
-            ctx.strokeStyle = (colorId > 0) ? useColor : getStyle('--text-color');
+            ctx.strokeStyle = (colorId > 0) ? useColor : getEditInk('text');
             ctx.lineWidth = 1.0;
             if (dispOpt === "OPTION_KEYFRAME") { ctx.beginPath(); ctx.arc(tx, ty - 4, 10, 0, Math.PI * 2); ctx.stroke(); }
             else if (dispOpt === "OPTION_REFERENCEFRAME") {
@@ -572,13 +572,13 @@ function drawSelectionMoveGhost(ctx, minLOrX, minF) {
         const ty = y + 16;
         const value = item.data.text ? `${item.data.value}/${item.data.text}` : item.data.value;
         ctx.globalAlpha = 0.8;
-        ctx.fillStyle = getStyle('--text-color');
+        ctx.fillStyle = getEditInk('text');
         if (value === "●") {
             ctx.beginPath();
             ctx.arc(tx, ty - 4, 2.5, 0, Math.PI * 2);
             ctx.fill();
         } else if (value === "―") {
-            ctx.strokeStyle = getStyle('--text-color');
+            ctx.strokeStyle = getEditInk('text');
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.moveTo(tx - 6, ty - 4);
@@ -626,7 +626,7 @@ function drawMotionInstructionMark(ctx, tx, startF, endF, mark, cellInfo) {
     const useColor = (colorId > 0 && typeof getFontColorById === 'function')
         ? getFontColorById(colorId)
         : null;
-    ctx.fillStyle = useColor || getStyle('--text-color');
+    ctx.fillStyle = useColor || getEditInk('text');
     ctx.font = (displayLabel === 'ブレ' || displayLabel === 'rep')
         ? "bold 12px sans-serif"
         : "bold 10px sans-serif";

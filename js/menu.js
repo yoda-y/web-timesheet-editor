@@ -645,7 +645,8 @@ function openColorSettings() {
     buildFontColorPalette();
     const setColorIfHex = (id, val) => {
         const el = document.getElementById(id);
-        if (val === 'auto') el.value = el.dataset.autoDefault || '#666666';
+        if (!el) return;
+        if (val === 'auto' || !val) el.value = el.dataset.autoDefault || '#666666';
         else el.value = val;
     };
     // 自動値の参考値（CSSから読む）
@@ -654,11 +655,13 @@ function openColorSettings() {
     document.getElementById('colorSelectBorder').dataset.autoDefault = getStyle('--select-border') || '#4285f4';
     document.getElementById('colorHandwritingSelect').dataset.autoDefault = DEFAULT_SETTINGS.colors.handwritingSelect;
     document.getElementById('colorHandwritingTransform').dataset.autoDefault = DEFAULT_SETTINGS.colors.handwritingTransform;
+    document.getElementById('colorEditLightMain').dataset.autoDefault = (typeof EDIT_LIGHT_MAIN_DEFAULT !== 'undefined') ? EDIT_LIGHT_MAIN_DEFAULT : '#2f5f3a';
     setColorIfHex('colorBookLine', settings.colors.bookLine);
     setColorIfHex('colorCellIcon', settings.colors.cellIcon);
     setColorIfHex('colorSelectBorder', settings.colors.selectBorder);
     setColorIfHex('colorHandwritingSelect', settings.colors.handwritingSelect);
     setColorIfHex('colorHandwritingTransform', settings.colors.handwritingTransform);
+    setColorIfHex('colorEditLightMain', settings.colors.editLightMain);
     document.getElementById('settings-color-modal').style.display = 'flex';
 }
 function closeColorSettings() {
@@ -677,7 +680,8 @@ document.getElementById('settings-color-ok').addEventListener('click', () => {
         colorCellIcon: 'cellIcon',
         colorSelectBorder: 'selectBorder',
         colorHandwritingSelect: 'handwritingSelect',
-        colorHandwritingTransform: 'handwritingTransform'
+        colorHandwritingTransform: 'handwritingTransform',
+        colorEditLightMain: 'editLightMain'
     };
     for (const id in map) {
         const el = document.getElementById(id);
@@ -702,7 +706,8 @@ document.querySelectorAll('.color-auto-btn').forEach(btn => {
             cellIcon: 'colorCellIcon',
             selectBorder: 'colorSelectBorder',
             handwritingSelect: 'colorHandwritingSelect',
-            handwritingTransform: 'colorHandwritingTransform'
+            handwritingTransform: 'colorHandwritingTransform',
+            editLightMain: 'colorEditLightMain'
         };
         const el = document.getElementById(idMap[target]);
         if (el) {

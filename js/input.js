@@ -137,7 +137,7 @@ function focusCell() {
     if (cellData[key]) disp = cellData[key].text ? `${cellData[key].value}/${cellData[key].text}` : cellData[key].value;
     cellInput.value = disp;
     cellInputDirty = false;
-    cellInput.style.color = (disp === "●") ? "transparent" : getStyle('--text-color');
+    cellInput.style.color = (disp === "●") ? "transparent" : getEditInk('text');
     drawGrid();
     updateCellInputOptionIndicator();
     setTimeout(() => {
