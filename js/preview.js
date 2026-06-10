@@ -140,10 +140,12 @@ function enablePreviewMode() {
     previewContainer = document.getElementById('preview-container');
     if (!previewContainer) return;
 
-    // ズーム/パンリセット
-    previewZoom = getSavedPreviewZoom();
-    previewPanX = 0;
-    previewPanY = 0;
+    // ズーム/パンは前回表示時の状態を維持する。
+    // 毎回 pan を 0,0 にリセットすると Edit→Preview 切替のたびに左寄りになるため、
+    // リセットは行わず、初回 (リロード直後) のみ下の fitPreviewToContainer で全体表示。
+    if (previewFirstShowAfterLoad) {
+        previewZoom = getSavedPreviewZoom();
+    }
 
     // 表示切替
     previewContainer.style.display = 'flex';

@@ -6,6 +6,19 @@
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
 
+## v0.21.3 (2026-06-10)
+
+### 修正
+- 外部テンプレのBBoxエディタで保存しても Preview が更新されない問題
+  - IDB保存後に適用中の currentExternalTemplate (メモリ状態) を再読込して同期
+- Edit → Preview 切替時にシートが左寄りになる問題
+  - 切替のたびに pan を 0,0 にリセットしていたのをやめ、前回表示状態を維持
+  - リロード直後の初回のみ全体fit (従来通り)
+- 外部テンプレで明示 fontSize 指定時に自動fit上限がかかる問題 (title 3.5mm上限など)
+  - title 等の単一行 meta/staff/custom: BBox高さ/幅による縮小をスキップ
+  - memo/custom複数行 (drawMultilineInBBox): 高さによる自動縮小をスキップ
+  - fontSize 未指定時は従来通り自動fit
+
 ## v0.21.2 (2026-06-10)
 
 ### 修正 (camera inline)
