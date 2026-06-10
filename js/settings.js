@@ -210,17 +210,33 @@ function applySettingsToDOM() {
     // CSS 変数の上書き
     const root = document.documentElement;
     const overrides = settings.colors;
-    if (overrides.bookLine !== 'auto') root.style.setProperty('--book-line', overrides.bookLine);
-    else root.style.removeProperty('--book-line');
-    if (overrides.cellIcon !== 'auto') root.style.setProperty('--cell-icon-color', overrides.cellIcon);
-    else root.style.removeProperty('--cell-icon-color');
-    if (overrides.selectBorder !== 'auto') root.style.setProperty('--select-border', overrides.selectBorder);
-    else root.style.removeProperty('--select-border');
+    // 'auto' の場合: ライトモードではメインカラー (editLightMain) 基準の再計算色、
+    // ダークモードでは従来のテーマ既定値 (CSS変数のまま)
+    const applyColorVar = (key, varName) => {
+        const v = overrides[key];
+        if (v !== 'auto') { root.style.setProperty(varName, v); return; }
+        const derived = (typeof getAutoRelatedColor === 'function') ? getAutoRelatedColor(key) : null;
+        if (derived) root.style.setProperty(varName, derived);
+        else root.style.removeProperty(varName);
+    };
+    applyColorVar('bookLine', '--book-line');
+    applyColorVar('cellIcon', '--cell-icon-color');
+    applyColorVar('selectBorder', '--select-border');
     if (overrides.gridThick !== 'auto') root.style.setProperty('--grid-thick', overrides.gridThick);
     else root.style.removeProperty('--grid-thick');
 
     if (typeof refreshDrawingSizeControls === 'function') refreshDrawingSizeControls();
     if (typeof refreshPreviewToolButtons === 'function') refreshPreviewToolButtons();
+}
+
+// システムテーマ変更時も auto 色 (ライト=メイン基準 / ダーク=既定) を再解決する
+if (window.matchMedia) {
+    try {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            if (typeof settings !== 'undefined' && settings.colors) applySettingsToDOM();
+            if (typeof drawAll === 'function') drawAll();
+        });
+    } catch (e) { /* older browsers */ }
 }
 
 function applyThemeSetting() {

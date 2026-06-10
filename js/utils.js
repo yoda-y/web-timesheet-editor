@@ -54,6 +54,60 @@ function getEditInk(role) {
     }
 }
 
+// #rrggbb → [h(0-360), s(0-100), l(0-100)]
+function hexToHsl(hex) {
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || '').trim());
+    if (!m) return null;
+    const r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    if (max === min) return [0, 0, l * 100];
+    const d = max - min;
+    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    let h;
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0));
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    return [h * 60, s * 100, l * 100];
+}
+
+// h(0-360), s(0-100), l(0-100) → #rrggbb
+function hslToHex(h, s, l) {
+    h = ((h % 360) + 360) % 360; s = Math.max(0, Math.min(100, s)) / 100; l = Math.max(0, Math.min(100, l)) / 100;
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const mm = l - c / 2;
+    let r = 0, g = 0, b = 0;
+    if (h < 60) { r = c; g = x; }
+    else if (h < 120) { r = x; g = c; }
+    else if (h < 180) { g = c; b = x; }
+    else if (h < 240) { g = x; b = c; }
+    else if (h < 300) { r = x; b = c; }
+    else { r = c; b = x; }
+    const toHex = (v) => Math.round((v + mm) * 255).toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+// 色設定の「自動」: ライトモード時はメインカラー (editLightMain) を基準に関連色を再計算する。
+// ダークモード時は null を返し、従来のテーマ既定値 (CSS変数) を使う。
+// key: 'bookLine' | 'cellIcon' | 'selectBorder'
+// mainHex 省略時は現在の設定値 (getEditLightMainColor) を使用
+function getAutoRelatedColor(key, mainHex) {
+    if (typeof isLightThemeActive === 'function' && !isLightThemeActive()) return null;
+    const hsl = hexToHsl(mainHex || getEditLightMainColor());
+    if (!hsl) return null;
+    const [h, s, l] = hsl;
+    switch (key) {
+        // BOOK線: メインの補色寄りアクセント (罫線と区別しつつ調和)
+        case 'bookLine':     return hslToHex(h + 180, Math.min(80, s + 20), Math.max(40, Math.min(62, l + 12)));
+        // CELLアイコン: メイン同系のやや濃色 (ライト背景で視認できる濃さ)
+        case 'cellIcon':     return hslToHex(h, Math.min(75, s + 5), Math.max(30, Math.min(55, l - 5)));
+        // 選択枠: メインから135°回した強調色
+        case 'selectBorder': return hslToHex(h + 135, 75, 50);
+        default: return null;
+    }
+}
+
 // セルデータキー "TYPE-COL-FRAME" を分解（FRAMEが負数でも正しく動作）
 function parseCellKey(k) {
     const a = k.indexOf('-');

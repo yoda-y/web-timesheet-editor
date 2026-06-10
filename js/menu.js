@@ -641,27 +641,58 @@ function buildFontColorPalette() {
         wrap.appendChild(item);
     });
 }
+// 色設定キー ↔ input id の対応
+const COLOR_SETTING_IDS = {
+    editLightMain: 'colorEditLightMain',
+    bookLine: 'colorBookLine',
+    cellIcon: 'colorCellIcon',
+    selectBorder: 'colorSelectBorder',
+    handwritingSelect: 'colorHandwritingSelect',
+    handwritingTransform: 'colorHandwritingTransform'
+};
+
+// 「自動」時に表示する色を計算する。
+// 関連色 (bookLine/cellIcon/selectBorder) はライトモードならメインカラー基準で再計算。
+// mainHex はモーダル内ピッカーの現在値 (確定前の値を反映するため)。
+function computeColorAutoDisplay(target) {
+    if (target === 'editLightMain') {
+        return (typeof EDIT_LIGHT_MAIN_DEFAULT !== 'undefined') ? EDIT_LIGHT_MAIN_DEFAULT : '#2f5f3a';
+    }
+    if (target === 'handwritingSelect') return DEFAULT_SETTINGS.colors.handwritingSelect;
+    if (target === 'handwritingTransform') return DEFAULT_SETTINGS.colors.handwritingTransform;
+    const mainEl = document.getElementById('colorEditLightMain');
+    const derived = (typeof getAutoRelatedColor === 'function')
+        ? getAutoRelatedColor(target, mainEl ? mainEl.value : null) : null;
+    if (derived) return derived;
+    // ダークモード等: テーマ既定値 (CSS変数)
+    const varMap = { bookLine: '--book-line', cellIcon: '--cell-icon-color', selectBorder: '--select-border' };
+    return getStyle(varMap[target]) || '#666666';
+}
+
+// 自動状態の項目の表示値を更新 (メインカラー変更時の再計算反映)
+function refreshColorAutoDisplays() {
+    for (const key in COLOR_SETTING_IDS) {
+        if (key === 'editLightMain') continue;
+        const el = document.getElementById(COLOR_SETTING_IDS[key]);
+        if (el && el.dataset.isAuto === '1') el.value = computeColorAutoDisplay(key);
+    }
+}
+
 function openColorSettings() {
     buildFontColorPalette();
-    const setColorIfHex = (id, val) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        if (val === 'auto' || !val) el.value = el.dataset.autoDefault || '#666666';
-        else el.value = val;
-    };
-    // 自動値の参考値（CSSから読む）
-    document.getElementById('colorBookLine').dataset.autoDefault = getStyle('--book-line') || '#4dd0e1';
-    document.getElementById('colorCellIcon').dataset.autoDefault = getStyle('--cell-icon-color') || '#fff59d';
-    document.getElementById('colorSelectBorder').dataset.autoDefault = getStyle('--select-border') || '#4285f4';
-    document.getElementById('colorHandwritingSelect').dataset.autoDefault = DEFAULT_SETTINGS.colors.handwritingSelect;
-    document.getElementById('colorHandwritingTransform').dataset.autoDefault = DEFAULT_SETTINGS.colors.handwritingTransform;
-    document.getElementById('colorEditLightMain').dataset.autoDefault = (typeof EDIT_LIGHT_MAIN_DEFAULT !== 'undefined') ? EDIT_LIGHT_MAIN_DEFAULT : '#2f5f3a';
-    setColorIfHex('colorBookLine', settings.colors.bookLine);
-    setColorIfHex('colorCellIcon', settings.colors.cellIcon);
-    setColorIfHex('colorSelectBorder', settings.colors.selectBorder);
-    setColorIfHex('colorHandwritingSelect', settings.colors.handwritingSelect);
-    setColorIfHex('colorHandwritingTransform', settings.colors.handwritingTransform);
-    setColorIfHex('colorEditLightMain', settings.colors.editLightMain);
+    // メイン色を先に設定 (関連色の自動表示計算が参照するため)
+    const mainEl = document.getElementById('colorEditLightMain');
+    const mainStored = settings.colors.editLightMain;
+    mainEl.dataset.isAuto = (mainStored === 'auto' || !mainStored) ? '1' : '0';
+    mainEl.value = (mainEl.dataset.isAuto === '1') ? computeColorAutoDisplay('editLightMain') : mainStored;
+    for (const key in COLOR_SETTING_IDS) {
+        if (key === 'editLightMain') continue;
+        const el = document.getElementById(COLOR_SETTING_IDS[key]);
+        if (!el) continue;
+        const stored = settings.colors[key];
+        el.dataset.isAuto = (stored === 'auto' || !stored) ? '1' : '0';
+        el.value = (el.dataset.isAuto === '1') ? computeColorAutoDisplay(key) : stored;
+    }
     document.getElementById('settings-color-modal').style.display = 'flex';
 }
 function closeColorSettings() {
@@ -674,21 +705,12 @@ document.getElementById('settings-color-ok').addEventListener('click', () => {
         settings.colors.fontColors[idx] = cp.value;
     });
     refreshQuickPalette();
-    // 単色項目（auto判定: 値が dataset.autoDefault と一致したら auto に戻す）
-    const map = {
-        colorBookLine: 'bookLine',
-        colorCellIcon: 'cellIcon',
-        colorSelectBorder: 'selectBorder',
-        colorHandwritingSelect: 'handwritingSelect',
-        colorHandwritingTransform: 'handwritingTransform',
-        colorEditLightMain: 'editLightMain'
-    };
-    for (const id in map) {
-        const el = document.getElementById(id);
-        const v = el.value;
-        const isAuto = el.dataset.userChanged !== '1';
-        settings.colors[map[id]] = isAuto ? 'auto' : v;
-        delete el.dataset.userChanged;
+    // 単色項目: dataset.isAuto による三状態管理。
+    // 触っていない項目は開いた時の状態 (custom色はcustomのまま) を維持する
+    for (const key in COLOR_SETTING_IDS) {
+        const el = document.getElementById(COLOR_SETTING_IDS[key]);
+        if (!el) continue;
+        settings.colors[key] = (el.dataset.isAuto === '1') ? 'auto' : el.value;
     }
     saveSettings();
     closeColorSettings();
@@ -696,24 +718,21 @@ document.getElementById('settings-color-ok').addEventListener('click', () => {
     if (typeof drawHandwritingUi === 'function') drawHandwritingUi();
 });
 document.querySelectorAll('#settings-color-modal input[type=color]').forEach(el => {
-    el.addEventListener('input', () => { el.dataset.userChanged = '1'; });
+    el.addEventListener('input', () => {
+        el.dataset.isAuto = '0';
+        // メイン色変更時は自動状態の関連色表示を再計算
+        if (el.id === 'colorEditLightMain') refreshColorAutoDisplays();
+    });
 });
 document.querySelectorAll('.color-auto-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        const target = btn.dataset.target;
-        const idMap = {
-            bookLine: 'colorBookLine',
-            cellIcon: 'colorCellIcon',
-            selectBorder: 'colorSelectBorder',
-            handwritingSelect: 'colorHandwritingSelect',
-            handwritingTransform: 'colorHandwritingTransform',
-            editLightMain: 'colorEditLightMain'
-        };
-        const el = document.getElementById(idMap[target]);
+        // 設定は書き換えず (確定はOK時)、自動状態 + 再計算した表示値にする
+        const el = document.getElementById(COLOR_SETTING_IDS[btn.dataset.target]);
         if (el) {
-            settings.colors[target] = 'auto';
-            el.value = el.dataset.autoDefault || '#666666';
-            delete el.dataset.userChanged;
+            el.dataset.isAuto = '1';
+            el.value = computeColorAutoDisplay(btn.dataset.target);
+            // メイン色を自動に戻した場合も関連色の自動表示を再計算
+            if (btn.dataset.target === 'editLightMain') refreshColorAutoDisplays();
         }
     });
 });
