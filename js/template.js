@@ -466,6 +466,8 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
 
         const isMultiline = MULTILINE_TAGS.includes(tagKey) ||
             (tagDef.category === 'custom' && bbox.type === 'multiline');
+        // BBox に明示 fontSize がある場合は自動fit (BBox高さ/幅による縮小) を行わずそのまま使う
+        const isExplicitFont = (typeof bbox.fontSize === 'number' && bbox.fontSize > 0);
         const userMm = (() => {
             if (typeof bbox.fontSize === 'number' && bbox.fontSize > 0) return bbox.fontSize;
             if (tagKey === 'direction') return (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.direction) || 3.5;
@@ -479,13 +481,15 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
                     minCols: 1, maxCols: 6, drawDividers: true
                 });
             } else {
-                drawMultilineInBBox(ctx, value, rect, scale, userMm);
+                drawMultilineInBBox(ctx, value, rect, scale, userMm, isExplicitFont);
             }
         } else {
             const padding = Math.max(1, rect.w * 0.04);
             const usableW = Math.max(1, rect.w - padding * 2);
             const usableH = Math.max(1, rect.h - padding * 2);
-            const fontSize = fitTextSize(ctx, value, usableW, usableH, Math.min(usableH * 0.85, userMm * scale));
+            const fontSize = isExplicitFont
+                ? (userMm * scale)
+                : fitTextSize(ctx, value, usableW, usableH, Math.min(usableH * 0.85, userMm * scale));
             ctx.font = `${fontSize}px sans-serif`;
             ctx.fillText(value, rect.x + rect.w / 2, rect.y + rect.h / 2);
         }
@@ -639,15 +643,18 @@ function drawWrappedMultiColumnText(ctx, text, rect, scale, fontMm, options) {
     }
 }
 
-function drawMultilineInBBox(ctx, text, rect, scale, fontMm) {
+function drawMultilineInBBox(ctx, text, rect, scale, fontMm, isExplicitFont) {
     const padding = Math.max(2, rect.w * 0.02);
     const usableW = Math.max(1, rect.w - padding * 2);
     const usableH = Math.max(1, rect.h - padding * 2);
 
     const rawLines = text.split(/\r?\n/);
     // フォントサイズ: 呼び出し元から fontMm を受け取る（未指定時は metaValue or 4.5mm）
+    // BBox に明示 fontSize がある場合 (isExplicitFont) は高さによる自動縮小を行わない
     const userMm = fontMm != null ? fontMm : ((typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.metaValue) || 4.5);
-    const baseFontSize = Math.min(userMm * scale, usableH / Math.max(rawLines.length, 1) * 0.7);
+    const baseFontSize = isExplicitFont
+        ? (userMm * scale)
+        : Math.min(userMm * scale, usableH / Math.max(rawLines.length, 1) * 0.7);
     ctx.font = `${baseFontSize}px sans-serif`;
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
