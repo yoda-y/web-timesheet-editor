@@ -491,9 +491,17 @@ function drawCameraBlocks(ctx) {
             ctx.beginPath(); ctx.moveTo(lineX, startY); ctx.lineTo(lineX, endY); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(lineX - 1, startY); ctx.lineTo(lineX + 8, startY); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(lineX - 1, endY); ctx.lineTo(lineX + 8, endY); ctx.stroke();
-            ctx.font = "bold 10px sans-serif"; ctx.textAlign = "left";
-            let dispText = tgts ? `[${tgts}] ${pKind}` : pKind;
-            ctx.fillText(dispText, lineX + 6, startY + 12);
+            // kind名/target名はブロック開始位置の上に積む (inline入力値との重なり回避)
+            ctx.textAlign = "left";
+            const labelLines = [pKind, ...(block.targetLayers || []).map(l => `[${l}]`)];
+            const labelLineH = 11;
+            let firstBaseline = startY - 5 - (labelLines.length - 1) * labelLineH;
+            // 画面上端に近く上に描けない場合は欄上端付近へクランプ
+            if (firstBaseline < 12) firstBaseline = 12;
+            labelLines.forEach((txt, i) => {
+                ctx.font = i === 0 ? "bold 10px sans-serif" : "9px sans-serif";
+                ctx.fillText(txt, lineX + 6, firstBaseline + i * labelLineH);
+            });
             ctx.lineWidth = 1.5;
         } else if (pKind === "FI" || pKind === "WI") {
             if (selectedCameraId === block.id) { ctx.strokeStyle = getStyle('--select-border'); ctx.lineWidth = 2; ctx.strokeRect(tx, startY, drawWidth, endY - startY); ctx.strokeStyle = isRed ? 'red' : getStyle('--text-color'); ctx.lineWidth = 1.5; }

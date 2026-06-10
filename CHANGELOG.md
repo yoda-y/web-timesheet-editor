@@ -6,6 +6,18 @@
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
 
+## v0.21.2 (2026-06-10)
+
+### 修正 (camera inline)
+- inline内の中割記号 (●/○/×) を ACTION/CELL 欄と同じサイズ・描画ルールに統一
+  - 標準A3 Preview / 外部テンプレで fillText 直描きだったものをシェイプ描画に
+  - SYMBOL_TICK系→●/○、SYMBOL_NULL系→×、SYMBOL_HYPHEN/STOP/START は非表示
+- inline ON時に kind名/target名が入力値と重なる問題を修正
+  - Edit/標準A3/外部テンプレともブロック開始位置の上に kind名+target名を積む
+  - 上に描けない場合は欄/BBox上端付近へクランプ
+- 外部テンプレで inline の kind名が描画されない問題を修正
+  - BBox clip 内で描いていたラベルを clip 解除後の遅延描画に変更
+
 ## v0.21.1 (2026-06-09)
 
 ### 修正

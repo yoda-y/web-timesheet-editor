@@ -1697,6 +1697,45 @@ function drawTimelineCellText(ctx, text, x, y, colW, rowH, fontSize) {
     ctx.restore();
 }
 
+// camera inline 用: SYMBOL値を表示記号へ正規化 (非表示なら null)
+// SYMBOL_HYPHEN は継続マーカー、SYMBOL_STOP/START は repeat マーカーなので inline 内では非表示
+function normalizeInlineCameraValue(value) {
+    if (value === 'SYMBOL_HYPHEN' || value === 'SYMBOL_STOP' || value === 'SYMBOL_START') return null;
+    if (value === 'SYMBOL_TICK_1' || value === 'SYMBOL_TICK') return '●';
+    if (value === 'SYMBOL_TICK_2') return '○';
+    if (value === 'SYMBOL_NULL_CELL' || value === 'SYMBOL_NULL') return '×';
+    return value;
+}
+
+// camera inline 用: 中割記号 (●/○/×) を ACTION/CELL 欄と同じルールで描画
+// 描画したら true、記号でなければ false (テキストは呼び出し側で描画)
+function drawInlineCameraSymbol(ctx, value, cx, cy, cellH, scale, fontSize, color) {
+    if (value !== '●' && value !== '○' && value !== '×') return false;
+    ctx.save();
+    ctx.fillStyle = color || '#000';
+    ctx.strokeStyle = color || '#000';
+    if (value === '●') {
+        const dotR = Math.max(scale * 0.35, cellH * (2.5 / 18));
+        ctx.beginPath();
+        ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (value === '○') {
+        ctx.lineWidth = Math.max(1.0, scale * 0.25);
+        ctx.beginPath();
+        ctx.arc(cx, cy, fontSize * 0.25, 0, Math.PI * 2);
+        ctx.stroke();
+    } else {
+        const s = fontSize * 0.3;
+        ctx.lineWidth = Math.max(1.5, scale * 0.3) * 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - s, cy - s); ctx.lineTo(cx + s, cy + s);
+        ctx.moveTo(cx + s, cy - s); ctx.lineTo(cx - s, cy + s);
+        ctx.stroke();
+    }
+    ctx.restore();
+    return true;
+}
+
 // 棒線・波線描画
 function getTemplateCustomRepeatAt(colType, colIndex, frame) {
     if (typeof customRepeats === 'undefined' || !Array.isArray(customRepeats)) return null;
@@ -2297,6 +2336,9 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
         ctx.rect(tx - colW, clipStartY, drawWidth + colW * 2, clipEndY - clipStartY);
         ctx.clip();
 
+        // inline の kind/target ラベルは clip 解除後に描画する (上方向への逃がしが切れないように)
+        let deferredInlineLabel = null;
+
         const vt = block.valueType;
         const pKind = (block.kind || '').split(' (')[0].trim();
         const tgts = (block.targetLayers || []).join(',');
@@ -2401,6 +2443,7 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
         // インライン編集（Rolling等）の場合 - 黒線で描画、入力データも表示
         if (block.isInlineEdit) {
             const lineX = tx + m(1);
+            const valueX = lineX + m(2.5);
             ctx.strokeStyle = TEMPLATE.TEXT_COLOR;
             ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             ctx.lineWidth = TEMPLATE.LINE_MEDIUM;
@@ -2411,24 +2454,43 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             if (block.endFrame < endFrame) {
                 ctx.beginPath(); ctx.moveTo(lineX - m(0.5), endY); ctx.lineTo(lineX + m(2), endY); ctx.stroke();
             }
-            // kind名、Target名を0frの上（ブロック開始位置の上）に表示
-            ctx.font = `bold ${m(2) * getFontScale('camera')}px sans-serif`;
+            // kind名/Target名はブロック開始位置の上に積む (clip解除後に描画して切れ防止)
+            if (block.startFrame >= absoluteStart) {
+                const kindFontPx = m(2) * getFontScale('camera');
+                const tgtFontPx2 = m(1.8) * getFontScale('camera');
+                const labelLineH = m(2.5);
+                deferredInlineLabel = () => {
+                    ctx.save();
+                    ctx.textAlign = 'left';
+                    ctx.fillStyle = TEMPLATE.TEXT_COLOR;
+                    const lines = [pKind, ...tgtList.map(l => `[${l}]`)];
+                    let bottomY = startY - m(0.8);
+                    // 上に置けない場合は欄上端付近へクランプ (欄上はm(6)まで許容)
+                    const labelTop = bottomY - (lines.length - 1) * labelLineH - kindFontPx;
+                    const topLimit = Math.max(m(1), y - m(6));
+                    if (labelTop < topLimit) bottomY += (topLimit - labelTop);
+                    let curY = bottomY - (lines.length - 1) * labelLineH;
+                    lines.forEach((txt, i) => {
+                        ctx.font = i === 0 ? `bold ${kindFontPx}px sans-serif` : `${tgtFontPx2}px sans-serif`;
+                        ctx.fillText(txt, valueX, curY);
+                        curY += labelLineH;
+                    });
+                    ctx.restore();
+                };
+            }
+            // インライン入力データを描画（中割記号はACTION/CELL欄と同じルール）
+            const valueFontPx = m(2) * getFontScale('camera');
+            ctx.font = `bold ${valueFontPx}px sans-serif`;
             ctx.textAlign = 'left';
-            let labelY = labelAnchorY;
-            // 対象レイヤーを下から積み上げで描画
-            tgtList.slice().reverse().forEach(l => {
-                ctx.fillText(`[${l}]`, lineX + m(2.5), labelY);
-                labelY -= m(2.5);
-            });
-            ctx.fillText(pKind, lineX + m(2.5), labelY);
-            // インライン入力データを描画（太字）
-            ctx.font = `bold ${m(2) * getFontScale('camera')}px sans-serif`;
             for (let f = sF; f <= eF; f++) {
                 const key = `CAMERA-${block.colIndex}-${f}`;
                 const data = cellData[key];
-                if (data && data.value && !['SYMBOL_HYPHEN', 'SYMBOL_TICK', 'SYMBOL_NULL'].includes(data.value)) {
-                    const fy = y + (f - absoluteStart) * rowH + rowH / 2 + m(0.8);
-                    ctx.fillText(data.value, lineX + m(2.5), fy);
+                if (!data || !data.value) continue;
+                const v = normalizeInlineCameraValue(data.value);
+                if (v == null) continue;
+                const fyMid = y + (f - absoluteStart) * rowH + rowH / 2;
+                if (!drawInlineCameraSymbol(ctx, v, valueX + valueFontPx * 0.5, fyMid, rowH, scale, valueFontPx, TEMPLATE.TEXT_COLOR)) {
+                    ctx.fillText(v, valueX, fyMid + m(0.8));
                 }
             }
             ctx.lineWidth = TEMPLATE.LINE_THIN;
@@ -2813,6 +2875,7 @@ function drawCameraBlocksTemplate(ctx, x, y, colW, colCount, rowH, absoluteStart
             }
         }
         ctx.restore();
+        if (deferredInlineLabel) deferredInlineLabel();
     });
 }
 
@@ -4259,6 +4322,9 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
         ctx.rect(rect.x - overflowAllowance, rect.y, rect.w + overflowAllowance * 2, rect.h);
         ctx.clip();
 
+        // inline の kind/target ラベルは clip 解除後に描画する (BBox上端より上へ逃がしても切れないように)
+        let deferredInlineLabel = null;
+
         const vt = block.valueType;
         const pKind = (block.kind || '').split(' (')[0].trim();
         const tgtList = block.targetLayers || [];
@@ -4285,22 +4351,31 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
                 ctx.stroke();
             }
             // kind/targets は範囲開始の少し上に逃がす (横書き、補助情報として軽く)
+            // clipで切れないよう restore 後に描画する
             ctx.lineWidth = lineW;
             if (isPrimary) {
-                ctx.save();
-                ctx.fillStyle = '#000';
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'bottom';
-                // kind (上段)
-                ctx.font = `bold ${Math.max(baseFontPx, m(2))}px ${fontFamily}`;
-                const tgtY = trueStartY - m(0.5);
-                ctx.fillText(pKind, valueX, tgtY - (tgtList.length ? tgtFontPx * 1.25 : 0));
-                // targets (kind の下、小さめ)
-                if (tgtList.length) {
-                    ctx.font = `${tgtFontPx}px ${fontFamily}`;
-                    ctx.fillText(tgtList.map(l => `[${l}]`).join(' '), valueX, tgtY);
-                }
-                ctx.restore();
+                deferredInlineLabel = () => {
+                    ctx.save();
+                    ctx.fillStyle = '#000';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'bottom';
+                    const kindFontPx = Math.max(baseFontPx, m(2));
+                    const tgtLineH = tgtList.length ? tgtFontPx * 1.25 : 0;
+                    let tgtY = trueStartY - m(0.5);
+                    // BBox外へ出すぎる場合はクランプ (上方向は overflowAllowance まで許容)
+                    const labelTop = tgtY - tgtLineH - kindFontPx;
+                    const topLimit = Math.max(m(0.5), rect.y - overflowAllowance);
+                    if (labelTop < topLimit) tgtY += (topLimit - labelTop);
+                    // kind (上段)
+                    ctx.font = `bold ${kindFontPx}px ${fontFamily}`;
+                    ctx.fillText(pKind, valueX, tgtY - tgtLineH);
+                    // targets (kind の下、小さめ)
+                    if (tgtList.length) {
+                        ctx.font = `${tgtFontPx}px ${fontFamily}`;
+                        ctx.fillText(tgtList.map(l => `[${l}]`).join(' '), valueX, tgtY);
+                    }
+                    ctx.restore();
+                };
             }
             // セル毎の入力値 + option mark
             const valueFontPx = Math.max(baseFontPx, m(2));
@@ -4313,16 +4388,9 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
                 const key = `CAMERA-${block.colIndex}-${f}`;
                 const data = cellData[key];
                 if (!data || !data.value) continue;
-                // raw SYMBOL値の防御
-                // - SYMBOL_HYPHEN: インライン内では非表示 (継続マーカー扱い)
-                // - SYMBOL_STOP/START: repeatマーカーなので非表示
-                // - SYMBOL_TICK_1/_2 / SYMBOL_NULL_CELL: ●/○/× に正規化して表示
-                let displayValue = data.value;
-                if (displayValue === 'SYMBOL_HYPHEN') continue;
-                if (displayValue === 'SYMBOL_STOP' || displayValue === 'SYMBOL_START') continue;
-                if (displayValue === 'SYMBOL_TICK_1' || displayValue === 'SYMBOL_TICK') displayValue = '●';
-                else if (displayValue === 'SYMBOL_TICK_2') displayValue = '○';
-                else if (displayValue === 'SYMBOL_NULL_CELL' || displayValue === 'SYMBOL_NULL') displayValue = '×';
+                // raw SYMBOL値の防御 (HYPHEN/STOP/START は非表示、TICK系は●/○/×へ正規化)
+                const displayValue = normalizeInlineCameraValue(data.value);
+                if (displayValue == null) continue;
                 const fy = rect.y + (f - frameStart) * cellH + cellH / 2;
                 // option mark を先 (50%透過、KEYFRAME円 / REFERENCEFRAME三角)
                 if (data.option && !['●','○','×','―'].includes(displayValue)) {
@@ -4348,7 +4416,10 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
                     }
                     ctx.restore();
                 }
-                ctx.fillText(displayValue, valueX, fy);
+                // 中割記号 (●/○/×) は ACTION/CELL 欄と同じルールで描画
+                if (!drawInlineCameraSymbol(ctx, displayValue, valueX + valueFontPx * 0.5, fy, cellH, scale, valueFontPx, '#000')) {
+                    ctx.fillText(displayValue, valueX, fy);
+                }
             }
             ctx.restore();
         } else if (pKind === 'IrisIN' || pKind === 'IrisOut') {
@@ -4757,6 +4828,7 @@ function drawCameraInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd
         }
 
         ctx.restore();
+        if (deferredInlineLabel) deferredInlineLabel();
     });
 }
 
