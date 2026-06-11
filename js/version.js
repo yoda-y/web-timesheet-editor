@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.22.0';
+const APP_VERSION = '0.23.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,21 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.23.0 (2026-06-11)
+
+### 追加 (BBoxサイズ同期)
+- BBoxエディタにカテゴリ別サイズ同期グループを追加 (BBOX_SYNC_GROUPS)
+  - action1/2, cell1/2, sound1/2, camera1/2, currentPage/totalPages
+  - 同期対象: w / h / fontSize / frames / columns (fontSizeの「自動」も同期)
+  - x / y / enabled / locked / type / prefix / label は同期しない (場所は個別)
+- checkbox「同種タグとサイズ同期」(bbox.syncSize、デフォルトON)
+  - 変更時のみ伝播。エディタを開いただけでは bboxes を変更しない
+  - OFF のタグには伝播しない (ON 同士のみ)
+  - プロパティ入力 / キャンバスドラッグリサイズ / Alt+矢印キー全てで同期
+- ボタン「同種BBoxにサイズを反映」(syncSize 状態に関わらず今すぐコピー)
+- Undo 1回で元タグ + 同期先タグの変更がまとめて戻る
+- 従来の frames/columns/fontSize の timeline ペア同期はこの仕組みに統合
 
 ## v0.22.0 (2026-06-10)
 

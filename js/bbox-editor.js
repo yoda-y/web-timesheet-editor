@@ -277,16 +277,27 @@ function renderBBoxEditorPropsForm() {
     } else { framesRow.style.display = 'none'; colsRow.style.display = 'none'; }
     // ロック
     document.getElementById('bbox-prop-locked').checked = !!bbox.locked;
+    // サイズ同期 (同期グループを持つタグのみ表示)
+    const syncRow = document.getElementById('bbox-prop-sync-row');
+    if (syncRow) {
+        const peers = (window.externalTemplate && typeof window.externalTemplate.getSyncPeers === 'function')
+            ? window.externalTemplate.getSyncPeers(bboxEditorSelectedTag) : [];
+        if (peers.length) {
+            syncRow.style.display = '';
+            document.getElementById('bbox-prop-sync-size').checked = bbox.syncSize !== false;
+        } else {
+            syncRow.style.display = 'none';
+        }
+    }
 }
 window.renderBBoxEditorPropsForm = renderBBoxEditorPropsForm;
 
-// タイムラインペア定義
-const TIMELINE_PAIRS = {
-    'action1': 'action2', 'action2': 'action1',
-    'sound1':  'sound2',  'sound2':  'sound1',
-    'cell1':   'cell2',   'cell2':   'cell1',
-    'camera1': 'camera2', 'camera2': 'camera1'
-};
+// サイズ同期 (external-template.js の BBOX_SYNC_GROUPS ベース)
+// 変更元タグのサイズ系 (w/h/fontSize/frames/columns) を同グループの peer へ伝播
+function syncBBoxSizeFromTag(tagKey, force) {
+    if (!bboxEditorTemplate || !window.externalTemplate || typeof window.externalTemplate.applySizeSync !== 'function') return;
+    window.externalTemplate.applySizeSync(bboxEditorTemplate.bboxes, tagKey, force);
+}
 
 // プロパティ変更時の反映
 function bindBBoxPropInput(id, key, parser) {
@@ -298,12 +309,9 @@ function bindBBoxPropInput(id, key, parser) {
         let v = parser ? parser(e.target.value) : e.target.value;
         if (typeof v === 'number' && isNaN(v)) return;
         bbox[key] = v;
-        // frames/columns はペアタグにも同値を反映
-        if ((key === 'frames' || key === 'columns') && TIMELINE_PAIRS[bboxEditorSelectedTag]) {
-            const pair = TIMELINE_PAIRS[bboxEditorSelectedTag];
-            if (bboxEditorTemplate.bboxes[pair]) {
-                bboxEditorTemplate.bboxes[pair][key] = v;
-            }
+        // サイズ系は同グループタグへ伝播 (syncSize ON 同士のみ)
+        if (['w', 'h', 'frames', 'columns'].includes(key)) {
+            syncBBoxSizeFromTag(bboxEditorSelectedTag);
         }
         if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
     });
@@ -358,6 +366,7 @@ window.addEventListener('keydown', (e) => {
         else if (e.key === 'ArrowUp') bbox.h -= dy;
         bbox.w = Math.max(0.005, Math.min(1.05, bbox.w));
         bbox.h = Math.max(0.005, Math.min(1.05, bbox.h));
+        syncBBoxSizeFromTag(bboxEditorSelectedTag);
     } else {
         // 位置移動
         if (e.key === 'ArrowRight') bbox.x += dx;
@@ -422,15 +431,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (v > 20.0) v = 20.0;
             bbox.fontSize = v;
         }
-        // timeline 1/2 ペアに fontSize を同期
-        const pair = TIMELINE_PAIRS[bboxEditorSelectedTag];
-        if (pair && bboxEditorTemplate.bboxes[pair]) {
-            if (raw === '') {
-                delete bboxEditorTemplate.bboxes[pair].fontSize;
-            } else {
-                bboxEditorTemplate.bboxes[pair].fontSize = bbox.fontSize;
-            }
-        }
+        // fontSize (未設定=自動含む) を同グループタグへ伝播 (syncSize ON 同士のみ)
+        syncBBoxSizeFromTag(bboxEditorSelectedTag);
         if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
     });
 
@@ -501,5 +503,29 @@ document.addEventListener('DOMContentLoaded', () => {
         bboxEditorTemplate.bboxes[bboxEditorSelectedTag].locked = e.target.checked;
         if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
     });
+
+    // サイズ同期チェックボックス (ON/OFF切替自体はサイズを変えない)
+    const syncCheck = document.getElementById('bbox-prop-sync-size');
+    if (syncCheck) {
+        syncCheck.addEventListener('change', (e) => {
+            if (!bboxEditorSelectedTag || !bboxEditorTemplate) return;
+            const bbox = bboxEditorTemplate.bboxes[bboxEditorSelectedTag];
+            if (!bbox) return;
+            pushBBoxHistory();
+            if (e.target.checked) delete bbox.syncSize;  // undefined = ON (デフォルト)
+            else bbox.syncSize = false;
+        });
+    }
+
+    // 「同種BBoxにサイズを反映」: syncSize 状態に関わらず今すぐ peer へコピー
+    const syncApplyBtn = document.getElementById('bbox-prop-sync-apply');
+    if (syncApplyBtn) {
+        syncApplyBtn.addEventListener('click', () => {
+            if (!bboxEditorSelectedTag || !bboxEditorTemplate) return;
+            pushBBoxHistory();
+            syncBBoxSizeFromTag(bboxEditorSelectedTag, true);
+            if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
+        });
+    }
 
 });

@@ -440,6 +440,8 @@ function setupBBoxCanvasEvents() {
                 nh = Math.min(nh, 1 - ny);
 
                 bbox.x = nx; bbox.y = ny; bbox.w = nw; bbox.h = nh;
+                // 同グループタグへサイズ伝播 (syncSize ON 同士のみ、peer もリアルタイム追従)
+                if (typeof syncBBoxSizeFromTag === 'function') syncBBoxSizeFromTag(selectedTag);
                 window.bboxEditorRenderCanvas();
             }
         } else {
