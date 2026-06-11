@@ -191,7 +191,7 @@ function drawRepMark(ctx, sec, colIndex, chunkStartFrame, endF, firstVal, firstD
         : ((firstData && firstData.fontColorId) || 0);
     const useColor = (colorId > 0 && typeof getFontColorById === 'function')
         ? getFontColorById(colorId)
-        : getEditInk('text');
+        : getStyle('--text-color');
     ctx.fillStyle = useColor;
     ctx.font = "bold 12px sans-serif";
     ctx.textAlign = "center";
@@ -232,7 +232,7 @@ function drawVerticalRepeatLabel(ctx, tx, y, label) {
     const bgH = chars.length * lineH + 6;
     ctx.fillStyle = getStyle('--bg-color');
     ctx.fillRect(tx - 7, y + 4, 14, bgH);
-    ctx.fillStyle = getEditInk('text');
+    ctx.fillStyle = getStyle('--text-color');
     ctx.font = "bold 10px sans-serif";
     ctx.textAlign = "center";
     chars.forEach((c, i) => ctx.fillText(c, tx, y + 15 + i * lineH));
@@ -285,7 +285,7 @@ function drawHoldMark(ctx, sec, colIndex) {
     if (drawTxtFrame >= targetFrames) return;
     ctx.fillStyle = getStyle('--bg-color');
     ctx.fillRect(tx - 6, frameY(drawTxtFrame) + 5, 12, 25);
-    ctx.fillStyle = getEditInk('text');
+    ctx.fillStyle = getStyle('--text-color');
     ctx.font = "bold 10px sans-serif";
     ctx.textAlign = "center";
     "止\nメ".split('\n').forEach((c, i) => ctx.fillText(c, tx, frameY(drawTxtFrame) + 14 + i * 11));

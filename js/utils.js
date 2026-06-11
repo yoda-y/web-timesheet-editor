@@ -24,9 +24,28 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// UIメインカラー (アクセント)。'auto' はテーマ既定 (CSS --accent-color と同値)
+function getUiAccentColor() {
+    const v = (typeof settings !== 'undefined' && settings.colors && settings.colors.uiAccent) || 'auto';
+    if (v !== 'auto' && v) return v;
+    return isLightThemeActive() ? '#1a73e8' : '#4285f4';
+}
+
+// UIメインカラーがカスタム指定かどうか (auto派生の基準にするか判定)
+function isUiAccentCustom() {
+    const v = (typeof settings !== 'undefined' && settings.colors && settings.colors.uiAccent) || 'auto';
+    return v !== 'auto' && !!v;
+}
+
 function getEditLightMainColor() {
     const v = (typeof settings !== 'undefined' && settings.colors && settings.colors.editLightMain) || 'auto';
-    return (v === 'auto' || !v) ? EDIT_LIGHT_MAIN_DEFAULT : v;
+    if (v !== 'auto' && v) return v;
+    // auto: UIメインカラーがカスタムならそこから派生 (同系の濃いインク色)、既定なら従来の緑
+    if (typeof isUiAccentCustom === 'function' && isUiAccentCustom()) {
+        const hsl = hexToHsl(getUiAccentColor());
+        if (hsl) return hslToHex(hsl[0], Math.min(45, hsl[1]), 30);
+    }
+    return EDIT_LIGHT_MAIN_DEFAULT;
 }
 
 // Editキャンバス用インク色取得。
@@ -88,22 +107,36 @@ function hslToHex(h, s, l) {
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-// 色設定の「自動」: ライトモード時はメインカラー (editLightMain) を基準に関連色を再計算する。
-// ダークモード時は null を返し、従来のテーマ既定値 (CSS変数) を使う。
-// key: 'bookLine' | 'cellIcon' | 'selectBorder'
-// mainHex 省略時は現在の設定値 (getEditLightMainColor) を使用
+// 色設定の「自動」: メインカラーを基準に関連色を再計算する。
+// 戻り値 null = テーマ既定値 (CSS変数 / TEMPLATE既定) を使う。
+// - bookLine / cellIcon: ライトモードのみ Editライト描画色 (editLightMain) から派生
+// - selectBorder / editLightMain / templateLine / templateBg:
+//   UIメインカラー (uiAccent) がカスタム指定のときのみ派生。auto なら既定
+// mainHex 省略時は現在の設定値を使用 (モーダルのプレビュー用に上書き可)
 function getAutoRelatedColor(key, mainHex) {
-    if (typeof isLightThemeActive === 'function' && !isLightThemeActive()) return null;
-    const hsl = hexToHsl(mainHex || getEditLightMainColor());
+    // Editライト描画色ベースの関連色 (紙面系、ライトモード限定)
+    if (key === 'bookLine' || key === 'cellIcon') {
+        if (typeof isLightThemeActive === 'function' && !isLightThemeActive()) return null;
+        const hsl = hexToHsl(mainHex || getEditLightMainColor());
+        if (!hsl) return null;
+        const [h, s, l] = hsl;
+        if (key === 'bookLine') return hslToHex(h + 180, Math.min(80, s + 20), Math.max(40, Math.min(62, l + 12)));
+        return hslToHex(h, Math.min(75, s + 5), Math.max(30, Math.min(55, l - 5)));
+    }
+    // UIメインカラーベースの派生 (uiAccent がカスタムのときのみ)
+    if (!mainHex && !isUiAccentCustom()) return null;
+    const hsl = hexToHsl(mainHex || getUiAccentColor());
     if (!hsl) return null;
     const [h, s, l] = hsl;
     switch (key) {
-        // BOOK線: メインの補色寄りアクセント (罫線と区別しつつ調和)
-        case 'bookLine':     return hslToHex(h + 180, Math.min(80, s + 20), Math.max(40, Math.min(62, l + 12)));
-        // CELLアイコン: メイン同系のやや濃色 (ライト背景で視認できる濃さ)
-        case 'cellIcon':     return hslToHex(h, Math.min(75, s + 5), Math.max(30, Math.min(55, l - 5)));
-        // 選択枠: メインから135°回した強調色
-        case 'selectBorder': return hslToHex(h + 135, 75, 50);
+        // キャンバス選択枠: アクセントそのまま
+        case 'selectBorder':  return hslToHex(h, s, l);
+        // Editライト描画色: 同系の濃いインク色
+        case 'editLightMain': return hslToHex(h, Math.min(45, s), 30);
+        // 標準テンプレ罫線・固定ラベル: 同系の中明度 (#7cb342 相当の濃さ)
+        case 'templateLine':  return hslToHex(h, Math.min(55, Math.max(30, s)), 48);
+        // 標準テンプレ背景: ごく淡い同系色 (紙のトーン)
+        case 'templateBg':    return hslToHex(h, Math.min(30, s), 97);
         default: return null;
     }
 }

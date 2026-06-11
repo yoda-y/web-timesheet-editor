@@ -12,6 +12,8 @@
   --highlight: #222222;
   --select-bg: rgba(66, 133, 244, 0.2); --select-border: #4285f4;
   --range-bg: rgba(66, 133, 244, 0.15);
+  /* UIアクセント色 (タブ/確定ボタン等)。--select-border はキャンバス選択枠専用 */
+  --accent-color: #4285f4;
 }
 @media (prefers-color-scheme: light) {
   :root {
@@ -27,6 +29,7 @@
     --highlight: #e6e6e6;
     --select-bg: rgba(26, 115, 232, 0.2); --select-border: #1a73e8;
     --range-bg: rgba(26, 115, 232, 0.1);
+    --accent-color: #1a73e8;
   }
 }
 
@@ -41,6 +44,7 @@
   --highlight: #222222;
   --select-bg: rgba(66, 133, 244, 0.2); --select-border: #4285f4;
   --range-bg: rgba(66, 133, 244, 0.15);
+  --accent-color: #4285f4;
 }
 
 :root[data-theme="light"] {
@@ -54,6 +58,7 @@
   --highlight: #e6e6e6;
   --select-bg: rgba(26, 115, 232, 0.2); --select-border: #1a73e8;
   --range-bg: rgba(26, 115, 232, 0.1);
+  --accent-color: #1a73e8;
 }
 
 body { background-color: var(--bg-color); color: var(--text-color); font-family: sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; -webkit-user-select: none; user-select: none; }
@@ -88,8 +93,8 @@ button:hover { background: var(--border-color); }
 .mode-tab:hover { background: var(--border-color); color: var(--text-color); }
 .mode-tab.active {
   background: var(--bg-color);
-  color: var(--select-border);
-  border-bottom: 2px solid var(--select-border);
+  color: var(--accent-color);
+  border-bottom: 2px solid var(--accent-color);
   margin-bottom: -1px;
 }
 .mode-tabs-spacer { flex: 1; }
@@ -124,7 +129,7 @@ button:hover { background: var(--border-color); }
 .document-tab.active {
   background: var(--bg-color);
   color: var(--text-color);
-  border-top-color: var(--select-border);
+  border-top-color: var(--accent-color);
 }
 .document-tab.dragging {
   opacity: 0.55;
@@ -200,7 +205,7 @@ button:hover { background: var(--border-color); }
   color-scheme: light;
 }
 .preview-cut-select:focus {
-  outline: 1px solid var(--select-border);
+  outline: 1px solid var(--accent-color);
   outline-offset: 1px;
 }
 .preview-cut-select option {
@@ -348,7 +353,7 @@ button:hover { background: var(--border-color); }
   background: var(--highlight);
 }
 .page-image-row.selected {
-  border-color: var(--select-border);
+  border-color: var(--accent-color);
   background: var(--select-bg);
 }
 .page-image-thumb {
@@ -401,7 +406,7 @@ button:hover { background: var(--border-color); }
 }
 .sidebar-tool.active {
   background: var(--select-bg);
-  border-color: var(--select-border);
+  border-color: var(--accent-color);
 }
 
 .zoom-row {
@@ -650,7 +655,7 @@ button:hover { background: var(--border-color); }
 .qp-swatch:hover { transform: scale(1.15); }
 .qp-swatch.active {
   border-color: var(--text-color);
-  box-shadow: 0 0 0 2px var(--select-border);
+  box-shadow: 0 0 0 2px var(--accent-color);
 }
 
 /* === ドロップダウンメニュー === */
@@ -808,9 +813,9 @@ button:hover { background: var(--border-color); }
   padding: 6px 16px;
 }
 .settings-actions button.primary {
-  background: var(--select-border);
+  background: var(--accent-color);
   color: #fff;
-  border-color: var(--select-border);
+  border-color: var(--accent-color);
 }
 .settings-actions button.primary:hover {
   filter: brightness(1.08);
@@ -839,7 +844,7 @@ button:hover { background: var(--border-color); }
   border-radius: 6px;
 }
 .settings-hub-card:hover:not(:disabled) {
-  border-color: var(--select-border);
+  border-color: var(--accent-color);
   background: var(--hover-bg);
 }
 .settings-hub-card strong {
@@ -917,7 +922,7 @@ button:hover { background: var(--border-color); }
   text-align: left;
 }
 .image-export-page.selected {
-  border-color: var(--select-border);
+  border-color: var(--accent-color);
   box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.35);
 }
 .image-export-page img {
@@ -1049,14 +1054,14 @@ button:hover { background: var(--border-color); }
 
 .shared-cut-switcher button:hover,
 .shared-cut-switcher button.active {
-  border-color: var(--select-border);
+  border-color: var(--accent-color);
   background: var(--hover-bg);
 }
 
 .shared-cut-switcher button.add {
   margin-top: 6px;
   border-top-color: var(--border-color);
-  color: var(--select-border);
+  color: var(--accent-color);
 }
 #columnHeaderCanvas { position: sticky; top: 0; z-index: 50; background: var(--bg-color); display: block; }
 #gridCanvas { display: block; z-index: 10; }

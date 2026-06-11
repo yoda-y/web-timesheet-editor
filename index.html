@@ -622,9 +622,24 @@
       <span class="settings-hint" style="margin-left:0;" data-i18n="color.fontPaletteHint">編集 → 文字色を変更 で各色を適用できます。リテイク赤などに利用</span>
     </div>
     <div class="settings-row">
+      <label data-i18n="color.uiAccent">UIメインカラー:</label>
+      <input type="color" id="colorUiAccent" style="width:50px; height:28px; padding:0;">
+      <button type="button" class="color-auto-btn" data-target="uiAccent" data-i18n="color.auto" style="font-size:11px; padding:2px 8px;">自動</button>
+    </div>
+    <div class="settings-row">
       <label data-i18n="color.editLightMain">Editライトモード メイン色:</label>
       <input type="color" id="colorEditLightMain" style="width:50px; height:28px; padding:0;">
       <button type="button" class="color-auto-btn" data-target="editLightMain" data-i18n="color.auto" style="font-size:11px; padding:2px 8px;">自動</button>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="color.templateBg">標準テンプレ 背景色:</label>
+      <input type="color" id="colorTemplateBg" style="width:50px; height:28px; padding:0;">
+      <button type="button" class="color-auto-btn" data-target="templateBg" data-i18n="color.auto" style="font-size:11px; padding:2px 8px;">自動</button>
+    </div>
+    <div class="settings-row">
+      <label data-i18n="color.templateLine">標準テンプレ 罫線・ラベル色:</label>
+      <input type="color" id="colorTemplateLine" style="width:50px; height:28px; padding:0;">
+      <button type="button" class="color-auto-btn" data-target="templateLine" data-i18n="color.auto" style="font-size:11px; padding:2px 8px;">自動</button>
     </div>
     <div class="settings-row">
       <label data-i18n="color.bookLine">BOOK線色:</label>
@@ -1109,7 +1124,7 @@
       </div>
     </div>
     <div style="text-align:right;">
-      <button onclick="saveDialogueBlock()" data-i18n="dlg.confirm" style="padding:4px 12px; margin-right:5px; background:var(--select-border); color:#fff; border:none; cursor:pointer; border-radius:3px;">確定</button>
+      <button onclick="saveDialogueBlock()" data-i18n="dlg.confirm" style="padding:4px 12px; margin-right:5px; background:var(--accent-color); color:#fff; border:none; cursor:pointer; border-radius:3px;">確定</button>
       <button onclick="closeDialogueModal()" data-i18n="btn.cancel" style="padding:4px 12px; background:transparent; color:var(--text-color); border:1px solid var(--border-color); cursor:pointer; border-radius:3px;">キャンセル</button>
     </div>
   </div>
@@ -1236,7 +1251,7 @@
         </label>
     </div>
     <div style="text-align:right;">
-      <button onclick="saveCameraBlock()" data-i18n="dlg.confirm" style="padding:4px 12px; margin-right:5px; background:var(--select-border); color:#fff; border:none; cursor:pointer; border-radius:3px;">確定</button>
+      <button onclick="saveCameraBlock()" data-i18n="dlg.confirm" style="padding:4px 12px; margin-right:5px; background:var(--accent-color); color:#fff; border:none; cursor:pointer; border-radius:3px;">確定</button>
       <button onclick="closeCameraModal()" data-i18n="btn.cancel" style="padding:4px 12px; background:transparent; color:var(--text-color); border:1px solid var(--border-color); cursor:pointer; border-radius:3px;">キャンセル</button>
     </div>
   </div>
