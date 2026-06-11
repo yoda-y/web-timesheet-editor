@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.24.0';
+const APP_VERSION = '0.24.1';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,19 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.24.1 (2026-06-11)
+
+### 修正
+- 外部テンプレの画像変更後、Preview「更新」ボタンで反映されない問題
+  - 更新ボタンを reloadCurrentExternalTemplate + 再描画に変更
+    - ライブラリテンプレ: IDB から再取得してメモリ状態 (画像/BBox) を差し替え
+    - 一時/Project由来テンプレ: 現在のオブジェクトから画像/pageImages を再デコード
+    - IDB から削除済みの場合は標準テンプレへ復帰
+  - 外部テンプレ設定モーダルの「保存」時、適用中テンプレならメモリ状態を即同期
+    (テンプレ切替不要で Edit/Preview に反映)
+- 保存後同期を syncAppliedExternalTemplateAfterSave に一本化
+  (BBoxエディタ保存後の同期 (v0.21.3) も同ヘルパー使用に統合)
 
 ## v0.24.0 (2026-06-11)
 

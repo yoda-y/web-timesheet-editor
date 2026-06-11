@@ -346,6 +346,47 @@ window.getCurrentExternalTemplate = getCurrentExternalTemplate;
 window.getCurrentExternalTemplateImage = getCurrentExternalTemplateImage;
 window.setCurrentExternalTemplate = setCurrentExternalTemplate;
 
+// 適用中の外部テンプレ状態を最新化する (Preview「更新」ボタン等から呼ぶ)。
+// - ライブラリテンプレ: IDB から再取得して currentExternalTemplate / 画像を差し替え
+//   (setCurrentExternalTemplate は毎回 IDB を引くため forceReload オプション不要)
+// - 一時テンプレ / Project由来テンプレ: IDB に無いので、現在のオブジェクトから
+//   画像 / pageImages を再デコード (applyProjectExternalTemplate の再適用)
+// 外部テンプレ未適用時は何もしない。BBox 設定はテンプレオブジェクト内なので維持される。
+async function reloadCurrentExternalTemplate() {
+    if (!currentExternalTemplate) return;
+    const isInMemory = currentExternalTemplate === projectLoadedExternalTemplate
+        || currentExternalTemplate.temporary
+        || !currentExternalTemplate.id;
+    if (isInMemory) {
+        await applyProjectExternalTemplate(currentExternalTemplate);
+        return;
+    }
+    const id = currentExternalTemplate.id;
+    await setCurrentExternalTemplate(id);
+    if (!currentExternalTemplate) {
+        // IDB から消えていた場合は標準テンプレへ戻して select と状態を同期
+        if (typeof window.resetToStandardTemplate === 'function') await window.resetToStandardTemplate();
+        return;
+    }
+    if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
+}
+window.reloadCurrentExternalTemplate = reloadCurrentExternalTemplate;
+
+// 外部テンプレを IDB へ保存した直後に呼ぶ: 保存したテンプレが適用中なら
+// メモリ状態を再読込して Edit/Preview へ即反映する (テンプレ切替不要にする)
+async function syncAppliedExternalTemplateAfterSave(id) {
+    if (!id || !currentExternalTemplate) return;
+    if (currentExternalTemplate.id !== id) return;
+    // 一時 / Project由来テンプレは IDB と別管理なので対象外
+    if (currentExternalTemplate === projectLoadedExternalTemplate || currentExternalTemplate.temporary) return;
+    await setCurrentExternalTemplate(id);
+    if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
+    if (typeof currentMode !== 'undefined' && currentMode === 'preview'
+        && typeof updateTemplatePreview === 'function') updateTemplatePreview();
+    if (typeof drawAll === 'function') drawAll();
+}
+window.syncAppliedExternalTemplateAfterSave = syncAppliedExternalTemplateAfterSave;
+
 // Project HTML 由来テンプレのインメモリキャッシュ (再選択時に IDB を引かず復元するため)
 let projectLoadedExternalTemplate = null;
 

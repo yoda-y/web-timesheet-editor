@@ -228,6 +228,10 @@ document.addEventListener('DOMContentLoaded', () => {
             await window.externalTemplate.save(extTplDraft);
             await refreshExternalTemplateList();
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
+            // 保存したテンプレが適用中なら、メモリ状態 (画像含む) を再読込して即反映
+            if (typeof window.syncAppliedExternalTemplateAfterSave === 'function') {
+                await window.syncAppliedExternalTemplateAfterSave(extTplDraft.id);
+            }
             if (typeof showToast === 'function') showToast(_ei18n('extTpl.toast.saved', 'テンプレートを保存しました'), 2000);
         } catch (err) {
             console.error('テンプレート保存エラー:', err);
@@ -250,6 +254,10 @@ document.addEventListener('DOMContentLoaded', () => {
             await window.externalTemplate.save(extTplDraft);
             await refreshExternalTemplateList();
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
+            // 適用中テンプレなら BBox エディタを開く前にメモリ状態も同期
+            if (typeof window.syncAppliedExternalTemplateAfterSave === 'function') {
+                await window.syncAppliedExternalTemplateAfterSave(extTplCurrentId);
+            }
             await window.openBBoxEditor(extTplCurrentId);
         } catch (err) {
             console.error('BBoxエディタを開けません:', err);
