@@ -547,3 +547,17 @@ function refreshPreview() {
         updateTemplatePreview();
     }
 }
+
+// Preview「更新」ボタン: 適用中の外部テンプレ状態 (画像/pageImages/BBox) を
+// 最新化してから再描画する。単なる再描画では IDB 側だけ更新された画像が反映されないため。
+async function refreshPreviewWithTemplateReload() {
+    try {
+        if (typeof window.reloadCurrentExternalTemplate === 'function') {
+            await window.reloadCurrentExternalTemplate();
+        }
+    } catch (e) {
+        console.warn('[Preview] テンプレ再読込に失敗:', e);
+    }
+    updateTemplatePreview();
+}
+window.refreshPreviewWithTemplateReload = refreshPreviewWithTemplateReload;

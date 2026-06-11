@@ -469,16 +469,9 @@ document.addEventListener('DOMContentLoaded', () => {
             await window.externalTemplate.save(toSave);
             console.log('[BBox] 保存成功:', toSave.id, Object.keys(toSave.bboxes).length, 'tags');
             // 適用中テンプレなら currentExternalTemplate (メモリ状態) も IDB から再読込して同期。
-            // これが無いと Preview が古い BBox のまま残る (テンプレ切替で戻すまで反映されない)
-            const curApplied = (typeof window.getCurrentExternalTemplate === 'function')
-                ? window.getCurrentExternalTemplate() : null;
-            if (curApplied && curApplied.id === bboxEditorTemplate.id
-                && typeof window.setCurrentExternalTemplate === 'function') {
-                await window.setCurrentExternalTemplate(bboxEditorTemplate.id);
-                if (typeof updateSidebarTemplateStatus === 'function') updateSidebarTemplateStatus();
-                if (typeof currentMode !== 'undefined' && currentMode === 'preview'
-                    && typeof updateTemplatePreview === 'function') updateTemplatePreview();
-                if (typeof drawAll === 'function') drawAll();
+            // これが無いと Preview が古い BBox のまま残る (共通ヘルパーに一本化)
+            if (typeof window.syncAppliedExternalTemplateAfterSave === 'function') {
+                await window.syncAppliedExternalTemplateAfterSave(bboxEditorTemplate.id);
             }
             if (typeof showToast === 'function') showToast(_bi18n('bbox.alert.savedToast', 'BBox設定を保存しました'), 2000);
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
