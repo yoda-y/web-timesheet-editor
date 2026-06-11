@@ -38,6 +38,53 @@ const EXTERNAL_TEMPLATE_TAGS = {
     logo:         { label: 'ロゴ',          category: 'extra' }
 };
 
+// ─── BBoxサイズ同期グループ ──────────────────────────────────────────────────
+// 同グループ内のタグはサイズ系プロパティ (w/h/fontSize/frames/columns) を同期できる。
+// x/y/enabled/locked/type/prefix/label は同期しない (場所と個性は個別)。
+// custom1〜4 は用途が独立しがちなため既定では入れない。追加タグは配列に1行足すだけ。
+const BBOX_SYNC_GROUPS = [
+    ['action1', 'action2'],
+    ['cell1', 'cell2'],
+    ['sound1', 'sound2'],
+    ['camera1', 'camera2'],
+    ['currentPage', 'totalPages']
+];
+
+const BBOX_SYNC_KEYS = ['w', 'h', 'fontSize', 'frames', 'columns'];
+
+// tag → 同グループの他メンバー配列 (グループ無しなら [])
+function getBBoxSyncPeers(tagKey) {
+    for (const group of BBOX_SYNC_GROUPS) {
+        if (group.includes(tagKey)) return group.filter(t => t !== tagKey);
+    }
+    return [];
+}
+
+// bbox.syncSize は undefined = ON (デフォルトON、旧テンプレ互換)
+function isBBoxSyncEnabled(bbox) {
+    return !bbox || bbox.syncSize !== false;
+}
+
+// 変更元タグのサイズ系プロパティを同グループの peer へ伝播する。
+// - 変更元 / 伝播先の両方が syncSize ON のときのみ伝播
+// - fontSize は「未設定 (undefined=自動)」も同期する (delete で揃える)
+// - 存在しない peer bbox は作らない (開いただけで bboxes を変更しないため)
+// force=true で syncSize 状態を無視して伝播 (「同種BBoxにサイズを反映」ボタン用)
+function applyBBoxSizeSync(bboxes, tagKey, force) {
+    if (!bboxes || !bboxes[tagKey]) return;
+    const src = bboxes[tagKey];
+    if (!force && !isBBoxSyncEnabled(src)) return;
+    getBBoxSyncPeers(tagKey).forEach(peer => {
+        const dst = bboxes[peer];
+        if (!dst) return;
+        if (!force && !isBBoxSyncEnabled(dst)) return;
+        BBOX_SYNC_KEYS.forEach(key => {
+            if (src[key] === undefined) delete dst[key];
+            else dst[key] = src[key];
+        });
+    });
+}
+
 // ─── UUID生成 ────────────────────────────────────────────────────────────────
 
 function generateTemplateId() {
@@ -582,6 +629,10 @@ window.refreshCustomFieldsSidebar = refreshCustomFieldsSidebar;
 
 window.externalTemplate = {
     tags:        EXTERNAL_TEMPLATE_TAGS,
+    syncGroups:  BBOX_SYNC_GROUPS,
+    getSyncPeers: getBBoxSyncPeers,
+    isSyncEnabled: isBBoxSyncEnabled,
+    applySizeSync: applyBBoxSizeSync,
     generateId:  generateTemplateId,
     defaultBBox: createDefaultBBox,
     save:        saveExternalTemplate,
