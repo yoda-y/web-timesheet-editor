@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.23.0';
+const APP_VERSION = '0.24.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,26 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.24.0 (2026-06-11)
+
+### 追加
+- BBoxサイズ同期グループに「尺」(lengthSec / lengthFrame) を追加
+- 標準A3テンプレートの色設定 (settings.colors.templateBg / templateLine)
+  - 背景色と罫線・固定ラベル色 (TEMPLATE_COLOR) を変更可能
+  - 入力値の文字色 (TEXT_COLOR) と fontColorId は対象外で従来通り
+  - 外部テンプレ画像の下地には適用しない (常に白)
+- UIメインカラー (settings.colors.uiAccent → --accent-color)
+  - タブ/確定ボタン/アクティブ表示などUIアクセントを一括変更
+  - 「自動」時は uiAccent を基準に Edit描画色/標準テンプレ色/選択枠色を派生
+
+### 変更 (色の適用範囲整理)
+- メインカラーを「タイムシート構造の描画色」に限定
+  - ユーザー入力内容 (セル値/メタ値/DIRECTION本文/棒線・波線/rep・止メ・ブレ表記/
+    選択移動ゴースト/cellInput) は従来の文字色 (--text-color) に戻した
+  - 枠線/グリッド/ヘッダー/固定ラベルは引き続き editLightMain 適用
+- --select-border をキャンバス選択枠専用に分離
+  - UI部品 (タブ/確定ボタン/カード/スイッチャ等) は --accent-color を使用
 
 ## v0.23.0 (2026-06-11)
 

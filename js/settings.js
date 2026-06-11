@@ -35,7 +35,12 @@ const DEFAULT_SETTINGS = {
         handwritingSelect: '#00a8ff',
         handwritingTransform: '#d81b60',
         // 改善8: ライトモード Editキャンバスの標準インク色 ('auto' = デフォルト)
-        editLightMain: 'auto'
+        editLightMain: 'auto',
+        // UIメインカラー (タブ/確定ボタン等のアクセント。'auto' = テーマ既定)
+        uiAccent: 'auto',
+        // 標準A3テンプレートの描画色 (背景 / 罫線・固定ラベル)。入力値の文字色は対象外
+        templateBg: 'auto',
+        templateLine: 'auto'
     },
     editor: {
         sharedMetaKeys: ['title', 'subTitle', 'scene', 'lengthSec', 'lengthFrame', 'creator']
@@ -222,6 +227,7 @@ function applySettingsToDOM() {
     applyColorVar('bookLine', '--book-line');
     applyColorVar('cellIcon', '--cell-icon-color');
     applyColorVar('selectBorder', '--select-border');
+    applyColorVar('uiAccent', '--accent-color');
     if (overrides.gridThick !== 'auto') root.style.setProperty('--grid-thick', overrides.gridThick);
     else root.style.removeProperty('--grid-thick');
 

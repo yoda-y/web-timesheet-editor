@@ -47,7 +47,8 @@ const BBOX_SYNC_GROUPS = [
     ['cell1', 'cell2'],
     ['sound1', 'sound2'],
     ['camera1', 'camera2'],
-    ['currentPage', 'totalPages']
+    ['currentPage', 'totalPages'],
+    ['lengthSec', 'lengthFrame']
 ];
 
 const BBOX_SYNC_KEYS = ['w', 'h', 'fontSize', 'frames', 'columns'];

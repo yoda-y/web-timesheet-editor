@@ -8,11 +8,13 @@ const TEMPLATE = {
     DPI_PREVIEW: 96,
     DPI_EXPORT: 300,
 
-    // テンプレートカラー（統一、変更可能）
+    // テンプレートカラー（罫線・固定ラベル。settings.colors.templateLine で上書き可能）
     TEMPLATE_COLOR: '#7cb342',
 
     // その他の色
+    // TEXT_COLOR は入力値の文字色 (固定。色設定の対象外、fontColorId が優先)
     TEXT_COLOR: '#333333',
+    // 背景 (settings.colors.templateBg で上書き可能)
     BG_COLOR: '#ffffff',
 
     // マージン (mm)
@@ -136,7 +138,24 @@ function renderExternalTemplateDataOnly(dpi, pageIndex) {
 }
 window.renderExternalTemplateDataOnly = renderExternalTemplateDataOnly;
 
+// 標準テンプレートの構造色 (背景 / 罫線・固定ラベル) を設定から解決する。
+// 'auto' は UIメインカラーがカスタムなら派生色、既定なら従来色。
+// TEXT_COLOR (入力値) は対象外で常に固定。
+const TEMPLATE_COLOR_DEFAULTS = { TEMPLATE_COLOR: '#7cb342', BG_COLOR: '#ffffff' };
+function applyTemplateColorSettings() {
+    const c = (typeof settings !== 'undefined' && settings.colors) || {};
+    const resolve = (key, autoKey, def) => {
+        const v = c[key];
+        if (v && v !== 'auto') return v;
+        const derived = (typeof getAutoRelatedColor === 'function') ? getAutoRelatedColor(autoKey) : null;
+        return derived || def;
+    };
+    TEMPLATE.TEMPLATE_COLOR = resolve('templateLine', 'templateLine', TEMPLATE_COLOR_DEFAULTS.TEMPLATE_COLOR);
+    TEMPLATE.BG_COLOR = resolve('templateBg', 'templateBg', TEMPLATE_COLOR_DEFAULTS.BG_COLOR);
+}
+
 function renderTemplate(dpi, pageIndex = 0) {
+    applyTemplateColorSettings();
     const canvas = createTemplateCanvas(dpi);
     const ctx = canvas.getContext('2d');
     const scale = dpi / 25.4;
@@ -146,7 +165,8 @@ function renderTemplate(dpi, pageIndex = 0) {
     const extTpl = (typeof getCurrentExternalTemplate === 'function') ? getCurrentExternalTemplate() : null;
     const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage(pageIndex) : null;
     if (extTpl && extImg) {
-        ctx.fillStyle = TEMPLATE.BG_COLOR;
+        // 外部テンプレ画像には標準テンプレ色を適用しない (下地は常に白)
+        ctx.fillStyle = TEMPLATE_COLOR_DEFAULTS.BG_COLOR;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         const cw = canvas.width, ch = canvas.height;
         const iw = extImg.naturalWidth || extImg.width;

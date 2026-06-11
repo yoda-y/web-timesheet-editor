@@ -137,7 +137,8 @@ function focusCell() {
     if (cellData[key]) disp = cellData[key].text ? `${cellData[key].value}/${cellData[key].text}` : cellData[key].value;
     cellInput.value = disp;
     cellInputDirty = false;
-    cellInput.style.color = (disp === "●") ? "transparent" : getEditInk('text');
+    // 入力欄はUIテーマ色 ('' で #cellInput の CSS (--text-color) に戻す)
+    cellInput.style.color = (disp === "●") ? "transparent" : '';
     drawGrid();
     updateCellInputOptionIndicator();
     setTimeout(() => {
@@ -559,8 +560,8 @@ function buildVersionSheetList() {
         const isCurrent = (idx === currentSheetIndex);
         row.innerHTML = `
             <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${s.color && s.color !== 0 ? s.color : 'transparent'}; border:1px solid var(--border-color);"></span>
-            <span style="flex:1; font-weight:${isCurrent ? 'bold' : 'normal'}; color:${isCurrent ? 'var(--select-border)' : 'var(--text-color)'};">${versionIndex + 1}. ${s.name}</span>
-            ${isCurrent ? '<span style="font-size:10px; color:var(--select-border); font-weight:bold;">[現在]</span>' : ''}
+            <span style="flex:1; font-weight:${isCurrent ? 'bold' : 'normal'}; color:${isCurrent ? 'var(--accent-color)' : 'var(--text-color)'};">${versionIndex + 1}. ${s.name}</span>
+            ${isCurrent ? '<span style="font-size:10px; color:var(--accent-color); font-weight:bold;">[現在]</span>' : ''}
         `;
         row.addEventListener('click', (e) => {
             e.stopPropagation();

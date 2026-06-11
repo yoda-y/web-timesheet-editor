@@ -641,9 +641,16 @@ function buildFontColorPalette() {
         wrap.appendChild(item);
     });
 }
-// 色設定キー ↔ input id の対応
+// 色設定キー ↔ input id の対応 (順序が初期化順: 派生元 → 派生先)
+const COLOR_SETTING_ORDER = [
+    'uiAccent', 'editLightMain', 'templateBg', 'templateLine',
+    'bookLine', 'cellIcon', 'selectBorder', 'handwritingSelect', 'handwritingTransform'
+];
 const COLOR_SETTING_IDS = {
+    uiAccent: 'colorUiAccent',
     editLightMain: 'colorEditLightMain',
+    templateBg: 'colorTemplateBg',
+    templateLine: 'colorTemplateLine',
     bookLine: 'colorBookLine',
     cellIcon: 'colorCellIcon',
     selectBorder: 'colorSelectBorder',
@@ -652,47 +659,64 @@ const COLOR_SETTING_IDS = {
 };
 
 // 「自動」時に表示する色を計算する。
-// 関連色 (bookLine/cellIcon/selectBorder) はライトモードならメインカラー基準で再計算。
-// mainHex はモーダル内ピッカーの現在値 (確定前の値を反映するため)。
+// UIメインカラー (uiAccent) がモーダル内でカスタムなら、その値を基準に
+// Edit描画色 / 標準テンプレ色 / 選択枠色を派生表示する。
+// bookLine/cellIcon はライトモード時 Edit描画色 (picker現在値) から派生。
 function computeColorAutoDisplay(target) {
-    if (target === 'editLightMain') {
-        return (typeof EDIT_LIGHT_MAIN_DEFAULT !== 'undefined') ? EDIT_LIGHT_MAIN_DEFAULT : '#2f5f3a';
-    }
+    const themeAccent = (typeof isLightThemeActive === 'function' && isLightThemeActive()) ? '#1a73e8' : '#4285f4';
+    if (target === 'uiAccent') return themeAccent;
     if (target === 'handwritingSelect') return DEFAULT_SETTINGS.colors.handwritingSelect;
     if (target === 'handwritingTransform') return DEFAULT_SETTINGS.colors.handwritingTransform;
+
+    const accentEl = document.getElementById('colorUiAccent');
+    const accentIsCustom = accentEl && accentEl.dataset.isAuto !== '1';
+    const accentVal = accentEl ? accentEl.value : null;
+
+    if (target === 'editLightMain') {
+        if (accentIsCustom && typeof getAutoRelatedColor === 'function') {
+            const d = getAutoRelatedColor('editLightMain', accentVal);
+            if (d) return d;
+        }
+        return (typeof EDIT_LIGHT_MAIN_DEFAULT !== 'undefined') ? EDIT_LIGHT_MAIN_DEFAULT : '#2f5f3a';
+    }
+    if (target === 'templateLine' || target === 'templateBg' || target === 'selectBorder') {
+        if (accentIsCustom && typeof getAutoRelatedColor === 'function') {
+            const d = getAutoRelatedColor(target, accentVal);
+            if (d) return d;
+        }
+        if (target === 'templateLine') return '#7cb342';
+        if (target === 'templateBg') return '#ffffff';
+        return themeAccent; // selectBorder のテーマ既定
+    }
+    // bookLine / cellIcon: Edit描画色 (picker現在値) から派生 (ライトモードのみ)
     const mainEl = document.getElementById('colorEditLightMain');
     const derived = (typeof getAutoRelatedColor === 'function')
         ? getAutoRelatedColor(target, mainEl ? mainEl.value : null) : null;
     if (derived) return derived;
-    // ダークモード等: テーマ既定値 (CSS変数)
-    const varMap = { bookLine: '--book-line', cellIcon: '--cell-icon-color', selectBorder: '--select-border' };
+    const varMap = { bookLine: '--book-line', cellIcon: '--cell-icon-color' };
     return getStyle(varMap[target]) || '#666666';
 }
 
 // 自動状態の項目の表示値を更新 (メインカラー変更時の再計算反映)
+// 派生元 (uiAccent → editLightMain → その他) の順に計算
 function refreshColorAutoDisplays() {
-    for (const key in COLOR_SETTING_IDS) {
-        if (key === 'editLightMain') continue;
+    COLOR_SETTING_ORDER.forEach(key => {
+        if (key === 'uiAccent') return; // 派生元自体は更新しない
         const el = document.getElementById(COLOR_SETTING_IDS[key]);
         if (el && el.dataset.isAuto === '1') el.value = computeColorAutoDisplay(key);
-    }
+    });
 }
 
 function openColorSettings() {
     buildFontColorPalette();
-    // メイン色を先に設定 (関連色の自動表示計算が参照するため)
-    const mainEl = document.getElementById('colorEditLightMain');
-    const mainStored = settings.colors.editLightMain;
-    mainEl.dataset.isAuto = (mainStored === 'auto' || !mainStored) ? '1' : '0';
-    mainEl.value = (mainEl.dataset.isAuto === '1') ? computeColorAutoDisplay('editLightMain') : mainStored;
-    for (const key in COLOR_SETTING_IDS) {
-        if (key === 'editLightMain') continue;
+    // 派生元 → 派生先の順で初期化 (auto表示計算が前の picker を参照するため)
+    COLOR_SETTING_ORDER.forEach(key => {
         const el = document.getElementById(COLOR_SETTING_IDS[key]);
-        if (!el) continue;
+        if (!el) return;
         const stored = settings.colors[key];
         el.dataset.isAuto = (stored === 'auto' || !stored) ? '1' : '0';
         el.value = (el.dataset.isAuto === '1') ? computeColorAutoDisplay(key) : stored;
-    }
+    });
     document.getElementById('settings-color-modal').style.display = 'flex';
 }
 function closeColorSettings() {
@@ -716,12 +740,15 @@ document.getElementById('settings-color-ok').addEventListener('click', () => {
     closeColorSettings();
     drawAll();
     if (typeof drawHandwritingUi === 'function') drawHandwritingUi();
+    // 標準テンプレ色の反映 (Preview表示中なら再描画)
+    if (typeof currentMode !== 'undefined' && currentMode === 'preview'
+        && typeof updateTemplatePreview === 'function') updateTemplatePreview();
 });
 document.querySelectorAll('#settings-color-modal input[type=color]').forEach(el => {
     el.addEventListener('input', () => {
         el.dataset.isAuto = '0';
-        // メイン色変更時は自動状態の関連色表示を再計算
-        if (el.id === 'colorEditLightMain') refreshColorAutoDisplays();
+        // 派生元 (UIメインカラー / Edit描画色) の変更時は自動状態の関連色表示を再計算
+        if (el.id === 'colorUiAccent' || el.id === 'colorEditLightMain') refreshColorAutoDisplays();
     });
 });
 document.querySelectorAll('.color-auto-btn').forEach(btn => {
@@ -731,8 +758,8 @@ document.querySelectorAll('.color-auto-btn').forEach(btn => {
         if (el) {
             el.dataset.isAuto = '1';
             el.value = computeColorAutoDisplay(btn.dataset.target);
-            // メイン色を自動に戻した場合も関連色の自動表示を再計算
-            if (btn.dataset.target === 'editLightMain') refreshColorAutoDisplays();
+            // 派生元を自動に戻した場合も関連色の自動表示を再計算
+            if (btn.dataset.target === 'uiAccent' || btn.dataset.target === 'editLightMain') refreshColorAutoDisplays();
         }
     });
 });
@@ -840,7 +867,7 @@ function appendShortcutGroup(tbody, group, ids) {
     const groupTitle = (typeof t === 'function') ? t('group.' + groupKey) : group.title;
     const header = document.createElement('tr');
     header.style.cssText = 'cursor:pointer; background:var(--highlight); border-bottom:1px solid var(--border-color);';
-    header.innerHTML = `<td colspan="3" style="padding:8px 6px; font-weight:bold; color:var(--select-border);">${collapsed ? '▶' : '▼'} ${groupTitle}</td>`;
+    header.innerHTML = `<td colspan="3" style="padding:8px 6px; font-weight:bold; color:var(--accent-color);">${collapsed ? '▶' : '▼'} ${groupTitle}</td>`;
     header.addEventListener('click', () => {
         collapsedShortcutGroups[groupKey] = !collapsedShortcutGroups[groupKey];
         buildShortcutTable();
@@ -1072,7 +1099,7 @@ function buildHelpShortcutTable(filterText) {
         if (matchedIds.length === 0) return;
         const groupTitle = (typeof t === 'function') ? t('group.' + group.titleKey) : group.title;
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td colspan="3" style="padding:8px 4px 4px; font-weight:bold; color:var(--select-border); border-bottom:1px solid var(--border-color);">${groupTitle}</td>`;
+        tr.innerHTML = `<td colspan="3" style="padding:8px 4px 4px; font-weight:bold; color:var(--accent-color); border-bottom:1px solid var(--border-color);">${groupTitle}</td>`;
         tbody.appendChild(tr);
         matchedIds.forEach(aid => {
             const sc = settings.shortcuts[aid] || { main: '', sub: '' };
@@ -1115,7 +1142,7 @@ document.getElementById('help-shortcuts-modal').addEventListener('click', (e) =>
 
 // === ヘルプ: 簡易マニュアル ===
 const HELP_MANUAL_HTML_JA = `
-<h4 style="margin:0 0 8px; color:var(--select-border);">基本操作</h4>
+<h4 style="margin:0 0 8px; color:var(--accent-color);">基本操作</h4>
 <ul>
   <li>セルをクリックして編集。<b>Tab</b>で次のフィールドへ移動、<b>Enter</b>でモーダル確定</li>
   <li><b>↑↓←→</b>でセル移動、<b>Shift+矢印</b>で範囲選択</li>
@@ -1124,14 +1151,14 @@ const HELP_MANUAL_HTML_JA = `
   <li>右クリックでコンテキストメニュー（コマ挿入・リピート展開等）</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">モード</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">モード</h4>
 <ul>
   <li><b>Edit</b>: タイムシート入力（現在のメイン画面）</li>
   <li><b>Preview</b>: 用紙テンプレートへの流し込み、手書き、画像/PSD書き出し</li>
   <li><b>Template</b>: 外部テンプレートと座標定義（今後実装予定）</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">Previewモード</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">Previewモード</h4>
 <ul>
   <li>右サイドバーから用紙テンプレート、描画ツール、読み込み、書き出し、表示倍率を操作できます</li>
   <li>手書きツールは <b>B</b>=ペン、<b>E</b>=消しゴム、<b>M</b>=矩形選択、<b>L</b>=投げ縄、<b>Ctrl+T</b>=変形、<b>H</b>=ハンド</li>
@@ -1141,7 +1168,7 @@ const HELP_MANUAL_HTML_JA = `
   <li>画像書き出しではページ、形式、DPI、ファイル名、保存場所をダイアログで調整できます。PSDはページごとのグループで出力します</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">ファイル形式</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">ファイル形式</h4>
 <ul>
   <li><b>TDTS</b> (.tdts): 東映デジタルタイムシート形式。ACTION/SOUND/CELL/CAMERA + BOOK + 文字色対応</li>
   <li><b>XDTS</b> (.xdts): 標準交換形式。CELL/SOUND/CAMERA のみ対応（ACTION/CELL は統合）</li>
@@ -1149,7 +1176,7 @@ const HELP_MANUAL_HTML_JA = `
   <li>上書き保存 (<b>Ctrl+S</b>) はダイアログなしで保存、別名保存 (<b>Ctrl+Shift+S</b>) は毎回ダイアログ</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">入力色（リテイク赤など）</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">入力色（リテイク赤など）</h4>
 <ul>
   <li>メニューバー右上のクイックパレットで入力色を選択</li>
   <li>選択後に新規入力したセルにその色が適用される</li>
@@ -1157,21 +1184,21 @@ const HELP_MANUAL_HTML_JA = `
   <li>パレットの色そのものは 設定 → 色設定 で変更可能</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">コマ挿入・削除</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">コマ挿入・削除</h4>
 <ul>
   <li>選択範囲のフレーム数だけ <b>挿入</b> または <b>削除</b> される</li>
   <li><b>選択列</b>: その列のみシフト（ブロックは追従）</li>
   <li><b>全レイヤ</b>: 全列＋ブロック＋カット尺もシフト（カッティング作業用）</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">自動保存</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">自動保存</h4>
 <ul>
   <li>編集後3秒アイドルで自動的に localStorage に保存</li>
   <li>ブラウザ閉じる時に未保存変更があれば警告</li>
   <li>次回起動時に「前回セッション復元」確認ダイアログ表示</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">既知の制約</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">既知の制約</h4>
 <ul>
   <li><b>Ctrl+R</b> や <b>Ctrl+Shift+R</b> はブラウザの予約キーで、JSで阻止できない場合があります</li>
   <li>XDTS はBOOK・文字色・カメラ詳細(ストロボ間隔・waypoints等)を保持できません</li>
@@ -1180,7 +1207,7 @@ const HELP_MANUAL_HTML_JA = `
 `;
 
 const HELP_MANUAL_HTML_EN = `
-<h4 style="margin:0 0 8px; color:var(--select-border);">Basic Operation</h4>
+<h4 style="margin:0 0 8px; color:var(--accent-color);">Basic Operation</h4>
 <ul>
   <li>Click a cell to edit. <b>Tab</b> moves to next field, <b>Enter</b> confirms a modal</li>
   <li>Use <b>↑↓←→</b> to move, <b>Shift+arrows</b> to extend selection</li>
@@ -1189,14 +1216,14 @@ const HELP_MANUAL_HTML_EN = `
   <li>Right-click for context menu (insert frame, apply repeat, etc.)</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">Modes</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">Modes</h4>
 <ul>
   <li><b>Edit</b>: Timesheet input (current main view)</li>
   <li><b>Preview</b>: Imprint data on paper templates, draw freehand, and export images/PSD</li>
   <li><b>Template</b>: External templates and coordinate definition (planned)</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">Preview Mode</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">Preview Mode</h4>
 <ul>
   <li>Use the sidebar for paper templates, drawing tools, imports, exports, and zoom controls</li>
   <li>Tools: <b>B</b>=pen, <b>E</b>=eraser, <b>M</b>=rect select, <b>L</b>=lasso, <b>Ctrl+T</b>=transform, <b>H</b>=hand</li>
@@ -1206,7 +1233,7 @@ const HELP_MANUAL_HTML_EN = `
   <li>Image export lets you choose pages, format, DPI, filename, and destination. PSD exports pages as groups</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">File Formats</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">File Formats</h4>
 <ul>
   <li><b>TDTS</b> (.tdts): Toei Digital Time Sheet. ACTION/SOUND/CELL/CAMERA + BOOK + font colors</li>
   <li><b>XDTS</b> (.xdts): Exchange standard. CELL/SOUND/CAMERA only (ACTION/CELL merged)</li>
@@ -1214,7 +1241,7 @@ const HELP_MANUAL_HTML_EN = `
   <li>Save (<b>Ctrl+S</b>) writes silently. Save As (<b>Ctrl+Shift+S</b>) always shows the dialog</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">Input Color (e.g. retake red)</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">Input Color (e.g. retake red)</h4>
 <ul>
   <li>Pick the input color from the quick palette in the top-right of the menu bar</li>
   <li>Newly typed cells will use that color</li>
@@ -1222,21 +1249,21 @@ const HELP_MANUAL_HTML_EN = `
   <li>Palette colors themselves are configurable in Settings → Color Settings</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">Insert / Delete Frames</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">Insert / Delete Frames</h4>
 <ul>
   <li>The selection length determines how many frames are inserted/deleted</li>
   <li><b>Selected cols</b>: Shifts only that column (blocks follow)</li>
   <li><b>All layers</b>: Shifts all columns + blocks + cut length (for cutting workflow)</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">Auto-save</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">Auto-save</h4>
 <ul>
   <li>Saves to localStorage 3 seconds after edits become idle</li>
   <li>Browser shows a warning if you close with unsaved changes</li>
   <li>Next launch offers a "Restore previous session" prompt</li>
 </ul>
 
-<h4 style="margin:14px 0 8px; color:var(--select-border);">Known Limitations</h4>
+<h4 style="margin:14px 0 8px; color:var(--accent-color);">Known Limitations</h4>
 <ul>
   <li><b>Ctrl+R</b> and <b>Ctrl+Shift+R</b> are reserved by browsers and may not be intercepted</li>
   <li>XDTS cannot retain BOOK / font color / camera details (strobo intervals, waypoints, etc.)</li>
@@ -1249,7 +1276,7 @@ function getHelpManualHtmlJA() {
 <style>
   .manual-section { padding:10px 0 12px; border-bottom:1px solid var(--border-color); }
   .manual-section:first-child { padding-top:0; }
-  .manual-section h4 { margin:0 0 8px; color:var(--select-border); font-size:14px; }
+  .manual-section h4 { margin:0 0 8px; color:var(--accent-color); font-size:14px; }
   .manual-section ul { margin:0; padding-left:18px; line-height:1.7; }
   .manual-section li { margin:2px 0; }
 </style>
@@ -1352,7 +1379,7 @@ function getHelpManualHtmlEN() {
 <style>
   .manual-section { padding:10px 0 12px; border-bottom:1px solid var(--border-color); }
   .manual-section:first-child { padding-top:0; }
-  .manual-section h4 { margin:0 0 8px; color:var(--select-border); font-size:14px; }
+  .manual-section h4 { margin:0 0 8px; color:var(--accent-color); font-size:14px; }
   .manual-section ul { margin:0; padding-left:18px; line-height:1.7; }
   .manual-section li { margin:2px 0; }
 </style>
