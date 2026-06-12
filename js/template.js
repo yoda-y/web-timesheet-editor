@@ -3947,7 +3947,7 @@ function getColumnHeaderName(type, ci) {
     return 'S' + (ci + 1);
 }
 
-// カラムヘッダー印字 (Phase A): 各列の0セル目中央に列名を描画
+// カラムヘッダー印字 (Phase A): 各列の -1セル目 (BBox上端の1セル上) 中央に列名を描画
 function drawColumnHeadersInBBox(ctx, type, rect, cellW, cellH, columns, scale, cfg) {
     if (!cfg || !cfg.show) return;
     const m = (mm) => mm * scale;
@@ -3962,7 +3962,7 @@ function drawColumnHeadersInBBox(ctx, type, rect, cellW, cellH, columns, scale, 
         const name = getColumnHeaderName(type, ci);
         if (!name) continue;
         const cx = rect.x + ci * cellW + cellW / 2 + m(cfg.offsetX || 0);
-        const cy = rect.y + cellH / 2 + m(cfg.offsetY || 0);
+        const cy = rect.y - cellH / 2 + m(cfg.offsetY || 0);
         if (cfg.vertical && name.length > 1) {
             const chars = String(name).split('');
             const charH = fontPx * 1.1;

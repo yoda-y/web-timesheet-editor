@@ -16,7 +16,7 @@ const APP_CHANGELOG = `# Changelog
 ### 追加 (columns超過対応 Phase A: カラムヘッダー印字)
 - 外部テンプレのタイムラインBBoxに列名 (ACTION: A/B/C…等) を印字できる機能
   - 取得元: Edit の列名 (sections[].chars、ユーザー編集名対応)。空は自動名 fallback
-  - 描画位置: 各列の0セル目中央。offsetX/Y (mm) / fontSize (mm、空=自動) / 縦書き対応
+  - 描画位置: 各列の-1セル目 (BBox上端の1セル上) 中央。offsetX/Y (mm) / fontSize (mm、空=自動) / 縦書き対応
   - 下地あり/なし + 下地色 + 文字色 (テンプレ画像のヘッダー欄と重なる場合の可読性確保)
 - 設定はテンプレ共通 (外部テンプレ設定モーダル) + timeline BBox単位 override (BBoxエディタ)
   - BBox側は「テンプレ共通設定を使う」チェックで切替
