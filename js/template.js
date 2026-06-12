@@ -3514,9 +3514,14 @@ function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pag
         const frames1Cap = b1.frames || 72;
         const cols1   = b1.columns || 5;
 
+        // カラムヘッダー実効設定 (テンプレ共通 + BBox override)
+        const resolveHeader = (window.externalTemplate && typeof window.externalTemplate.resolveColumnHeader === 'function')
+            ? window.externalTemplate.resolveColumnHeader : null;
+
         // BBox1 で使うフレーム数: 通常は容量分、0ページなら残量と容量の小さい方
         const use1 = isPage0 ? Math.min(totalToRender, frames1Cap) : frames1Cap;
-        drawTimelineBBox(ctx, grp.type, b1, bboxToCanvas, scale, pageOffset, pageOffset + use1, cols1, frames1Cap);
+        drawTimelineBBox(ctx, grp.type, b1, bboxToCanvas, scale, pageOffset, pageOffset + use1, cols1, frames1Cap,
+            resolveHeader ? resolveHeader(extTpl, b1) : null);
 
         // BBox2: 0ページで残量がなければスキップ
         if (b2 && b2.enabled) {
@@ -3524,7 +3529,8 @@ function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pag
             const cols2   = b2.columns || 5;
             const remaining2 = isPage0 ? Math.max(0, totalToRender - use1) : frames2Cap;
             if (remaining2 > 0) {
-                drawTimelineBBox(ctx, grp.type, b2, bboxToCanvas, scale, pageOffset + use1, pageOffset + use1 + remaining2, cols2, frames2Cap);
+                drawTimelineBBox(ctx, grp.type, b2, bboxToCanvas, scale, pageOffset + use1, pageOffset + use1 + remaining2, cols2, frames2Cap,
+                    resolveHeader ? resolveHeader(extTpl, b2) : null);
             }
         }
     });
@@ -3928,7 +3934,60 @@ function drawCutLengthInBBox(ctx, rect, cellH, frameStart, frameEnd, scale) {
     ctx.restore();
 }
 
-function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, frameEnd, columns, bboxCapacity) {
+// カラムヘッダー名の取得 (Edit の sections[].chars。空は自動名 fallback)
+function getColumnHeaderName(type, ci) {
+    const secType = { action: 'ACTION', cell: 'CELL', sound: 'SOUND', camera: 'CAMERA' }[type];
+    const sec = (typeof sections !== 'undefined' && Array.isArray(sections))
+        ? sections.find(s => s.type === secType) : null;
+    const name = sec && Array.isArray(sec.chars) ? sec.chars[ci] : null;
+    if (name) return String(name);
+    if (type === 'action') return String.fromCharCode(65 + (ci % 26));   // A, B, C...
+    if (type === 'cell')   return String.fromCharCode(97 + (ci % 26));   // a, b, c...
+    if (type === 'camera') return 'CAM' + (ci + 1);
+    return 'S' + (ci + 1);
+}
+
+// カラムヘッダー印字 (Phase A): 各列の -1セル目 (BBox上端の1セル上) 中央に列名を描画
+function drawColumnHeadersInBBox(ctx, type, rect, cellW, cellH, columns, scale, cfg) {
+    if (!cfg || !cfg.show) return;
+    const m = (mm) => mm * scale;
+    const fontPx = (typeof cfg.fontSize === 'number' && cfg.fontSize > 0)
+        ? cfg.fontSize * scale
+        : Math.min(cellH * 0.6, m(2.2));
+    ctx.save();
+    ctx.font = `bold ${fontPx}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let ci = 0; ci < columns; ci++) {
+        const name = getColumnHeaderName(type, ci);
+        if (!name) continue;
+        const cx = rect.x + ci * cellW + cellW / 2 + m(cfg.offsetX || 0);
+        const cy = rect.y - cellH / 2 + m(cfg.offsetY || 0);
+        if (cfg.vertical && name.length > 1) {
+            const chars = String(name).split('');
+            const charH = fontPx * 1.1;
+            const totalH = charH * chars.length;
+            if (cfg.bgEnabled) {
+                ctx.fillStyle = cfg.bgColor || '#ffffff';
+                const w = fontPx + m(1);
+                ctx.fillRect(cx - w / 2, cy - totalH / 2 - m(0.4), w, totalH + m(0.8));
+            }
+            ctx.fillStyle = cfg.textColor || '#000000';
+            chars.forEach((c, i) => ctx.fillText(c === 'ー' ? '丨' : c, cx, cy - totalH / 2 + charH * (i + 0.5)));
+        } else {
+            const tw = ctx.measureText(name).width;
+            if (cfg.bgEnabled) {
+                ctx.fillStyle = cfg.bgColor || '#ffffff';
+                ctx.fillRect(cx - tw / 2 - m(0.6), cy - fontPx * 0.65, tw + m(1.2), fontPx * 1.3);
+            }
+            ctx.fillStyle = cfg.textColor || '#000000';
+            ctx.fillText(name, cx, cy);
+        }
+    }
+    ctx.restore();
+}
+
+function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, frameEnd, columns, bboxCapacity, headerCfg) {
     const rect = bboxToCanvas(bbox);
     if (rect.w <= 0 || rect.h <= 0) return;
 
@@ -3987,6 +4046,9 @@ function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, fram
             }
         }
     }
+
+    // カラムヘッダー印字 (セルデータより前面、最後に描画)
+    drawColumnHeadersInBBox(ctx, type, rect, cellW, cellH, columns, scale, headerCfg);
 
     ctx.restore();
 }

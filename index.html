@@ -436,6 +436,23 @@
             <img id="ext-tpl-image-preview" alt="">
             <div id="ext-tpl-image-info" class="ext-tpl-image-info"></div>
           </div>
+          <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:5px; border-top:1px solid var(--border-color); margin-top:10px; padding-top:8px;">
+            <label style="font-weight:bold; font-size:12px;" data-i18n="colHeader.sectionTitle">カラムヘッダー印字 (テンプレ共通)</label>
+            <label style="font-size:11px; display:inline-flex; align-items:center; gap:4px;">
+              <input type="checkbox" id="ext-tpl-ch-show"> <span data-i18n="colHeader.show">カラムヘッダーを印字</span>
+            </label>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:11px;">
+              <label style="display:inline-flex; align-items:center; gap:4px;"><input type="checkbox" id="ext-tpl-ch-bg"> <span data-i18n="colHeader.bgEnabled">下地あり</span></label>
+              <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.bgColor">下地色:</span> <input type="color" id="ext-tpl-ch-bgcolor" style="width:36px; height:22px; padding:0;"></label>
+              <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.textColor">文字色:</span> <input type="color" id="ext-tpl-ch-textcolor" style="width:36px; height:22px; padding:0;"></label>
+              <label style="display:inline-flex; align-items:center; gap:4px;"><input type="checkbox" id="ext-tpl-ch-vertical"> <span data-i18n="colHeader.vertical">縦書き</span></label>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:11px;">
+              <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.offsetX">X補正(mm):</span> <input type="number" id="ext-tpl-ch-offx" step="0.1" style="width:56px;"></label>
+              <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.offsetY">Y補正(mm):</span> <input type="number" id="ext-tpl-ch-offy" step="0.1" style="width:56px;"></label>
+              <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.fontSize">文字サイズ(mm):</span> <input type="number" id="ext-tpl-ch-fontsize" step="0.1" min="0.5" placeholder="自動" style="width:56px;"></label>
+            </div>
+          </div>
           <div class="settings-row" style="margin-top:12px; gap:8px;">
             <button id="ext-tpl-bbox-editor-btn" type="button" data-i18n="extTpl.openBBoxEditor">BBoxエディタを開く</button>
           </div>
@@ -514,6 +531,30 @@
             </label>
             <div style="margin-top:4px;">
               <button type="button" id="bbox-prop-sync-apply" style="font-size:11px; padding:3px 10px;" data-i18n="bbox.prop.syncApply">同種BBoxにサイズを反映</button>
+            </div>
+          </div>
+          <div id="bbox-prop-colheader-row" style="display:none; margin-top:6px; padding-top:6px; border-top:1px solid var(--border-color);">
+            <label style="font-weight:bold; font-size:11px;" data-i18n="colHeader.sectionTitleBBox">カラムヘッダー印字</label>
+            <div style="margin-top:3px;">
+              <label style="font-size:11px; display:inline-flex; align-items:center; gap:4px;">
+                <input type="checkbox" id="bbox-ch-usetpl" checked> <span data-i18n="colHeader.useTemplate">テンプレ共通設定を使う</span>
+              </label>
+            </div>
+            <div id="bbox-ch-fields" style="display:flex; flex-direction:column; gap:4px; margin-top:4px; font-size:11px;">
+              <label style="display:inline-flex; align-items:center; gap:4px;">
+                <input type="checkbox" id="bbox-ch-show"> <span data-i18n="colHeader.show">カラムヘッダーを印字</span>
+              </label>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <label style="display:inline-flex; align-items:center; gap:4px;"><input type="checkbox" id="bbox-ch-bg"> <span data-i18n="colHeader.bgEnabled">下地あり</span></label>
+                <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.bgColor">下地色:</span> <input type="color" id="bbox-ch-bgcolor" style="width:32px; height:20px; padding:0;"></label>
+                <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.textColor">文字色:</span> <input type="color" id="bbox-ch-textcolor" style="width:32px; height:20px; padding:0;"></label>
+                <label style="display:inline-flex; align-items:center; gap:4px;"><input type="checkbox" id="bbox-ch-vertical"> <span data-i18n="colHeader.vertical">縦書き</span></label>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.offsetX">X補正(mm):</span> <input type="number" id="bbox-ch-offx" step="0.1" style="width:52px;"></label>
+                <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.offsetY">Y補正(mm):</span> <input type="number" id="bbox-ch-offy" step="0.1" style="width:52px;"></label>
+                <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.fontSize">文字サイズ(mm):</span> <input type="number" id="bbox-ch-fontsize" step="0.1" min="0.5" placeholder="自動" style="width:52px;"></label>
+              </div>
             </div>
           </div>
         </div>
