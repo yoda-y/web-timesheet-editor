@@ -12,3 +12,6 @@ docs/*
 
 # プロジェクトHTML 仕様書は公開する
 !docs/project_html_spec.md
+
+# columns超過自動分割の設計メモは公開する
+!docs/column_overflow_design.md
