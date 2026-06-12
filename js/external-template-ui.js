@@ -3,19 +3,37 @@
 
 let extTplCurrentId = null;
 let extTplDraft = null;
+// 未保存変更フラグ (名前変更/画像変更で true、保存・選択切替・閉じるで false)
+let extTplDirty = false;
 
 const _ei18n = (key, fallback) => (typeof t === 'function' ? t(key) : null) || fallback;
+
+function setExtTplDirty(d) {
+    extTplDirty = !!d;
+    const badge = document.getElementById('ext-tpl-dirty-badge');
+    if (badge) badge.style.display = extTplDirty ? 'inline-block' : 'none';
+}
+
+// 未保存変更がある場合に破棄確認。true = 続行してよい
+function confirmExtTplDiscardIfDirty() {
+    if (!extTplDirty) return true;
+    return confirm(_ei18n('extTpl.confirmDiscard',
+        '保存していない変更があります。閉じると変更は破棄されます。閉じますか？'));
+}
 
 // ── モーダル開閉 ──────────────────────────────────────────
 async function openExternalTemplateModal() {
     document.getElementById('external-template-modal').style.display = 'flex';
+    setExtTplDirty(false);
     await refreshExternalTemplateList();
     showExternalTemplateDetail(null);
 }
-function closeExternalTemplateModal() {
+function closeExternalTemplateModal(force) {
+    if (!force && !confirmExtTplDiscardIfDirty()) return;
     document.getElementById('external-template-modal').style.display = 'none';
     extTplCurrentId = null;
     extTplDraft = null;
+    setExtTplDirty(false);
 }
 window.openExternalTemplateModal = openExternalTemplateModal;
 
@@ -47,6 +65,9 @@ async function refreshExternalTemplateList() {
     listEl.querySelectorAll('.ext-tpl-list-item').forEach(el => {
         el.addEventListener('click', (e) => {
             if (e.target.tagName === 'BUTTON') return;
+            if (el.dataset.id === extTplCurrentId) return;
+            // 未保存変更があるまま別テンプレへ切り替えると破棄されるため確認
+            if (!confirmExtTplDiscardIfDirty()) return;
             showExternalTemplateDetail(el.dataset.id);
         });
     });
@@ -101,6 +122,7 @@ async function showExternalTemplateDetail(id) {
         form.style.display = 'none';
         extTplDraft = null;
         document.querySelectorAll('.ext-tpl-list-item.selected').forEach(el => el.classList.remove('selected'));
+        setExtTplDirty(false);
         return;
     }
     const tpl = await window.externalTemplate.get(id);
@@ -111,6 +133,8 @@ async function showExternalTemplateDetail(id) {
     document.getElementById('ext-tpl-name-input').value = tpl.name || '';
     updateExternalTemplateImagePreview(tpl.image, tpl.imageWidth, tpl.imageHeight);
     document.querySelectorAll('.ext-tpl-list-item').forEach(el => el.classList.toggle('selected', el.dataset.id === id));
+    // 保存済み内容を読み込んだ直後はクリーン状態
+    setExtTplDirty(false);
 }
 
 function updateExternalTemplateImagePreview(dataUrl, w, h) {
@@ -213,6 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
             extTplDraft.imageWidth = result.width;
             extTplDraft.imageHeight = result.height;
             updateExternalTemplateImagePreview(result.dataUrl, result.width, result.height);
+            setExtTplDirty(true);
         } catch (err) {
             alert(_ei18n('extTpl.alert.imageLoadFailed', '画像読み込みに失敗しました: ') + (err.message || err));
         }
@@ -232,6 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof window.syncAppliedExternalTemplateAfterSave === 'function') {
                 await window.syncAppliedExternalTemplateAfterSave(extTplDraft.id);
             }
+            setExtTplDirty(false);
             if (typeof showToast === 'function') showToast(_ei18n('extTpl.toast.saved', 'テンプレートを保存しました'), 2000);
         } catch (err) {
             console.error('テンプレート保存エラー:', err);
@@ -258,6 +284,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof window.syncAppliedExternalTemplateAfterSave === 'function') {
                 await window.syncAppliedExternalTemplateAfterSave(extTplCurrentId);
             }
+            // draft は保存済みになったのでクリーン状態へ
+            setExtTplDirty(false);
             await window.openBBoxEditor(extTplCurrentId);
         } catch (err) {
             console.error('BBoxエディタを開けません:', err);
@@ -265,8 +293,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 閉じる
-    document.getElementById('ext-tpl-close-btn').addEventListener('click', closeExternalTemplateModal);
+    // テンプレート名の編集で未保存状態にする
+    document.getElementById('ext-tpl-name-input').addEventListener('input', () => {
+        if (extTplDraft) setExtTplDirty(true);
+    });
+
+    // 閉じる (click イベントが force 引数に渡らないようラップ)
+    document.getElementById('ext-tpl-close-btn').addEventListener('click', () => closeExternalTemplateModal());
 });
 
 // BBoxエディタ保存後に呼ばれる: draft と一覧を再読込
