@@ -171,6 +171,8 @@ function buildProjectData(extraMeta) {
             };
             if (tpl.id) externalTemplateBlock.sourceTemplateId = tpl.id;
             if (tpl.temporary) externalTemplateBlock.temporary = true;
+            // Phase A: テンプレ共通カラムヘッダー設定 (BBox側 override は bboxes 内に含まれる)
+            if (tpl.columnHeader) externalTemplateBlock.columnHeader = deepCloneJSON(tpl.columnHeader);
             // Phase 2: ページ別テンプレ画像 (pageImages)。各画像を assets 化。
             if (tpl.pageImages && typeof tpl.pageImages === 'object') {
                 const pageImagesOut = {};
@@ -353,6 +355,8 @@ async function loadProjectData(projectData) {
                 bboxes: deepCloneJSON(et.bboxes || {})
             };
             if (et.temporary) tplToApply.temporary = true;
+            // Phase A: テンプレ共通カラムヘッダー設定の復元
+            if (et.columnHeader) tplToApply.columnHeader = deepCloneJSON(et.columnHeader);
             // Phase 2: pageImages 復元 (assetId → dataUrl)
             if (et.pageImages && typeof et.pageImages === 'object') {
                 const pageImages = {};

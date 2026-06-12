@@ -86,6 +86,27 @@ function applyBBoxSizeSync(bboxes, tagKey, force) {
     });
 }
 
+// ─── カラムヘッダー印字設定 (Phase A) ────────────────────────────────────────
+// テンプレ共通 (tpl.columnHeader) + timeline BBox override (bbox.columnHeader) を
+// マージして実効設定を返す。どちらも未定義なら既定 (show: false = 従来動作)。
+const COLUMN_HEADER_DEFAULTS = {
+    show: false,
+    bgEnabled: true,
+    bgColor: '#ffffff',
+    textColor: '#000000',
+    offsetX: 0,        // mm
+    offsetY: 0,        // mm
+    fontSize: null,    // mm。null = 自動 (セル高ベース)
+    vertical: false
+};
+
+function resolveColumnHeaderConfig(tpl, bbox) {
+    return Object.assign({},
+        COLUMN_HEADER_DEFAULTS,
+        (tpl && tpl.columnHeader) || {},
+        (bbox && bbox.columnHeader) || {});
+}
+
 // ─── UUID生成 ────────────────────────────────────────────────────────────────
 
 function generateTemplateId() {
@@ -671,6 +692,8 @@ window.refreshCustomFieldsSidebar = refreshCustomFieldsSidebar;
 
 window.externalTemplate = {
     tags:        EXTERNAL_TEMPLATE_TAGS,
+    columnHeaderDefaults: COLUMN_HEADER_DEFAULTS,
+    resolveColumnHeader:  resolveColumnHeaderConfig,
     syncGroups:  BBOX_SYNC_GROUPS,
     getSyncPeers: getBBoxSyncPeers,
     isSyncEnabled: isBBoxSyncEnabled,

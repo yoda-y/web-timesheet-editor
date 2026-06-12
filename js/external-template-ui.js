@@ -132,9 +132,44 @@ async function showExternalTemplateDetail(id) {
     form.style.display = 'flex';
     document.getElementById('ext-tpl-name-input').value = tpl.name || '';
     updateExternalTemplateImagePreview(tpl.image, tpl.imageWidth, tpl.imageHeight);
+    loadExtTplColumnHeaderForm(tpl);
     document.querySelectorAll('.ext-tpl-list-item').forEach(el => el.classList.toggle('selected', el.dataset.id === id));
     // 保存済み内容を読み込んだ直後はクリーン状態
     setExtTplDirty(false);
+}
+
+// ── カラムヘッダー設定 (テンプレ共通) ────────────────────────
+const EXT_TPL_CH_INPUTS = [
+    { id: 'ext-tpl-ch-show',      key: 'show',      kind: 'checkbox' },
+    { id: 'ext-tpl-ch-bg',        key: 'bgEnabled', kind: 'checkbox' },
+    { id: 'ext-tpl-ch-bgcolor',   key: 'bgColor',   kind: 'color' },
+    { id: 'ext-tpl-ch-textcolor', key: 'textColor', kind: 'color' },
+    { id: 'ext-tpl-ch-vertical',  key: 'vertical',  kind: 'checkbox' },
+    { id: 'ext-tpl-ch-offx',      key: 'offsetX',   kind: 'number' },
+    { id: 'ext-tpl-ch-offy',      key: 'offsetY',   kind: 'number' },
+    { id: 'ext-tpl-ch-fontsize',  key: 'fontSize',  kind: 'number-nullable' }
+];
+
+function ensureDraftColumnHeader() {
+    if (!extTplDraft) return null;
+    if (!extTplDraft.columnHeader) {
+        const defaults = (window.externalTemplate && window.externalTemplate.columnHeaderDefaults) || {};
+        extTplDraft.columnHeader = Object.assign({}, defaults);
+    }
+    return extTplDraft.columnHeader;
+}
+
+function loadExtTplColumnHeaderForm(tpl) {
+    const cfg = (window.externalTemplate && typeof window.externalTemplate.resolveColumnHeader === 'function')
+        ? window.externalTemplate.resolveColumnHeader(tpl, null) : null;
+    if (!cfg) return;
+    EXT_TPL_CH_INPUTS.forEach(def => {
+        const el = document.getElementById(def.id);
+        if (!el) return;
+        if (def.kind === 'checkbox') el.checked = !!cfg[def.key];
+        else if (def.kind === 'number-nullable') el.value = (typeof cfg[def.key] === 'number') ? cfg[def.key] : '';
+        else el.value = cfg[def.key] != null ? cfg[def.key] : (def.kind === 'number' ? 0 : '#000000');
+    });
 }
 
 function updateExternalTemplateImagePreview(dataUrl, w, h) {
@@ -296,6 +331,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // テンプレート名の編集で未保存状態にする
     document.getElementById('ext-tpl-name-input').addEventListener('input', () => {
         if (extTplDraft) setExtTplDirty(true);
+    });
+
+    // カラムヘッダー設定 (テンプレ共通) の配線
+    EXT_TPL_CH_INPUTS.forEach(def => {
+        const el = document.getElementById(def.id);
+        if (!el) return;
+        const evt = (def.kind === 'checkbox') ? 'change' : 'input';
+        el.addEventListener(evt, () => {
+            const ch = ensureDraftColumnHeader();
+            if (!ch) return;
+            if (def.kind === 'checkbox') ch[def.key] = el.checked;
+            else if (def.kind === 'number') {
+                const v = parseFloat(el.value);
+                ch[def.key] = isNaN(v) ? 0 : v;
+            } else if (def.kind === 'number-nullable') {
+                const v = parseFloat(el.value);
+                ch[def.key] = isNaN(v) ? null : v;
+            } else {
+                ch[def.key] = el.value;
+            }
+            setExtTplDirty(true);
+        });
     });
 
     // 閉じる (click イベントが force 引数に渡らないようラップ)

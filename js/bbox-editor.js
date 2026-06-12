@@ -289,6 +289,46 @@ function renderBBoxEditorPropsForm() {
             syncRow.style.display = 'none';
         }
     }
+    // カラムヘッダー override (timeline タグのみ表示)
+    const chRow = document.getElementById('bbox-prop-colheader-row');
+    if (chRow) {
+        if (tagDef.timeline) {
+            chRow.style.display = '';
+            renderBBoxColumnHeaderForm(bbox);
+        } else {
+            chRow.style.display = 'none';
+        }
+    }
+}
+
+// ── カラムヘッダー override UI (timeline BBox) ──────────────
+const BBOX_CH_INPUTS = [
+    { id: 'bbox-ch-show',      key: 'show',      kind: 'checkbox' },
+    { id: 'bbox-ch-bg',        key: 'bgEnabled', kind: 'checkbox' },
+    { id: 'bbox-ch-bgcolor',   key: 'bgColor',   kind: 'color' },
+    { id: 'bbox-ch-textcolor', key: 'textColor', kind: 'color' },
+    { id: 'bbox-ch-vertical',  key: 'vertical',  kind: 'checkbox' },
+    { id: 'bbox-ch-offx',      key: 'offsetX',   kind: 'number' },
+    { id: 'bbox-ch-offy',      key: 'offsetY',   kind: 'number' },
+    { id: 'bbox-ch-fontsize',  key: 'fontSize',  kind: 'number-nullable' }
+];
+
+function renderBBoxColumnHeaderForm(bbox) {
+    const useTpl = !bbox.columnHeader;
+    const useTplCheck = document.getElementById('bbox-ch-usetpl');
+    if (useTplCheck) useTplCheck.checked = useTpl;
+    const cfg = (window.externalTemplate && typeof window.externalTemplate.resolveColumnHeader === 'function')
+        ? window.externalTemplate.resolveColumnHeader(bboxEditorTemplate, bbox)
+        : null;
+    BBOX_CH_INPUTS.forEach(def => {
+        const el = document.getElementById(def.id);
+        if (!el) return;
+        el.disabled = useTpl;
+        if (!cfg) return;
+        if (def.kind === 'checkbox') el.checked = !!cfg[def.key];
+        else if (def.kind === 'number-nullable') el.value = (typeof cfg[def.key] === 'number') ? cfg[def.key] : '';
+        else el.value = cfg[def.key] != null ? cfg[def.key] : (def.kind === 'number' ? 0 : '#000000');
+    });
 }
 window.renderBBoxEditorPropsForm = renderBBoxEditorPropsForm;
 
@@ -520,5 +560,51 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
         });
     }
+
+    // カラムヘッダー override: 「テンプレ共通設定を使う」切替
+    const chUseTpl = document.getElementById('bbox-ch-usetpl');
+    if (chUseTpl) {
+        chUseTpl.addEventListener('change', (e) => {
+            if (!bboxEditorSelectedTag || !bboxEditorTemplate) return;
+            const bbox = bboxEditorTemplate.bboxes[bboxEditorSelectedTag];
+            if (!bbox) return;
+            pushBBoxHistory();
+            if (e.target.checked) {
+                // テンプレ共通へ戻す (override を破棄)
+                delete bbox.columnHeader;
+            } else {
+                // 現在の実効設定を初期値として override を開始
+                const cfg = (window.externalTemplate && typeof window.externalTemplate.resolveColumnHeader === 'function')
+                    ? window.externalTemplate.resolveColumnHeader(bboxEditorTemplate, null) : {};
+                bbox.columnHeader = Object.assign({}, cfg);
+            }
+            renderBBoxColumnHeaderForm(bbox);
+        });
+    }
+    // override 各項目の配線 (useTpl OFF のときのみ有効)
+    BBOX_CH_INPUTS.forEach(def => {
+        const el = document.getElementById(def.id);
+        if (!el) return;
+        const evt = (def.kind === 'checkbox') ? 'change' : 'input';
+        if (def.kind !== 'checkbox') {
+            el.addEventListener('focus', () => pushBBoxHistory());
+        }
+        el.addEventListener(evt, () => {
+            if (!bboxEditorSelectedTag || !bboxEditorTemplate) return;
+            const bbox = bboxEditorTemplate.bboxes[bboxEditorSelectedTag];
+            if (!bbox || !bbox.columnHeader) return;
+            if (def.kind === 'checkbox') pushBBoxHistory();
+            if (def.kind === 'checkbox') bbox.columnHeader[def.key] = el.checked;
+            else if (def.kind === 'number') {
+                const v = parseFloat(el.value);
+                bbox.columnHeader[def.key] = isNaN(v) ? 0 : v;
+            } else if (def.kind === 'number-nullable') {
+                const v = parseFloat(el.value);
+                bbox.columnHeader[def.key] = isNaN(v) ? null : v;
+            } else {
+                bbox.columnHeader[def.key] = el.value;
+            }
+        });
+    });
 
 });
