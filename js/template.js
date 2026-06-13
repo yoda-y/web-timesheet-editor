@@ -428,6 +428,8 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
         && (typeof window.getExternalTemplateChunkCount === 'function')
         && window.getExternalTemplateChunkCount() > 1;
     const isPrimaryChunk = !pageDesc || pageDesc.chunk === 0;
+    // Phase C-4 (SeparatePages): memo/staff/custom は原画ページのみ。meta系は全ページ。
+    const separateMode = pageDesc && pageDesc.sheetKind === 'douga';
 
     const tagDefs = (window.externalTemplate && window.externalTemplate.tags) || {};
 
@@ -495,6 +497,12 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
             const primaryOnly = tagKey === 'memo'
                 || tagDef.category === 'staff' || tagDef.category === 'custom';
             if (primaryOnly && !isPrimaryChunk) continue;
+        } else if (separateMode) {
+            // SeparatePages: memo/staff/custom は原画ページのみ (動画ページではスキップ)。
+            // meta系は全ページ。
+            const gengaOnly = tagKey === 'memo'
+                || tagDef.category === 'staff' || tagDef.category === 'custom';
+            if (gengaOnly) continue;
         }
 
         let value = getMetaValue(tagKey);
@@ -3442,6 +3450,21 @@ function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, 
         return;
     }
 
+    // gengaDougaSeparatePages: 原画ページ (sheetKind='genga') のみ。
+    // ACTION 系列を4枠 (action1/cell1/action2/cell2) に累積オフセットで描画
+    if (mode === 'gengaDougaSeparatePages') {
+        if (pageDesc && pageDesc.sheetKind !== 'genga') return;
+        let off = 0;
+        [['action1'], ['cell1'], ['action2'], ['cell2']].forEach(([key]) => {
+            const b = extTpl.bboxes[key];
+            if (!b || !b.enabled) return;
+            const cols = b.columns || 5;
+            drawBooksIntoBBox(ctx, bboxToCanvas(b), scale, off, cols, b.frames || 72);
+            off += cols;
+        });
+        return;
+    }
+
     // none: action1 のみ、列範囲は b1.columns
     drawBooksIntoBBox(ctx, bboxToCanvas(b1), scale, 0, columns, b1.frames || 72);
 }
@@ -3577,11 +3600,12 @@ function extSeriesType(type) {
 }
 function extDataKey(type) { return extSeriesType(type).toUpperCase(); }
 
-// gengaDouga Auto は当面 SplitPage に解決 (SeparatePages は C-4 で追加)
+// 実効モード解決 (gengaDougaAuto の Split/Separate 判定は external-template.js)
 function getEffectiveOverflowMode(extTpl) {
-    const mode = (extTpl && extTpl.columnOverflowMode) || 'none';
-    if (mode === 'gengaDougaAuto') return 'gengaDougaSplitPage';
-    return mode;
+    if (typeof window.getExternalTemplateEffectiveMode === 'function') {
+        return window.getExternalTemplateEffectiveMode();
+    }
+    return (extTpl && extTpl.columnOverflowMode) || 'none';
 }
 
 // gengaDougaSplitPage (Phase C-3): 同一フレーム範囲を
@@ -3621,10 +3645,22 @@ function drawGengaDougaSplitPage(ctx, extTpl, bboxToCanvas, scale, pageOffset) {
     drawArea(bx.action1, bx.cell1, 'action');  // 原画領域
     drawArea(bx.action2, bx.cell2, 'cell');    // 動画領域
 
-    // SOUND / CAMERA / セリフは原画側の補助情報として sound1/camera1 に通常描画する。
-    // (extSourceType は使わず自系列をそのまま読む。動画側への複製や sound2/camera2 への
-    //  列続き描画は将来 (continuation) 対応。drawSoundInBBox/drawCameraInBBox は
-    //  colOffset 非対応のため、ここでは offset 0 の主BBoxのみ。)
+    // SOUND / CAMERA / セリフは原画側に通常描画
+    drawGengaDougaAux(ctx, extTpl, bboxToCanvas, scale, pageOffset, resolveHeader);
+
+    extColOffset = 0;
+    extSourceType = null;
+    // TODO (C-5): 動画領域 (action2/cell2) の上部に notice + 上括弧
+}
+
+// SOUND / CAMERA / セリフを原画側 (sound1/camera1) に通常描画する共通ヘルパー。
+// (extSourceType は使わず自系列をそのまま読む。動画側複製や sound2/camera2 への
+//  列続き描画は将来 continuation 対応。drawSoundInBBox/drawCameraInBBox は
+//  colOffset 非対応のため offset 0 の主BBoxのみ。)
+function drawGengaDougaAux(ctx, extTpl, bboxToCanvas, scale, pageOffset, resolveHeader) {
+    const bx = extTpl.bboxes;
+    const isPage0 = pageOffset < 0;
+    const totalToRender = isPage0 ? (-pageOffset) : null;
     const drawAux = (type, b1) => {
         if (!b1 || !b1.enabled) return;
         const cap1 = b1.frames || 72;
@@ -3635,19 +3671,60 @@ function drawGengaDougaSplitPage(ctx, extTpl, bboxToCanvas, scale, pageOffset) {
     };
     drawAux('sound', bx.sound1);
     drawAux('camera', bx.camera1);
+    extColOffset = 0;
+}
 
+// gengaDougaSeparatePages (Phase C-4): 1ページ全体を1系列の列描画に使う。
+//   原画ページ (sheetKind='genga'): action1+cell1+action2+cell2 をすべて ACTION 系列で描画
+//   動画ページ (sheetKind='douga'): 同じ4枠をすべて CELL 系列で描画
+// 原画/動画は別物理ページ。SOUND/CAMERA は原画ページのみ。
+function drawGengaDougaSeparatePage(ctx, extTpl, bboxToCanvas, scale, pageOffset, pageDesc) {
+    const bx = extTpl.bboxes;
+    const resolveHeader = (window.externalTemplate && typeof window.externalTemplate.resolveColumnHeader === 'function')
+        ? window.externalTemplate.resolveColumnHeader : null;
+    const isPage0 = pageOffset < 0;
+    const totalToRender = isPage0 ? (-pageOffset) : null;
+    const sheetKind = (pageDesc && pageDesc.sheetKind === 'douga') ? 'douga' : 'genga';
+    const sourceType = (sheetKind === 'douga') ? 'cell' : 'action';
+
+    extSourceType = sourceType;
+    let off = 0;
+    // 4枠を順に、系列の続き列として割り当て (enabled な枠のみ列を消費)
+    [['action1', 'action'], ['cell1', 'cell'], ['action2', 'action'], ['cell2', 'cell']].forEach(([key, type]) => {
+        const b = bx[key];
+        if (!b || !b.enabled) return;
+        const cols = b.columns || 5;
+        const cap = b.frames || 72;
+        const use = isPage0 ? Math.min(totalToRender, cap) : cap;
+        extColOffset = off;
+        drawTimelineBBox(ctx, type, b, bboxToCanvas, scale, pageOffset, pageOffset + use, cols, cap,
+            resolveHeader ? resolveHeader(extTpl, b) : null);
+        off += cols;
+    });
     extColOffset = 0;
     extSourceType = null;
-    // TODO (C-5): 動画領域 (action2/cell2) の上部に notice + 上括弧
+
+    // SOUND / CAMERA / セリフは原画ページのみ
+    if (sheetKind === 'genga') {
+        drawGengaDougaAux(ctx, extTpl, bboxToCanvas, scale, pageOffset, resolveHeader);
+    }
+    extColOffset = 0;
+    extSourceType = null;
+    // TODO (C-5): ページ上部に原画/動画ラベル
 }
 
 function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset, pageDesc) {
     if (!extTpl.bboxes || typeof cellData === 'undefined') return;
     if (typeof pageOffset !== 'number') pageOffset = 0;
 
-    // gengaDouga SplitPage は専用パス (4枠の役割が none/pageChunks と異なる)
-    if (getEffectiveOverflowMode(extTpl) === 'gengaDougaSplitPage') {
+    // gengaDouga は専用パス (4枠の役割が none/pageChunks と異なる)
+    const effMode = getEffectiveOverflowMode(extTpl);
+    if (effMode === 'gengaDougaSplitPage') {
         drawGengaDougaSplitPage(ctx, extTpl, bboxToCanvas, scale, pageOffset);
+        return;
+    }
+    if (effMode === 'gengaDougaSeparatePages') {
+        drawGengaDougaSeparatePage(ctx, extTpl, bboxToCanvas, scale, pageOffset, pageDesc);
         return;
     }
 

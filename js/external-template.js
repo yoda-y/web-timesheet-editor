@@ -1072,7 +1072,7 @@ window.getExternalTemplateColumnCapacity = getExternalTemplateColumnCapacity;
 // 列チャンク数 (pageChunks モード時のみ >1)。容量は ACTION/CELL のみで決める
 function getExternalTemplateChunkCount() {
     const tpl = currentExternalTemplate;
-    if (!tpl || tpl.columnOverflowMode !== 'pageChunks') return 1;
+    if (!tpl || getExternalTemplateEffectiveMode() !== 'pageChunks') return 1;
     let chunks = 1;
     ['action', 'cell'].forEach(type => {
         const cap = getExternalTemplateColumnCapacity(tpl, type);
@@ -1084,44 +1084,91 @@ function getExternalTemplateChunkCount() {
 }
 window.getExternalTemplateChunkCount = getExternalTemplateChunkCount;
 
+// gengaDouga 領域容量: main BBox + continuation BBox の列数合計
+function getGengaDougaAreaCapacity(tpl, mainKey, contKey) {
+    if (!tpl || !tpl.bboxes) return 0;
+    const b = tpl.bboxes[mainKey];
+    if (!b || !b.enabled) return 0;
+    let cap = b.columns || 5;
+    const c = tpl.bboxes[contKey];
+    if (c && c.enabled) cap += (c.columns || 5);
+    return cap;
+}
+
+// 実効モード解決: gengaDougaAuto は列が SplitPage 容量に収まれば SplitPage、
+// 収まらなければ SeparatePages。それ以外はそのまま。
+function getExternalTemplateEffectiveMode() {
+    const tpl = currentExternalTemplate;
+    const mode = (tpl && tpl.columnOverflowMode) || 'none';
+    if (mode !== 'gengaDougaAuto') return mode;
+    if (!tpl || !tpl.bboxes) return 'gengaDougaSplitPage';
+    const gengaCap = getGengaDougaAreaCapacity(tpl, 'action1', 'cell1');  // ACTION用 (原画領域)
+    const dougaCap = getGengaDougaAreaCapacity(tpl, 'action2', 'cell2');  // CELL用 (動画領域)
+    const actionUsed = getUsedColumnCount('action');
+    const cellUsed = getUsedColumnCount('cell');
+    if (actionUsed <= gengaCap && cellUsed <= dougaCap) return 'gengaDougaSplitPage';
+    return 'gengaDougaSeparatePages';
+}
+window.getExternalTemplateEffectiveMode = getExternalTemplateEffectiveMode;
+
+// 1フレームページあたりの物理サブページ数
+// pageChunks: チャンク数 / SeparatePages: 2 (原画+動画) / それ以外: 1
+function getExternalTemplateSubPagesPerFrame() {
+    const mode = getExternalTemplateEffectiveMode();
+    if (mode === 'pageChunks') return getExternalTemplateChunkCount();
+    if (mode === 'gengaDougaSeparatePages') return 2;
+    return 1;
+}
+window.getExternalTemplateSubPagesPerFrame = getExternalTemplateSubPagesPerFrame;
+
 // 物理ページ index → 論理ページ記述子 PageDesc
 // { framePage, chunk, sheetKind, isPage0 }
-// 並び: フレームページ内で chunk を連続 (1-1 → 1-2 → 2-1 → 2-2)
+// 並び: フレームページ内でサブページ (chunk / sheetKind) を連続
+//   pageChunks:     1-1 → 1-2 → 2-1 → 2-2
+//   SeparatePages:  1原 → 1動 → 2原 → 2動
 function getExternalTemplatePageDesc(physicalIndex) {
     const hasZero = (typeof hasPage0 === 'function') && hasPage0();
     if (hasZero && physicalIndex === 0) {
         return { framePage: 0, chunk: 0, sheetKind: 'normal', isPage0: true };
     }
-    const chunkCount = getExternalTemplateChunkCount();
+    const sub = getExternalTemplateSubPagesPerFrame();
     const idx = Math.max(0, hasZero ? physicalIndex - 1 : physicalIndex);
-    return {
-        framePage: Math.floor(idx / chunkCount),
-        chunk: idx % chunkCount,
-        sheetKind: 'normal',
-        isPage0: false
-    };
+    const framePage = Math.floor(idx / sub);
+    const inner = idx % sub;
+    const mode = getExternalTemplateEffectiveMode();
+    let chunk = 0;
+    let sheetKind = 'normal';
+    if (mode === 'pageChunks') chunk = inner;
+    else if (mode === 'gengaDougaSeparatePages') sheetKind = (inner === 0) ? 'genga' : 'douga';
+    return { framePage, chunk, sheetKind, isPage0: false };
 }
 window.getExternalTemplatePageDesc = getExternalTemplatePageDesc;
 
-// ページ表記 (currentPage BBox 用)。chunkCount>1 のとき "1-1" 形式
+// ページ表記 (currentPage BBox 用)。
+// pageChunks: "1-1" 形式 / それ以外 (none/Split/Separate): 物理ページ連番
 function getExternalTemplatePageLabel(physicalIndex) {
     const desc = getExternalTemplatePageDesc(physicalIndex);
     if (desc.isPage0) return '0';
-    const chunkCount = getExternalTemplateChunkCount();
-    const fp = desc.framePage + 1;
-    if (chunkCount <= 1) return String(fp);
-    return `${fp}-${desc.chunk + 1}`;
+    const hasZero = (typeof hasPage0 === 'function') && hasPage0();
+    const idx = Math.max(0, hasZero ? physicalIndex - 1 : physicalIndex);  // 0始まりの通常ページ連番
+    const mode = getExternalTemplateEffectiveMode();
+    if (mode === 'pageChunks') {
+        const chunkCount = getExternalTemplateChunkCount();
+        if (chunkCount > 1) return `${desc.framePage + 1}-${desc.chunk + 1}`;
+        return String(desc.framePage + 1);
+    }
+    return String(idx + 1);
 }
 window.getExternalTemplatePageLabel = getExternalTemplatePageLabel;
 
-// 総物理ページ数 = フレームページ数 × チャンク数 (+0ページ)
+// 総物理ページ数 = フレームページ数 × サブページ数 (+0ページ)
 function getExternalTemplateTotalPages() {
     if (!currentExternalTemplate) return 0;
     const capacity = getExternalTemplateSheetCapacity();
     if (capacity <= 0) return 1;
     if (typeof targetFrames === 'undefined' || !targetFrames || targetFrames <= 0) return 1;
     const framePages = Math.max(1, Math.ceil(targetFrames / capacity));
-    const normalPages = framePages * getExternalTemplateChunkCount();
+    const normalPages = framePages * getExternalTemplateSubPagesPerFrame();
     // headMargin有効時は 0ページ目を追加
     const hasZero = (typeof hasPage0 === 'function') && hasPage0();
     return hasZero ? normalPages + 1 : normalPages;

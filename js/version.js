@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.27.1';
+const APP_VERSION = '0.28.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,22 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.28.0 (2026-06-13)
+
+### 追加 (columns超過対応 Phase C-4: gengaDougaSeparatePages + Auto結線)
+- gengaDougaSeparatePages: 原画シート/動画シートを別物理ページに出力
+  - 原画ページ: action1+cell1+action2+cell2 をすべて ACTION 系列で描画 (4枠で1系列)
+  - 動画ページ: 同4枠をすべて CELL 系列で描画
+  - ページ順: 1原 → 1動 → 2原 → 2動 (フレームページ内で連続)
+  - SOUND/CAMERA/セリフ・memo/staff/custom は原画ページのみ、meta系は全ページ
+  - BOOK は原画ページ (最初のフレームページ) の4枠に累積オフセットで描画
+- gengaDougaAuto を結線: SplitPage 容量 (action1+cell1 / action2+cell2) に
+  収まれば SplitPage、収まらなければ SeparatePages に自動切替
+  (getExternalTemplateEffectiveMode)
+- ページ計算を sub-page 数で統一 (pageChunks=チャンク数 / Separate=2 / 他=1)
+  - totalPages は総物理ページ数、currentPage は物理ページ連番 (Separateは 1,2,3,4)
+- 原画/動画のページ内ラベル (notice) は C-5 で対応予定
 
 ## v0.27.1 (2026-06-13)
 
