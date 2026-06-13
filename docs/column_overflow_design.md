@@ -198,89 +198,250 @@ function getExternalTemplateChunkCount(tpl) {
   - フレームページ数が必要になったら別タグ `totalFramePages` を将来追加。
 - Preview のページ送り UI / 画像書き出しのページ列挙も総物理ページ数を使う。
 
-## 5. パターン2: gengaDouga (Phase C)
-
-### 5.1 概念
-
-原画シートと動画シートを分けて出力する。
-**シート種別ごとに描画するデータ系列が異なる**:
+## 5. columnOverflowMode の全体像 (Phase C 反映)
 
 ```js
-const sourceType = (sheetKind === 'douga') ? 'cell' : 'action';
+columnOverflowMode:
+  'none'                     // 従来。超過列は描画しない
+  'pageChunks'               // パターン1 (Phase B 実装済み)
+  'gengaDougaAuto'           // SplitPage を試し、収まらなければ SeparatePages に切替
+  'gengaDougaSplitPage'      // パターン3: 1ページ内で原画領域/動画領域を分ける (メイン運用)
+  'gengaDougaSeparatePages'  // パターン2: 原画シート/動画シートを別ページに
 ```
 
-- 原画シート: **ACTION 系列**を描画
-- 動画シート: **CELL 系列**を描画
+### 5.1 UI 表記 (3択 + 詳細)
 
-将来設定可能にする場合は `tpl.gengaDougaSources = { genga: 'action', douga: 'cell' }`。
-初期実装はこの固定値 (UI 無し)。
+設定モーダルの「列超過モード」select は基本3択:
 
-### 5.2 CELL BBox の役割
+| UI表記 | 値 |
+|---|---|
+| 通常（原動画 自動） | `gengaDougaAuto` |
+| 列ページ分割 | `pageChunks` |
+| 従来方式 | `none` |
 
-gengaDouga モードでは CELL BBox は「CELLデータ専用欄」ではなく、
-**そのシートで扱う系列の続き列を描画する領域**として使う。
+`gengaDougaSplitPage` / `gengaDougaSeparatePages` は将来「詳細設定」で明示選択可能にする
+(Auto に任せず固定したい上級者向け)。初期 UI には出さない。
 
-- 原画シート: ACTION BBox = ACTION 列 0..a-1 / CELL BBox = ACTION 列 a.. (続き)
-- 動画シート: ACTION BBox = CELL 列 0..a-1 / CELL BBox = CELL 列 a.. (続き)
+### 5.2 既存互換と新規デフォルト
 
-例 (ACTION BBox columns=7, CELL BBox columns=7, データ10列):
+- **既存テンプレで `columnOverflowMode` 未設定 → 従来通り `none` 扱い**。
+  描画は一切変えない (リグレッション基準)。
+- 「UI上の通常 = `gengaDougaAuto`」だが、これは**未設定 (= none) とは区別する**。
+  未設定テンプレを開いても select は「従来方式 (none)」を指す。
+  ユーザーが明示的に「通常（原動画 自動）」を選んで保存して初めて
+  `gengaDougaAuto` になる。
+- **新規テンプレ / 一時テンプレのデフォルト**:
+  - 案A (採用): 当面は `none` のまま。原動画自動を使うかはユーザーが明示選択。
+    既存運用 (1系列を action1/action2 でフレーム継続) を壊さないため。
+  - 案B (将来): UX が固まったら新規デフォルトを `gengaDougaAuto` に切替検討。
+  → 初期実装は案A。
 
-| シート | ACTION BBox | CELL BBox |
-|---|---|---|
-| 1 原画 | ACTION 1〜7列 | ACTION 8〜10列 |
-| 1 動画 | CELL 1〜7列 | CELL 8〜10列 |
+## 6. パターン3: gengaDougaSplitPage (メイン運用)
 
-実装: `drawTimelineBBox` に `sourceType` と `colOffset` を渡す。
-- 原画: (ACTION BBox, sourceType='action', colOffset=0)、(CELL BBox, sourceType='action', colOffset=a)
-- 動画: (ACTION BBox, sourceType='cell', colOffset=0)、(CELL BBox, sourceType='cell', colOffset=a)
-セルキー生成・Rep解析・棒線/止メ・BOOK・カラムヘッダーは sourceType の section を参照する。
+### 6.1 位置づけ
 
-### 5.3 ページ計算とシート種別
+1ページを3秒シートのように使い、**同一物理ページ内**で原画領域と動画領域を分ける。
+`action1/action2` を「時間の前半/後半」ではなく「原画/動画の領域」として使う。
 
-- 総物理ページ = (hasPage0 ? 1 : 0) + framePages × 2 (原画, 動画)
+### 6.2 BBox の役割 (4枠の使い方)
+
+```
+action1 + cell1 = 原画領域 (sourceType = 'action')
+action2 + cell2 = 動画領域 (sourceType = 'cell')
+```
+
+各領域内では cell BBox を「続き列」として使う:
+
+| 領域 | BBox | 描画系列 | 列範囲 |
+|---|---|---|---|
+| 原画 | action1 | ACTION | 0 .. a1-1 |
+| 原画 | cell1   | ACTION | a1 .. a1+c1-1 (続き) |
+| 動画 | action2 | CELL   | 0 .. a2-1 |
+| 動画 | cell2   | CELL   | a2 .. a2+c2-1 (続き) |
+
+例 (action1.columns=7, cell1.columns=7, ACTIONデータ10列):
+- action1: ACTION 1〜7列 / cell1: ACTION 8〜10列
+- action2: CELL 1〜7列 / cell2: CELL 8〜10列
+
+frames はフレーム継続ではなく**同一フレーム範囲**を原画/動画で共有する
+(action1.frames を1ページ容量とし、action2 も同じ範囲)。
+
+### 6.3 sourceType と描画
+
+`drawTimelineBBox` に `sourceType` ('action'|'cell') と `colOffset` を渡す:
+- 原画: (action1, 'action', 0)、(cell1, 'action', a1)
+- 動画: (action2, 'cell', 0)、(cell2, 'cell', a2)
+
+セルキー生成・Rep解析・棒線/止メ・BOOK・カラムヘッダーは sourceType の section
+(`ACTION` or `CELL`) を参照する。Phase B の `extColOffset` に加え、
+`extSourceType` モジュール変数を追加して同様に貫通させる。
+
+### 6.4 ページ番号
+
+**通常表記**。1ページ内に原画/動画が同居するため枝番不要。
+- `currentPage`: `1`, `2`, ... (pageChunks のような枝番なし)
+- `totalPages`: フレームページ数 (= 通常のシート枚数)
+- 原画/動画の区別はページ内ラベル (§8) で示す。
+
+### 6.5 SOUND / CAMERA / BOOK
+
+- **BOOK**: 原画側 (action1 領域) に記載。
+- **SOUND / CAMERA / セリフ**: 基本は原画側 (sound1/camera1)。
+- **続き欄の活用**: SOUND/CAMERA の列が sound1/camera1 で足りない場合、
+  動画側の sound2/camera2 を continuation として使う。
+  - sound1/camera1: 原画側の通常 SOUND/CAMERA (列 0..)
+  - sound2/camera2: 足りない分の続き列 (colOffset = sound1.columns)
+  - ただし SplitPage の動画領域は本来 CELL 系列の描画に使うため、
+    SOUND/CAMERA の continuation と競合しうる。
+    → 初期実装では **sound/camera は sound1/camera1 のみ** に描画し、
+    続き欄活用は将来オプション (要 UI: 「SOUND/CAMERA を動画側へ続ける」) とする。
+    SplitPage の主目的は ACTION/CELL の列収容なので、SOUND/CAMERA 超過は稀。
+
+## 7. パターン2: gengaDougaSeparatePages (収まらない時のフォールバック)
+
+### 7.1 位置づけ
+
+SplitPage で列が収まらない (実使用列 > a1+c1) 場合に使う。
+1ページ全体を1種類のシート (原画 or 動画) として使う。
+
+### 7.2 BBox の役割
+
+ページ内の全4枠を、そのシートの系列の列描画に使う:
+
+原画シート (sourceType='action'):
+| BBox | 列範囲 |
+|---|---|
+| action1 | 0 .. a1-1 |
+| cell1    | a1 .. a1+c1-1 |
+| action2  | a1+c1 .. a1+c1+a2-1 |
+| cell2    | a1+c1+a2 .. a1+c1+a2+c2-1 |
+
+動画シート (sourceType='cell'): 同じ列割当で CELL 系列を描画。
+
+これにより1ページの列容量が a1+c1+a2+c2 に拡大する。
+
+### 7.3 ページ順とページ番号
+
 - 並び: `1 原画 → 1 動画 → 2 原画 → 2 動画`
-- シート種別表示:
-  - 新タグ `sheetType` BBox (meta カテゴリ、**全ページ描画**、gengaDouga 以外では空)。
-    値は `tpl.sheetTypeLabels` (ja デフォルト 原画/動画、en デフォルト KEY/INBTWN)。
-  - `currentPage` 表記: `1 原画` / `1 動画` (ラベルは sheetTypeLabels を使用)。
-  - `totalPages`: 総物理ページ数 (framePages × 2 + 0ページ)。
-- SOUND / CAMERA / セリフ / direction / memo / staff / custom は
-  **各 framePage の原画シート側のみ** (primary = genga)。
-  動画シートにも出すオプションは将来追加。
-- meta系は全ページ。
+- 総物理ページ = (hasPage0 ? 1 : 0) + framePages × 2
+- **currentPage / totalPages は通常表記** (`1`, `2`… / 総物理ページ数)。
+  そのページが原画/動画かは**ページ内ラベル** (§8) で明記。
+  - 例: currentPage `1` (原画), `2` (動画), `3` (原画)…
+  - PageDesc.sheetKind = 'genga' | 'douga' で区別。
 
-### 5.4 列が収まらない場合 (a + c < 実使用列数)
+### 7.4 列が a1+c1+a2+c2 でも収まらない場合
 
-**黙って切り捨てない**。
+§9 の警告 + 未描画列注記。さらなる chunk 化は将来 (PageDesc.chunk と併用)。
 
-- 初期実装 (Phase C): 未描画列が発生した場合、
-  1. Preview 更新時に警告トースト (「○列が表示されていません。pageChunks の利用を検討してください」)
-  2. シート上にも未描画列があることを明示 (CELL BBox 右下に「+n列 未表示」の小さい注記)
-- 将来: gengaDouga × chunk の組合せ (`1-1 原画, 1-2 原画, 1-1 動画...`) を
-  PageDesc の chunk 軸で実現できる設計にしておく (PageDesc に chunk を最初から持たせる理由)。
+## 8. シート種別ラベル / notice / 上括弧
 
-## 6. 実装フェーズ分割 (PR分割)
+### 8.1 sheetTypeLabels (テンプレ単位、可変)
 
-| Phase | 内容 | 規模 |
+```js
+tpl.sheetTypeLabels = {
+  genga: '原画',                          // en: 'KEY'
+  douga: '動画',                          // en: 'INBTWN'
+  splitDougaNotice: 'こちらが動画シートです',     // en: 'INBETWEEN AREA'
+  separateGengaNotice: '原画シート',            // en: 'KEY SHEET'
+  separateDougaNotice: '動画シート'             // en: 'INBETWEEN SHEET'
+}
+```
+
+未設定時は i18n デフォルトを使う。テンプレで上書き可能。
+
+### 8.2 SplitPage の notice + 上括弧
+
+動画領域 (action2/cell2) の上部に notice を描画し、領域を上括弧で括る:
+- **位置**: action2 の上端より上 (カラムヘッダー -1セル目より更に上、または BOOK 帯を避けた位置)。
+  action2.y を基準に `noticeY = action2.rect.y - m(オフセット)`。BOOK は原画側なので干渉しない。
+- **内容**: `splitDougaNotice` (ja: こちらが動画シートです)。
+- **上括弧**: action2 左端〜cell2 右端を覆う `⌐___¬` 型の線。
+  `[action2.x, noticeY] → 下に小ヒゲ / 横線 / 右端で下に小ヒゲ`。
+  線色は控えめ (グレー or templateLine 色)、下地なしでテンプレ画像に馴染ませる。
+- **原画側**: 明示不要。必要なら小さく `genga` ラベルを option で。
+- **ON/OFF**: `tpl.sheetTypeLabels.showSplitNotice !== false` (初期 ON)。将来 UI で OFF 可能。
+
+### 8.3 SeparatePages の notice
+
+ページ全体が原画/動画なので**上括弧は不要**。
+シート上部 (BOOK 付近 = ヘッダー帯の空きスペース、または action1 の上) に
+そのページ種別を明記:
+- 原画ページ: `separateGengaNotice` (ja: 原画シート)
+- 動画ページ: `separateDougaNotice` (ja: 動画シート)
+
+表示文の長さ: 長い注記 (「別ページに動画シートがあります」) は邪魔なので、
+**デフォルトは短縮形** (`原画シート` / `動画シート`)。
+長い説明が欲しいユーザーは sheetTypeLabels で上書きできる。
+
+### 8.4 sheetType BBox (任意)
+
+- meta カテゴリの `sheetType` BBox を配置すると、そのページ種別ラベルを
+  任意位置に描画できる (全ページ描画)。
+- notice (§8.2/8.3) は BBox 無しでも自動描画される固定挙動。
+  sheetType BBox は「テンプレ画像に専用欄がある」場合の追加配置用。
+
+## 9. 未描画列の警告 (全モード共通)
+
+どのモードでも列が黙って消えるのを避ける:
+- 収まらない列がある場合、Preview 更新時に**警告トースト**
+  (「○列が表示されていません。列ページ分割の利用を検討してください」)。
+- 可能ならシート上にも `+n列 未表示` の小注記。
+- `gengaDougaAuto`: SplitPage (容量 a1+c1) で収まらなければ SeparatePages
+  (容量 a1+c1+a2+c2) に自動切替。SeparatePages でも収まらなければ警告。
+
+## 10. Direction を 1-1 のみに (Phase C-1 / 先行小修正)
+
+Phase B では direction を「各 framePage の chunk 0」に描画したが、
+**direction はカット全体の指示**なので `1-1` (最初の物理ページ) のみに変更する。
+
+| ページ | direction |
+|---|---|
+| 1-1 | 描画 |
+| 1-2 | 描画しない |
+| 2-1 | **描画しない** (Phase B からの変更点) |
+| 2-2 | 描画しない |
+
+- memo/staff/custom は従来通り「各 framePage の chunk 0」のままにするか、
+  direction と揃えて 1-1 のみにするか → **direction のみ 1-1、他は据え置き**。
+  (memo はページごとの補足に使う運用もあるため)
+- この修正は Phase C 本体と独立しているため、**Phase C-1 として先行 PR 可能**。
+
+## 11. 実装フェーズ分割 (PR分割)
+
+| Phase | 内容 | 状態 |
 |---|---|---|
-| A | カラムヘッダー印字 (外部テンプレのみ、0セル目中央、offset/fontSize/textColor/bg/vertical、color input) | 中 |
-| B | pageChunks: PageDesc + colOffset 貫通 + currentPage/totalPages + SOUND/CAMERA は chunk 0 のみ + meta全ページ + 未描画列ゼロ | 大 |
-| C | gengaDouga: sheetKind + sourceType (原画=action/動画=cell) + ACTION/CELL BBox を前半/続き領域として使用 + sheetType 表示 + SOUND/CAMERA は原画側 + 収まらない場合の警告 | 中 (Bの上に乗る) |
-| D | スポイト (BBoxエディタ上でテンプレ画像から色取得 → columnHeaderBgColor) | 小 |
+| A | カラムヘッダー印字 | 実装済み (v0.25.0) |
+| B | pageChunks | 実装済み (v0.26.0) |
+| **C-1** | direction を 1-1 のみに (先行小修正) | 次 |
+| C-2 | gengaDouga ページ計算設計の確定 (PageDesc に sheetKind、Auto の切替ロジック) | |
+| C-3 | gengaDougaSplitPage 実装 (sourceType 貫通 + 4枠役割 + 通常ページ番号) | |
+| C-4 | gengaDougaSeparatePages 実装 (4枠で1系列 + sheetKind ページ展開) | |
+| C-5 | sheetType / notice / 上括弧描画 + sheetTypeLabels + UI 3択 | |
+| D | スポイト | 未着手 |
 
-- B が土台 (PageDesc / colOffset / primary chunk 判定)。
-- 既存テンプレ (columnOverflowMode 未設定 = 'none') は全 Phase 完了後も
-  描画結果が従来と一致すること (リグレッション基準)。
+- C-1 は独立。C-2 は設計のみ。C-3 が SplitPage 本体、C-4 が SeparatePages、
+  C-5 がラベル類。`gengaDougaAuto` の切替判定は C-3 と C-4 が揃った後 C-5 で結線。
+- 各 Phase 完了時も `none` テンプレは描画結果が従来一致 (リグレッション基準)。
 
-## 7. レビュー反映履歴 (2026-06-12)
+## 12. レビュー反映履歴
 
-初版からの主な変更点:
+### 2026-06-12 (初回)
+1. totalPages は総物理ページ数 / 2. PAGE1_ONLY は各 framePage の primary chunk /
+3. gengaDouga は原画=ACTION系列・動画=CELL系列 / 4. CELL BBox は続き列領域 /
+5. SOUND/CAMERA の扱い / 6. カラムヘッダーは外部テンプレのみ /
+7. 未描画列は警告 / 8. sheetTypeLabels 可変
 
-1. totalPages は**総物理ページ数** (初版はフレームページ数 → 変更)
-2. PAGE1_ONLY 系は物理1ページ目限定ではなく**各 framePage の primary chunk** (chunk 0 / 原画側)
-3. gengaDouga は**原画=ACTION系列、動画=CELL系列** (初版の「両シート同一データ複製」案を破棄)
-4. CELL BBox は「そのシートの sourceType の続き列領域」
-5. SOUND/CAMERA は pageChunks では各 framePage の chunk 0、gengaDouga では原画シート側
-6. カラムヘッダーは外部テンプレのみ
-7. gengaDouga で列が収まらない場合、黙って切り捨てず警告 + 未表示明示
-8. sheetTypeLabels をデータ構造として可変に (ja: 原画/動画、en: KEY/INBTWN)
+### 2026-06-13 (Phase C 詳細化)
+1. `columnOverflowMode` を5値に拡張、UI は3択 (通常=gengaDougaAuto / 列ページ分割 / 従来方式)
+2. 既存テンプレ未設定は `none` 扱い、新規デフォルトも当面 `none` (案A)
+3. **gengaDougaSplitPage** (パターン3) をメイン運用に: 同一ページ内で
+   action1+cell1=原画 / action2+cell2=動画。ページ番号は通常表記
+4. **gengaDougaSeparatePages** (パターン2): 4枠すべてで1系列を描画、原画/動画は別ページ。
+   ページ番号は通常表記、種別はページ内ラベルで明示
+5. **gengaDougaAuto**: SplitPage→収まらなければ SeparatePages へ自動切替
+6. SOUND/CAMERA は原画側、continuation は将来オプション。BOOK は原画側
+7. **direction は 1-1 のみ** (Phase B からの変更、C-1 で先行修正)
+8. notice / 上括弧: SplitPage は動画領域上部に notice+上括弧、
+   SeparatePages はページ上部にページ種別ラベル (上括弧不要)
+9. sheetTypeLabels に notice 文言を追加 (splitDougaNotice 等)
+10. Phase を C-1〜C-5 に細分化 (C-1 先行可能)
