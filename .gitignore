@@ -15,3 +15,6 @@ docs/*
 
 # columns超過自動分割の設計メモは公開する
 !docs/column_overflow_design.md
+
+# 用紙横拡張の設計メモは公開する
+!docs/paper_horizontal_expand_notes.md

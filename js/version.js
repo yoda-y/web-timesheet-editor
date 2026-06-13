@@ -27,6 +27,10 @@ const APP_CHANGELOG = `# Changelog
   - totalPages は総物理ページ数、currentPage は物理ページ連番 (Separateは 1,2,3,4)
 - 原画/動画のページ内ラベル (notice) は C-5 で対応予定
 
+### 修正
+- カラムヘッダー/列名 fallback を Excel 列名風に (A..Z, AA, AB…/小文字 a..z, aa…)
+  - 26列以上でも自然な列名。ユーザー定義列名 (sections[].chars) は従来通り優先
+
 ## v0.27.1 (2026-06-13)
 
 ### 修正 (gengaDougaSplitPage)
