@@ -132,6 +132,8 @@ async function showExternalTemplateDetail(id) {
     form.style.display = 'flex';
     document.getElementById('ext-tpl-name-input').value = tpl.name || '';
     updateExternalTemplateImagePreview(tpl.image, tpl.imageWidth, tpl.imageHeight);
+    const overflowSel = document.getElementById('ext-tpl-overflow-mode');
+    if (overflowSel) overflowSel.value = tpl.columnOverflowMode || 'none';
     loadExtTplColumnHeaderForm(tpl);
     document.querySelectorAll('.ext-tpl-list-item').forEach(el => el.classList.toggle('selected', el.dataset.id === id));
     // 保存済み内容を読み込んだ直後はクリーン状態
@@ -332,6 +334,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('ext-tpl-name-input').addEventListener('input', () => {
         if (extTplDraft) setExtTplDirty(true);
     });
+
+    // 列超過モード (Phase B)
+    const overflowSel = document.getElementById('ext-tpl-overflow-mode');
+    if (overflowSel) {
+        overflowSel.addEventListener('change', () => {
+            if (!extTplDraft) return;
+            extTplDraft.columnOverflowMode = overflowSel.value;
+            setExtTplDirty(true);
+        });
+    }
 
     // カラムヘッダー設定 (テンプレ共通) の配線
     EXT_TPL_CH_INPUTS.forEach(def => {

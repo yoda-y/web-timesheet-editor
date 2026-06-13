@@ -178,6 +178,10 @@ const I18N = {
         'extTpl.confirmDelete': '削除してよろしいですか？',
         'extTpl.confirmDiscard': '保存していない変更があります。閉じると変更は破棄されます。閉じますか？',
         'extTpl.dirtyBadge': '未保存',
+        // 列超過モード (Phase B)
+        'extTpl.overflowMode': '列超過モード:',
+        'extTpl.overflowNone': 'なし (超過列は非表示)',
+        'extTpl.overflowPageChunks': 'ページ分割 (1-1, 1-2…)',
         // カラムヘッダー印字 (Phase A)
         'colHeader.sectionTitle': 'カラムヘッダー印字 (テンプレ共通)',
         'colHeader.sectionTitleBBox': 'カラムヘッダー印字',
@@ -785,6 +789,10 @@ const I18N = {
         'extTpl.confirmDelete': 'Delete this template?',
         'extTpl.confirmDiscard': 'There are unsaved changes. Closing will discard them. Close anyway?',
         'extTpl.dirtyBadge': 'Unsaved',
+        // Column overflow mode (Phase B)
+        'extTpl.overflowMode': 'Column overflow:',
+        'extTpl.overflowNone': 'None (extra columns hidden)',
+        'extTpl.overflowPageChunks': 'Page chunks (1-1, 1-2…)',
         // Column header printing (Phase A)
         'colHeader.sectionTitle': 'Column Headers (template default)',
         'colHeader.sectionTitleBBox': 'Column Headers',
