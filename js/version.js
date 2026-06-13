@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.29.0';
+const APP_VERSION = '0.30.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,17 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.30.0 (2026-06-14)
+
+### 追加 (columns超過 Phase D + sheetTypeLabels 編集UI)
+- カラムヘッダー下地色のスポイト (ネイティブ EyeDropper API 優先)
+  - 外部テンプレ設定モーダル / BBoxエディタの下地色横に「スポイト」ボタン
+  - 非対応ブラウザでは BBoxエディタ canvas クリック (crosshair/Esc) にフォールバック
+  - 取得色を columnHeaderBgColor に反映
+- 原動画ラベル (sheetTypeLabels) の編集UI を外部テンプレ設定モーダルに追加
+  - 原画/動画ラベル、SplitPage動画側、Separate原画/動画ページの文言を編集可
+  - 空欄は i18n 既定値 (プレースホルダ表示)。IDB / Project HTML 保存対象
 
 ## v0.28.0 (2026-06-13)
 

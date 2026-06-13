@@ -135,6 +135,7 @@ async function showExternalTemplateDetail(id) {
     const overflowSel = document.getElementById('ext-tpl-overflow-mode');
     if (overflowSel) overflowSel.value = tpl.columnOverflowMode || 'none';
     loadExtTplColumnHeaderForm(tpl);
+    loadExtTplSheetTypeLabelsForm(tpl);
     document.querySelectorAll('.ext-tpl-list-item').forEach(el => el.classList.toggle('selected', el.dataset.id === id));
     // 保存済み内容を読み込んだ直後はクリーン状態
     setExtTplDirty(false);
@@ -159,6 +160,34 @@ function ensureDraftColumnHeader() {
         extTplDraft.columnHeader = Object.assign({}, defaults);
     }
     return extTplDraft.columnHeader;
+}
+
+// ── sheetTypeLabels (原動画ラベル) 編集 ──────────────────────
+const EXT_TPL_SL_INPUTS = [
+    { id: 'ext-tpl-sl-genga',     key: 'genga' },
+    { id: 'ext-tpl-sl-douga',     key: 'douga' },
+    { id: 'ext-tpl-sl-splitdouga', key: 'splitDougaNotice' },
+    { id: 'ext-tpl-sl-sepgenga',  key: 'separateGengaNotice' },
+    { id: 'ext-tpl-sl-sepdouga',  key: 'separateDougaNotice' }
+];
+
+function ensureDraftSheetTypeLabels() {
+    if (!extTplDraft) return null;
+    if (!extTplDraft.sheetTypeLabels) extTplDraft.sheetTypeLabels = {};
+    return extTplDraft.sheetTypeLabels;
+}
+
+function loadExtTplSheetTypeLabelsForm(tpl) {
+    const resolved = (window.externalTemplate && typeof window.externalTemplate.resolveSheetTypeLabels === 'function')
+        ? window.externalTemplate.resolveSheetTypeLabels(tpl) : {};
+    EXT_TPL_SL_INPUTS.forEach(def => {
+        const el = document.getElementById(def.id);
+        if (!el) return;
+        // 既定値はプレースホルダで示し、value は明示設定値のみ (未設定は空欄=既定)
+        const stored = (tpl && tpl.sheetTypeLabels && tpl.sheetTypeLabels[def.key]) || '';
+        el.value = stored;
+        el.placeholder = resolved[def.key] || '';
+    });
 }
 
 function loadExtTplColumnHeaderForm(tpl) {
@@ -363,6 +392,36 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 ch[def.key] = el.value;
             }
+            setExtTplDirty(true);
+        });
+    });
+
+    // カラムヘッダー下地色スポイト (テンプレ共通)
+    const chEyedropper = document.getElementById('ext-tpl-ch-eyedropper');
+    if (chEyedropper) {
+        chEyedropper.addEventListener('click', async () => {
+            if (!extTplDraft || typeof window.pickColorEyedropper !== 'function') return;
+            const hex = await window.pickColorEyedropper(document.getElementById('ext-tpl-image-preview-canvas'));
+            if (!hex) return;
+            const ch = ensureDraftColumnHeader();
+            if (!ch) return;
+            ch.bgColor = hex;
+            const bgEl = document.getElementById('ext-tpl-ch-bgcolor');
+            if (bgEl) bgEl.value = hex;
+            setExtTplDirty(true);
+        });
+    }
+
+    // 原動画ラベル (sheetTypeLabels) の配線
+    EXT_TPL_SL_INPUTS.forEach(def => {
+        const el = document.getElementById(def.id);
+        if (!el) return;
+        el.addEventListener('input', () => {
+            const sl = ensureDraftSheetTypeLabels();
+            if (!sl) return;
+            const v = el.value;
+            if (v.trim() === '') delete sl[def.key];   // 空欄は既定 (i18n) に戻す
+            else sl[def.key] = v;
             setExtTplDirty(true);
         });
     });
