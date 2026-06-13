@@ -6,6 +6,15 @@
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
 
+## v0.26.1 (2026-06-13)
+
+### 修正 (columns超過対応 Phase C-1)
+- pageChunks 時、Direction (演出指示) を最初の物理ページ (1-1) のみに描画
+  - 従来は各 framePage の chunk 0 (1-1, 2-1, 3-1…) に出ていた
+  - Direction はカット全体の指示のため 1-1 のみが適切
+  - SOUND/CAMERA/セリフ は従来通り各 framePage の primary chunk に描画
+  - memo/staff/custom も従来通り (各 framePage の chunk 0) 据え置き
+
 ## v0.26.0 (2026-06-13)
 
 ### 追加 (columns超過対応 Phase B: pageChunks)
