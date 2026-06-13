@@ -177,6 +177,8 @@ function buildProjectData(extraMeta) {
             if (tpl.columnOverflowMode && tpl.columnOverflowMode !== 'none') {
                 externalTemplateBlock.columnOverflowMode = tpl.columnOverflowMode;
             }
+            // Phase C-5: シート種別ラベル (gengaDouga)
+            if (tpl.sheetTypeLabels) externalTemplateBlock.sheetTypeLabels = deepCloneJSON(tpl.sheetTypeLabels);
             // Phase 2: ページ別テンプレ画像 (pageImages)。各画像を assets 化。
             if (tpl.pageImages && typeof tpl.pageImages === 'object') {
                 const pageImagesOut = {};
@@ -363,6 +365,8 @@ async function loadProjectData(projectData) {
             if (et.columnHeader) tplToApply.columnHeader = deepCloneJSON(et.columnHeader);
             // Phase B: 列超過モードの復元
             if (et.columnOverflowMode) tplToApply.columnOverflowMode = et.columnOverflowMode;
+            // Phase C-5: シート種別ラベルの復元
+            if (et.sheetTypeLabels) tplToApply.sheetTypeLabels = deepCloneJSON(et.sheetTypeLabels);
             // Phase 2: pageImages 復元 (assetId → dataUrl)
             if (et.pageImages && typeof et.pageImages === 'object') {
                 const pageImages = {};

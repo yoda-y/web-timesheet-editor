@@ -21,6 +21,20 @@
   - totalPages は総物理ページ数、currentPage は物理ページ連番 (Separateは 1,2,3,4)
 - 原画/動画のページ内ラベル (notice) は C-5 で対応予定
 
+## v0.29.0 (2026-06-13)
+
+### 追加 (columns超過対応 Phase C-5: ラベル/notice/警告)
+- gengaDouga シート種別ラベル (tpl.sheetTypeLabels、テンプレ単位で可変)
+  - 既定 ja: 原画/動画、en: KEY/INBTWN
+- SplitPage: 動画領域 (action2/cell2) 上部に上括弧 + 「こちらが動画シートです」notice
+  - showSplitNotice で ON/OFF (既定 ON)、BOOK帯と干渉しない位置
+- SeparatePages: ページ上部に「原画シート」/「動画シート」ラベル
+- 未描画列の警告
+  - Preview更新時に警告トースト (同一状態は抑制)
+  - シート右下に「ACTION +n / CELL +n 列 未表示」注記
+  - 容量判定はモード別 (none/Split/Separate)。pageChunks は全列描画で対象外
+- Project HTML に sheetTypeLabels を保存/復元
+
 ## v0.28.2 (2026-06-13)
 
 ### 修正 (列名 Excel化の根本対応)

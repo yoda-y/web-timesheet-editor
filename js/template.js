@@ -200,6 +200,7 @@ function renderTemplate(dpi, pageIndex = 0) {
             drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex, pageDesc);
             drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset, pageDesc);
             drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, pageDesc);
+            drawUnrenderedColumnsNote(ctx, extTpl, bboxToCanvas, scale);
         }
         return canvas;
     }
@@ -3650,7 +3651,49 @@ function drawGengaDougaSplitPage(ctx, extTpl, bboxToCanvas, scale, pageOffset) {
 
     extColOffset = 0;
     extSourceType = null;
-    // TODO (C-5): 動画領域 (action2/cell2) の上部に notice + 上括弧
+
+    // 動画領域 (action2/cell2) の上部に notice + 上括弧 (C-5)
+    drawSplitDougaNotice(ctx, extTpl, bboxToCanvas, scale);
+}
+
+// SplitPage: 動画領域 (action2/cell2) を上括弧で括り「こちらが動画シートです」を描画
+function drawSplitDougaNotice(ctx, extTpl, bboxToCanvas, scale) {
+    const bx = extTpl.bboxes;
+    const a2 = bx.action2;
+    if (!a2 || !a2.enabled) return;
+    const labels = (window.externalTemplate && typeof window.externalTemplate.resolveSheetTypeLabels === 'function')
+        ? window.externalTemplate.resolveSheetTypeLabels(extTpl) : null;
+    if (labels && labels.showSplitNotice === false) return;
+    const text = (labels && labels.splitDougaNotice) || 'こちらが動画シートです';
+
+    // 動画領域の左端〜右端 (action2 左端 〜 cell2 右端 or action2 右端)
+    const rA2 = bboxToCanvas(a2);
+    const c2 = bx.cell2;
+    const rC2 = (c2 && c2.enabled) ? bboxToCanvas(c2) : null;
+    const left = rA2.x;
+    const right = rC2 ? Math.max(rA2.x + rA2.w, rC2.x + rC2.w) : (rA2.x + rA2.w);
+    const m = (mm) => mm * scale;
+    // BOOK帯 (原画側) と干渉しないよう、動画領域上端から少し上に置く
+    const bracketY = rA2.y - m(4);
+    const tick = m(1.5);
+
+    ctx.save();
+    ctx.strokeStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.TEMPLATE_COLOR) || '#7cb342';
+    ctx.lineWidth = Math.max(1, scale * 0.25);
+    // 上括弧 (⌐___¬): 両端から下にヒゲ
+    ctx.beginPath();
+    ctx.moveTo(left, bracketY + tick);
+    ctx.lineTo(left, bracketY);
+    ctx.lineTo(right, bracketY);
+    ctx.lineTo(right, bracketY + tick);
+    ctx.stroke();
+    // notice テキスト (括弧の上、中央)
+    ctx.fillStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.TEMPLATE_COLOR) || '#7cb342';
+    ctx.font = `bold ${m(2.4)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(text, (left + right) / 2, bracketY - m(0.6));
+    ctx.restore();
 }
 
 // SOUND / CAMERA / セリフを原画側 (sound1/camera1) に通常描画する共通ヘルパー。
@@ -3710,7 +3753,58 @@ function drawGengaDougaSeparatePage(ctx, extTpl, bboxToCanvas, scale, pageOffset
     }
     extColOffset = 0;
     extSourceType = null;
-    // TODO (C-5): ページ上部に原画/動画ラベル
+
+    // ページ上部に原画/動画ラベル (C-5)
+    drawSeparatePageLabel(ctx, extTpl, bboxToCanvas, scale, sheetKind);
+}
+
+// SeparatePages: ページ種別 (原画/動画) をシート上部に明記
+function drawSeparatePageLabel(ctx, extTpl, bboxToCanvas, scale, sheetKind) {
+    const a1 = extTpl.bboxes.action1;
+    if (!a1 || !a1.enabled) return;
+    const labels = (window.externalTemplate && typeof window.externalTemplate.resolveSheetTypeLabels === 'function')
+        ? window.externalTemplate.resolveSheetTypeLabels(extTpl) : null;
+    const text = sheetKind === 'douga'
+        ? ((labels && labels.separateDougaNotice) || '動画シート')
+        : ((labels && labels.separateGengaNotice) || '原画シート');
+    const r = bboxToCanvas(a1);
+    const m = (mm) => mm * scale;
+    ctx.save();
+    ctx.fillStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.TEMPLATE_COLOR) || '#7cb342';
+    ctx.font = `bold ${m(3.2)}px sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    // action1 上端のさらに上 (BOOK帯より上)。負域に出る場合は上端付近へクランプ
+    let y = r.y - m(8);
+    if (y < m(3)) y = r.y - m(1);
+    ctx.fillText(text, r.x, y);
+    ctx.restore();
+}
+
+// 未描画列がある場合、シート右下に「+n列 未表示」注記 (C-5)
+function drawUnrenderedColumnsNote(ctx, extTpl, bboxToCanvas, scale) {
+    if (typeof window.getExternalTemplateUnrenderedColumns !== 'function') return;
+    let info;
+    try { info = window.getExternalTemplateUnrenderedColumns(); } catch (e) { return; }
+    if (!info || info.total <= 0) return;
+    const parts = [];
+    if (info.actionMissing > 0) parts.push(`ACTION +${info.actionMissing}`);
+    if (info.cellMissing > 0) parts.push(`CELL +${info.cellMissing}`);
+    const text = `${parts.join(' / ')} 列 未表示`;
+    const m = (mm) => mm * scale;
+    ctx.save();
+    ctx.font = `bold ${m(2.4)}px sans-serif`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    const tw = ctx.measureText(text).width;
+    const x = ctx.canvas.width - m(3);
+    const y = ctx.canvas.height - m(3);
+    // 視認性のため淡い下地
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(x - tw - m(1.5), y - m(3.4), tw + m(3), m(4));
+    ctx.fillStyle = '#c62828';
+    ctx.fillText(text, x, y);
+    ctx.restore();
 }
 
 function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset, pageDesc) {

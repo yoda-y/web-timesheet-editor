@@ -539,6 +539,29 @@ function updateTemplatePreview() {
 
     // ページ内画像リスト同期 (改善7)
     if (typeof refreshHandwritingImageList === 'function') refreshHandwritingImageList();
+
+    // 外部テンプレ 未描画列の警告 (C-5)
+    maybeWarnUnrenderedColumns();
+}
+
+// 未描画列がある場合に警告トースト (同一内容の連続表示は抑制)
+let lastUnrenderedWarnKey = null;
+function maybeWarnUnrenderedColumns() {
+    if (typeof window.getExternalTemplateUnrenderedColumns !== 'function') return;
+    let info;
+    try { info = window.getExternalTemplateUnrenderedColumns(); } catch (e) { return; }
+    if (!info || info.total <= 0) { lastUnrenderedWarnKey = null; return; }
+    const key = `${info.actionMissing}/${info.cellMissing}`;
+    if (key === lastUnrenderedWarnKey) return;  // 同一状態の再警告を抑制
+    lastUnrenderedWarnKey = key;
+    const parts = [];
+    if (info.actionMissing > 0) parts.push(`ACTION +${info.actionMissing}`);
+    if (info.cellMissing > 0) parts.push(`CELL +${info.cellMissing}`);
+    const detail = parts.join(' / ');
+    const msg = (typeof t === 'function')
+        ? t('extTpl.unrenderedWarn').replace('{cols}', detail)
+        : `表示しきれない列があります (${detail})。列ページ分割の利用を検討してください。`;
+    if (typeof showToast === 'function') showToast(msg, 4000);
 }
 
 // プレビュー更新（モード切替時やデータ変更時に呼ばれる）
