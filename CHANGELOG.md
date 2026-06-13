@@ -21,6 +21,13 @@
   - totalPages は総物理ページ数、currentPage は物理ページ連番 (Separateは 1,2,3,4)
 - 原画/動画のページ内ラベル (notice) は C-5 で対応予定
 
+## v0.28.1 (2026-06-13)
+
+### 修正
+- カラムヘッダー/列名 fallback を Excel 列名風に (A..Z, AA, AB…/小文字 a..z, aa…)
+  - 26列以上でも自然な列名。ユーザー定義列名 (sections[].chars) は従来通り優先
+- 標準テンプレ用紙の横拡張要望を docs/paper_horizontal_expand_notes.md に別タスクとしてメモ
+
 ## v0.27.1 (2026-06-13)
 
 ### 修正 (gengaDougaSplitPage)
