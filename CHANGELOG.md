@@ -6,6 +6,23 @@
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
 
+## v0.27.0 (2026-06-13)
+
+### 追加 (columns超過対応 Phase C-2/C-3: gengaDougaSplitPage)
+- 列超過モードに gengaDougaSplitPage / gengaDougaAuto を追加
+  - SplitPage: 同一フレーム範囲を原画領域/動画領域に分けて1ページに描画
+    - 原画領域: action1 (ACTION 0..) + cell1 (ACTION 続き列)
+    - 動画領域: action2 (CELL 0..) + cell2 (CELL 続き列)
+  - Auto: 当面 SplitPage に解決 (SeparatePages への自動切替は C-4 で追加)
+  - ページ番号は通常表記 (枝番なし)、シート容量はフレーム方向 '1'側のみ
+- 描画系列の上書き機構 extSourceType を追加
+  - BBox のレイアウト種別 (type) と実データ系列を分離 (extDataKey/extSeriesType)
+  - セル値 / Rep / 止メ / 棒線・波線 / カラムヘッダー列名が描画系列に追従
+  - Rep系の有効判定を type ではなくデータ系列 (ACTION) ベースに変更
+- UI: 列超過モード select を3択に (通常〔原動画自動〕/ 列ページ分割 / 従来方式)
+  - 既存テンプレ未設定は従来方式 (none) のまま、描画不変
+- 動画領域の notice / 上括弧表示は C-5 で対応予定
+
 ## v0.26.1 (2026-06-13)
 
 ### 修正 (columns超過対応 Phase C-1)

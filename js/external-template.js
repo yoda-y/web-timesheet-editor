@@ -1006,6 +1006,12 @@ function getExternalTemplateSheetCapacity() {
         });
         return max;
     };
+    // gengaDouga: '2'側は同一フレーム範囲の別領域 (動画) なのでフレーム容量は '1'側のみ。
+    // none/pageChunks: '1'+'2' (action2 は時間継続)。
+    const mode = tpl.columnOverflowMode || 'none';
+    if (mode === 'gengaDougaSplitPage' || mode === 'gengaDougaSeparatePages' || mode === 'gengaDougaAuto') {
+        return getMaxFrames('1');
+    }
     return getMaxFrames('1') + getMaxFrames('2');
 }
 window.getExternalTemplateSheetCapacity = getExternalTemplateSheetCapacity;

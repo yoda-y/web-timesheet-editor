@@ -3542,9 +3542,74 @@ function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, 
 let extColOffset = 0;
 function extCol(ci) { return ci + extColOffset; }
 
+// gengaDouga (Phase C): 描画系列の上書き。
+// 'action' | 'cell' | null。SplitPage/SeparatePages では BBox のレイアウト種別 (type) と
+// 実データ系列が異なる (例: cell2 BBox に CELL 系列、action2 BBox に CELL 系列)。
+// null のとき (none/pageChunks) は従来通り type がそのまま系列。
+let extSourceType = null;
+function extSeriesType(type) {
+    if (extSourceType && (type === 'action' || type === 'cell')) return extSourceType;
+    return type;
+}
+function extDataKey(type) { return extSeriesType(type).toUpperCase(); }
+
+// gengaDouga Auto は当面 SplitPage に解決 (SeparatePages は C-4 で追加)
+function getEffectiveOverflowMode(extTpl) {
+    const mode = (extTpl && extTpl.columnOverflowMode) || 'none';
+    if (mode === 'gengaDougaAuto') return 'gengaDougaSplitPage';
+    return mode;
+}
+
+// gengaDougaSplitPage (Phase C-3): 同一フレーム範囲を
+//   原画領域 = action1 (ACTION 0..) + cell1 (ACTION 続き)
+//   動画領域 = action2 (CELL 0..)  + cell2 (CELL 続き)
+// として描画する。ページ数は増やさず通常表記。
+function drawGengaDougaSplitPage(ctx, extTpl, bboxToCanvas, scale, pageOffset) {
+    const bx = extTpl.bboxes;
+    const resolveHeader = (window.externalTemplate && typeof window.externalTemplate.resolveColumnHeader === 'function')
+        ? window.externalTemplate.resolveColumnHeader : null;
+    const isPage0 = pageOffset < 0;
+    const totalToRender = isPage0 ? (-pageOffset) : null;
+
+    const drawArea = (mainB, contB, sourceType) => {
+        if (!mainB || !mainB.enabled) return;
+        extSourceType = sourceType;
+        // main BBox: 系列の先頭列 0..a-1
+        const aCols = mainB.columns || 5;
+        const aCap = mainB.frames || 72;
+        const useA = isPage0 ? Math.min(totalToRender, aCap) : aCap;
+        extColOffset = 0;
+        drawTimelineBBox(ctx, 'action', mainB, bboxToCanvas, scale, pageOffset, pageOffset + useA, aCols, aCap,
+            resolveHeader ? resolveHeader(extTpl, mainB) : null);
+        // continuation BBox: 系列の続き列 a..a+c-1
+        if (contB && contB.enabled) {
+            const cCols = contB.columns || 5;
+            const cCap = contB.frames || aCap;
+            const useC = isPage0 ? Math.min(totalToRender, cCap) : cCap;
+            extColOffset = aCols;
+            drawTimelineBBox(ctx, 'cell', contB, bboxToCanvas, scale, pageOffset, pageOffset + useC, cCols, cCap,
+                resolveHeader ? resolveHeader(extTpl, contB) : null);
+        }
+        extColOffset = 0;
+        extSourceType = null;
+    };
+
+    drawArea(bx.action1, bx.cell1, 'action');  // 原画領域
+    drawArea(bx.action2, bx.cell2, 'cell');    // 動画領域
+    extColOffset = 0;
+    extSourceType = null;
+    // TODO (C-5): 動画領域 (action2/cell2) の上部に notice + 上括弧
+}
+
 function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset, pageDesc) {
     if (!extTpl.bboxes || typeof cellData === 'undefined') return;
     if (typeof pageOffset !== 'number') pageOffset = 0;
+
+    // gengaDouga SplitPage は専用パス (4枠の役割が none/pageChunks と異なる)
+    if (getEffectiveOverflowMode(extTpl) === 'gengaDougaSplitPage') {
+        drawGengaDougaSplitPage(ctx, extTpl, bboxToCanvas, scale, pageOffset);
+        return;
+    }
 
     const groups = [
         { type: 'action', tag1: 'action1', tag2: 'action2' },
@@ -3856,7 +3921,7 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
 // - autoRep / customRepeat の範囲はスキップ
 function drawBarLinesInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale) {
     if (typeof cellData === 'undefined') return;
-    const upperType = type.toUpperCase();
+    const upperType = extDataKey(type);   // gengaDouga: 描画系列を上書き
     const m = (mm) => mm * scale;
 
     // カット尺
@@ -4013,6 +4078,7 @@ function drawCutLengthInBBox(ctx, rect, cellH, frameStart, frameEnd, scale) {
 
 // カラムヘッダー名の取得 (Edit の sections[].chars。空は自動名 fallback)
 function getColumnHeaderName(type, ci) {
+    type = extSeriesType(type);   // gengaDouga: 列名も描画系列に合わせる
     const secType = { action: 'ACTION', cell: 'CELL', sound: 'SOUND', camera: 'CAMERA' }[type];
     const sec = (typeof sections !== 'undefined' && Array.isArray(sections))
         ? sections.find(s => s.type === secType) : null;
@@ -4082,14 +4148,16 @@ function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, fram
     const bboxFontMm = (typeof bbox.fontSize === 'number' && bbox.fontSize > 0) ? bbox.fontSize : null;
 
     if (type === 'action' || type === 'cell') {
-        // ACTION列のみ Rep省略を有効化
-        const skipSet = (type === 'action')
+        // Rep系は「描画系列が ACTION のとき」有効 (SplitPage で cell BBox に ACTION系列を
+        // 描く場合も rep が要るため、レイアウト type ではなくデータ系列 dataType で判定)
+        const dataType = extDataKey(type);
+        const skipSet = (dataType === 'ACTION')
             ? computeActionRepeatSkipSet(columns, frameStart, frameEnd)
             : null;
         drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm, skipSet);
         // 連続線(棒線/波線) を ACTION/CELL の両方で描画
         drawBarLinesInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
-        if (type === 'action') {
+        if (dataType === 'ACTION') {
             drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, frameEnd, scale);
         }
     } else if (type === 'sound') {
@@ -4131,7 +4199,7 @@ function drawTimelineBBox(ctx, type, bbox, bboxToCanvas, scale, frameStart, fram
 }
 
 function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, frameEnd, scale, bboxFontMm, skipSet) {
-    const upperType = type.toUpperCase();
+    const upperType = extDataKey(type);   // gengaDouga: 描画系列を上書き
     const defaultMm = (typeof settings !== 'undefined' && settings.draw && settings.draw.fontSize && settings.draw.fontSize.cell) || 2.7;
     const isExplicit = (typeof bboxFontMm === 'number' && bboxFontMm > 0);
     const userMm = isExplicit ? bboxFontMm : defaultMm;
