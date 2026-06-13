@@ -607,4 +607,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // カラムヘッダー下地色スポイト (BBox override)。BBoxエディタ canvas からも拾える
+    const bboxChEyedropper = document.getElementById('bbox-ch-eyedropper');
+    if (bboxChEyedropper) {
+        bboxChEyedropper.addEventListener('click', async () => {
+            if (!bboxEditorSelectedTag || !bboxEditorTemplate) return;
+            const bbox = bboxEditorTemplate.bboxes[bboxEditorSelectedTag];
+            if (!bbox || !bbox.columnHeader) return;
+            if (typeof window.pickColorEyedropper !== 'function') return;
+            const hex = await window.pickColorEyedropper(document.getElementById('bbox-editor-canvas'));
+            if (!hex) return;
+            pushBBoxHistory();
+            bbox.columnHeader.bgColor = hex;
+            const bgEl = document.getElementById('bbox-ch-bgcolor');
+            if (bgEl) bgEl.value = hex;
+            if (typeof window.bboxEditorRenderCanvas === 'function') window.bboxEditorRenderCanvas();
+        });
+    }
+
 });

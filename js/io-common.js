@@ -27,6 +27,56 @@ function showToast(message, duration = 3000, onClick = null) {
     toast._hideTimer = setTimeout(() => { toast.style.opacity = '0'; }, duration);
 }
 
+// ----- スポイト (色取得) -----
+// Phase D: ネイティブ EyeDropper API を優先。非対応なら canvas からの手動ピックへ。
+// 戻り値 Promise<string|null> (#rrggbb、キャンセル時 null)
+async function pickColorEyedropper(fallbackCanvas) {
+    // 1. ネイティブ EyeDropper API (Chrome/Edge 95+)。画面全体から拾える・Esc対応・crosshair
+    if (typeof window.EyeDropper === 'function') {
+        try {
+            const res = await new window.EyeDropper().open();
+            return (res && res.sRGBHex) ? res.sRGBHex : null;
+        } catch (e) {
+            return null;  // ユーザーキャンセル (Esc) 含む
+        }
+    }
+    // 2. フォールバック: 指定 canvas 上のクリックで getImageData
+    const canvas = fallbackCanvas;
+    if (!canvas || typeof canvas.getContext !== 'function') {
+        if (typeof showToast === 'function') {
+            showToast(typeof t === 'function' ? t('colHeader.eyedropperUnsupported')
+                : 'スポイト非対応のブラウザです', 3000);
+        }
+        return null;
+    }
+    return new Promise((resolve) => {
+        const prevCursor = canvas.style.cursor;
+        canvas.style.cursor = 'crosshair';
+        const cleanup = () => {
+            canvas.style.cursor = prevCursor;
+            canvas.removeEventListener('click', onClick, true);
+            window.removeEventListener('keydown', onKey, true);
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cleanup(); resolve(null); }
+        };
+        const onClick = (e) => {
+            e.preventDefault(); e.stopPropagation();
+            try {
+                const rect = canvas.getBoundingClientRect();
+                const x = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
+                const y = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
+                const d = canvas.getContext('2d').getImageData(x, y, 1, 1).data;
+                const hex = '#' + [d[0], d[1], d[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+                cleanup(); resolve(hex);
+            } catch (err) { cleanup(); resolve(null); }
+        };
+        canvas.addEventListener('click', onClick, true);
+        window.addEventListener('keydown', onKey, true);
+    });
+}
+window.pickColorEyedropper = pickColorEyedropper;
+
 // ----- 最小セル数定義（G列まで確保） -----
 const MIN_SECTION_COLS = {
     ACTION: { cols: 7, chars: ['A', 'B', 'C', 'D', 'E', 'F', 'G'] },
