@@ -129,10 +129,9 @@ window.addCellByRef = function(type, idx, position) {
         let cellSec = sections.find(s => s.type === "CELL");
         let newActName = "A", newCellName = "a";
         if (insertIdx === actSec.cols) {
-            let lastActCode = actSec.chars[actSec.cols - 1] ? actSec.chars[actSec.cols - 1].charCodeAt(0) : 64;
-            let lastCellCode = cellSec.chars[cellSec.cols - 1] ? cellSec.chars[cellSec.cols - 1].charCodeAt(0) : 96;
-            newActName = String.fromCharCode(lastActCode + 1);
-            newCellName = String.fromCharCode(lastCellCode + 1);
+            // 末尾追加: Excel列名 (A..Z, AA, AB…) で採番。Z 超えでも [ \ にならない
+            newActName = toColumnLetters(insertIdx, false);
+            newCellName = toColumnLetters(insertIdx, true);
         } else {
             let baseIdx = position === 'right' ? idx : Math.max(0, idx - 1);
             newActName = (actSec.chars[baseIdx] || "A") + "'";

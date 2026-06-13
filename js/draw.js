@@ -178,7 +178,12 @@ function drawColumnHeader() {
         ctx.textAlign = "center"; ctx.fillStyle = getEditInk('text'); ctx.font = "bold 10px sans-serif";
         ctx.fillText(s.type, s.x + (s.cols * s.cw) / 2, colHeaderH - 35);
         for (let i = 0; i < s.cols; i++) {
-            ctx.fillText(s.chars[i], s.x + s.cw * i + s.cw / 2, colHeaderH - 8);
+            // ACTION/CELL は壊れた自動名 ([ \ 等) を Excel列名で補完して表示
+            let colLabel = s.chars[i];
+            if ((s.type === 'ACTION' || s.type === 'CELL') && typeof resolveColumnDisplayName === 'function') {
+                colLabel = resolveColumnDisplayName(s.chars[i], i, s.type === 'CELL');
+            }
+            ctx.fillText(colLabel, s.x + s.cw * i + s.cw / 2, colHeaderH - 8);
             ctx.strokeStyle = getEditInk('thin'); ctx.lineWidth = (i === 0) ? 2 : 1;
             ctx.beginPath(); ctx.moveTo(s.x + i * s.cw, colHeaderH - 25); ctx.lineTo(s.x + i * s.cw, colHeaderH); ctx.stroke();
         }

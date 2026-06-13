@@ -21,6 +21,24 @@
   - totalPages は総物理ページ数、currentPage は物理ページ連番 (Separateは 1,2,3,4)
 - 原画/動画のページ内ラベル (notice) は C-5 で対応予定
 
+## v0.28.2 (2026-06-13)
+
+### 修正 (列名 Excel化の根本対応)
+- 列追加 (sections.js) の自動採番が Z の次に [ \ ] になる問題を修正
+  - 末尾追加を Excel列名 (toColumnLetters) に変更し AA, AB… を生成
+- 既に [ \ ] 等が保存された列も表示時に Excel列名へ補完
+  - resolveColumnDisplayName / isBrokenAutoColumnName を utils.js に追加
+  - Edit画面の列ヘッダー (draw.js) と外部テンプレ カラムヘッダー印字の両方に適用
+  - 意図あるユーザー定義名 (複数文字や通常文字) は維持
+- toColumnLetters を template.js から utils.js へ移動 (共有)
+
+## v0.28.1 (2026-06-13)
+
+### 修正
+- カラムヘッダー/列名 fallback を Excel 列名風に (A..Z, AA, AB…/小文字 a..z, aa…)
+  - 26列以上でも自然な列名。ユーザー定義列名 (sections[].chars) は従来通り優先
+- 標準テンプレ用紙の横拡張要望を docs/paper_horizontal_expand_notes.md に別タスクとしてメモ
+
 ## v0.27.1 (2026-06-13)
 
 ### 修正 (gengaDougaSplitPage)
