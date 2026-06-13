@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.28.2';
+const APP_VERSION = '0.29.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -26,6 +26,26 @@ const APP_CHANGELOG = `# Changelog
 - ページ計算を sub-page 数で統一 (pageChunks=チャンク数 / Separate=2 / 他=1)
   - totalPages は総物理ページ数、currentPage は物理ページ連番 (Separateは 1,2,3,4)
 - 原画/動画のページ内ラベル (notice) は C-5 で対応予定
+
+## v0.29.0 (2026-06-13)
+
+### 追加 (columns超過対応 Phase C-5: ラベル/notice/警告)
+- gengaDouga シート種別ラベル (tpl.sheetTypeLabels、テンプレ単位で可変)
+  - 既定 ja: 原画/動画、en: KEY/INBTWN
+- SplitPage: 動画領域 (action2/cell2) の BOOK帯高さに上括弧 + 「こちらが動画シートです」notice
+  - showSplitNotice で ON/OFF (既定 ON)。動画側は BOOK が無いので原画側 BOOK帯と同高さに配置
+- SeparatePages: 右側 (camera2 付近) の BOOK帯にページ種別ラベル「原画シート」/「動画シート」
+  - 左側 action1 の BOOK と干渉しない位置
+- 未描画列の警告
+  - Preview更新時に警告トースト (同一状態は抑制)
+  - シート右下に「ACTION +n / CELL +n 列 未表示」注記
+  - 容量判定はモード別 (none/Split/Separate)。pageChunks は全列描画で対象外
+- Project HTML に sheetTypeLabels を保存/復元
+
+### 修正
+- 標準テンプレ↔外部テンプレ切替時にページ数/送りボタンが更新されない問題
+  - 切替後に updatePageIndicator を呼び、currentPage をページ数内にクランプ
+  - 従来は Preview→Edit→Preview の再切替で初めて反映されていた
 
 ## v0.28.2 (2026-06-13)
 

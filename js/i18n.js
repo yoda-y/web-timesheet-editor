@@ -183,6 +183,7 @@ const I18N = {
         'extTpl.overflowNone': '従来方式 (超過列は非表示)',
         'extTpl.overflowPageChunks': '列ページ分割 (1-1, 1-2…)',
         'extTpl.overflowAuto': '通常 (原動画 自動)',
+        'extTpl.unrenderedWarn': '表示しきれない列があります ({cols})。列ページ分割の利用を検討してください。',
         // カラムヘッダー印字 (Phase A)
         'colHeader.sectionTitle': 'カラムヘッダー印字 (テンプレ共通)',
         'colHeader.sectionTitleBBox': 'カラムヘッダー印字',
@@ -795,6 +796,7 @@ const I18N = {
         'extTpl.overflowNone': 'Legacy (extra columns hidden)',
         'extTpl.overflowPageChunks': 'Page chunks (1-1, 1-2…)',
         'extTpl.overflowAuto': 'Auto (key/inbetween)',
+        'extTpl.unrenderedWarn': 'Some columns cannot be shown ({cols}). Consider using page chunks.',
         // Column header printing (Phase A)
         'colHeader.sectionTitle': 'Column Headers (template default)',
         'colHeader.sectionTitleBBox': 'Column Headers',

@@ -107,6 +107,30 @@ function resolveColumnHeaderConfig(tpl, bbox) {
         (bbox && bbox.columnHeader) || {});
 }
 
+// ─── gengaDouga シート種別ラベル (Phase C-5) ──────────────────────────────────
+// 原画/動画の表示文言。テンプレ単位で上書き可 (tpl.sheetTypeLabels)。
+function getSheetTypeLabelDefaults() {
+    const isJa = !(typeof currentLang !== 'undefined' && currentLang === 'en');
+    return isJa
+        ? {
+            genga: '原画', douga: '動画',
+            splitDougaNotice: 'こちらが動画シートです',
+            separateGengaNotice: '原画シート',
+            separateDougaNotice: '動画シート',
+            showSplitNotice: true
+          }
+        : {
+            genga: 'KEY', douga: 'INBTWN',
+            splitDougaNotice: 'INBETWEEN AREA',
+            separateGengaNotice: 'KEY SHEET',
+            separateDougaNotice: 'INBETWEEN SHEET',
+            showSplitNotice: true
+          };
+}
+function resolveSheetTypeLabels(tpl) {
+    return Object.assign({}, getSheetTypeLabelDefaults(), (tpl && tpl.sheetTypeLabels) || {});
+}
+
 // ─── UUID生成 ────────────────────────────────────────────────────────────────
 
 function generateTemplateId() {
@@ -694,6 +718,7 @@ window.externalTemplate = {
     tags:        EXTERNAL_TEMPLATE_TAGS,
     columnHeaderDefaults: COLUMN_HEADER_DEFAULTS,
     resolveColumnHeader:  resolveColumnHeaderConfig,
+    resolveSheetTypeLabels: resolveSheetTypeLabels,
     syncGroups:  BBOX_SYNC_GROUPS,
     getSyncPeers: getBBoxSyncPeers,
     isSyncEnabled: isBBoxSyncEnabled,
@@ -906,6 +931,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // 起動時に外部テンプレート一覧を読み込む
     refreshTemplateSelectExternalOptions().then(() => updateSidebarTemplateStatus());
 
+    // テンプレ切替後の共通後処理: ページ数が変わるので currentPage をクランプし、
+    // ページ送りインジケータと Preview を更新する (切替直後はページ送り不可だったバグ修正)
+    const afterTemplateChange = () => {
+        if (typeof getTotalPages === 'function' && typeof currentPage !== 'undefined') {
+            const tp = getTotalPages();
+            if (currentPage > tp - 1) currentPage = Math.max(0, tp - 1);
+        }
+        if (typeof updatePageIndicator === 'function') updatePageIndicator();
+        if (typeof updateTemplatePreview === 'function'
+            && typeof currentMode !== 'undefined' && currentMode === 'preview') {
+            updateTemplatePreview();
+        }
+    };
+
     templateSelect.addEventListener('change', async (e) => {
         const v = e.target.value;
         if (v === '__new_external__') {
@@ -920,17 +959,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 && projectLoadedExternalTemplate) {
                 await applyProjectExternalTemplate(projectLoadedExternalTemplate);
                 updateSidebarTemplateStatus();
-                if (typeof updateTemplatePreview === 'function' && typeof currentMode !== 'undefined' && currentMode === 'preview') updateTemplatePreview();
+                afterTemplateChange();
                 return;
             }
             const id = v.substring(4);
             await setCurrentExternalTemplate(id);
             updateSidebarTemplateStatus();
-            if (typeof updateTemplatePreview === 'function') updateTemplatePreview();
+            afterTemplateChange();
             return;
         }
         // 標準テンプレート選択時は外部テンプレートを解除 (バグ1修正: 強制同期ヘルパー使用)
         await resetToStandardTemplate();
+        afterTemplateChange();
     });
 
     // 追加ボタン: 常に有効、外部テンプレ管理モーダルを開く
@@ -1110,6 +1150,45 @@ function getExternalTemplateEffectiveMode() {
     return 'gengaDougaSeparatePages';
 }
 window.getExternalTemplateEffectiveMode = getExternalTemplateEffectiveMode;
+
+// 未描画列の検査。描画されない列がある場合 { action, cell } の不足列数を返す。
+// none: 容量超過分。pageChunks/Split/Separate: それぞれの最大容量を超える分。
+// 戻り値 { actionMissing, cellMissing, total } (0 なら未描画なし)
+function getExternalTemplateUnrenderedColumns() {
+    const tpl = currentExternalTemplate;
+    if (!tpl || !tpl.bboxes) return { actionMissing: 0, cellMissing: 0, total: 0 };
+    const mode = getExternalTemplateEffectiveMode();
+    const actionUsed = getUsedColumnCount('action');
+    const cellUsed = getUsedColumnCount('cell');
+    let actionCap = 0, cellCap = 0;
+    if (mode === 'none') {
+        // action1(+action2) / cell1(+cell2) の合計列容量
+        const cap = (a, b) => {
+            let c = 0;
+            const b1 = tpl.bboxes[a]; if (b1 && b1.enabled) c += (b1.columns || 5);
+            const b2 = tpl.bboxes[b]; if (b2 && b2.enabled) c += (b2.columns || 5);
+            return c;
+        };
+        actionCap = cap('action1', 'action2');
+        cellCap = cap('cell1', 'cell2');
+    } else if (mode === 'pageChunks') {
+        // チャンクで全列カバーするので未描画は出ない
+        return { actionMissing: 0, cellMissing: 0, total: 0 };
+    } else if (mode === 'gengaDougaSplitPage') {
+        actionCap = getGengaDougaAreaCapacity(tpl, 'action1', 'cell1');
+        cellCap = getGengaDougaAreaCapacity(tpl, 'action2', 'cell2');
+    } else if (mode === 'gengaDougaSeparatePages') {
+        // 4枠すべてで1系列 → 両系列とも同じ全容量
+        const total = ['action1', 'cell1', 'action2', 'cell2'].reduce((s, k) => {
+            const b = tpl.bboxes[k]; return s + (b && b.enabled ? (b.columns || 5) : 0);
+        }, 0);
+        actionCap = total; cellCap = total;
+    }
+    const actionMissing = Math.max(0, actionUsed - actionCap);
+    const cellMissing = Math.max(0, cellUsed - cellCap);
+    return { actionMissing, cellMissing, total: actionMissing + cellMissing };
+}
+window.getExternalTemplateUnrenderedColumns = getExternalTemplateUnrenderedColumns;
 
 // 1フレームページあたりの物理サブページ数
 // pageChunks: チャンク数 / SeparatePages: 2 (原画+動画) / それ以外: 1
