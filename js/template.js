@@ -3679,7 +3679,7 @@ function drawSplitDougaNotice(ctx, extTpl, bboxToCanvas, scale) {
     const tick = m(1.5);
 
     ctx.save();
-    ctx.strokeStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.TEMPLATE_COLOR) || '#7cb342';
+    ctx.strokeStyle = '#000';
     ctx.lineWidth = Math.max(1, scale * 0.25);
     // 上括弧 (⌐___¬): 両端から下にヒゲ
     ctx.beginPath();
@@ -3689,7 +3689,7 @@ function drawSplitDougaNotice(ctx, extTpl, bboxToCanvas, scale) {
     ctx.lineTo(right, bracketY + tick);
     ctx.stroke();
     // notice テキスト (括弧の上、中央)
-    ctx.fillStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.TEMPLATE_COLOR) || '#7cb342';
+    ctx.fillStyle = '#000';
     ctx.font = `bold ${m(2.4)}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
@@ -3780,7 +3780,7 @@ function drawSeparatePageLabel(ctx, extTpl, bboxToCanvas, scale, sheetKind) {
     let y = rA1.y - cellH * 2 - m(2);
     if (y < m(4)) y = rA1.y - m(1);
     ctx.save();
-    ctx.fillStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.TEMPLATE_COLOR) || '#7cb342';
+    ctx.fillStyle = '#000';
     ctx.font = `bold ${m(3.2)}px sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
