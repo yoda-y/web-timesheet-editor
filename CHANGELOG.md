@@ -36,6 +36,11 @@
   - 容量判定はモード別 (none/Split/Separate)。pageChunks は全列描画で対象外
 - Project HTML に sheetTypeLabels を保存/復元
 
+### 修正
+- 標準テンプレ↔外部テンプレ切替時にページ数/送りボタンが更新されない問題
+  - 切替後に updatePageIndicator を呼び、currentPage をページ数内にクランプ
+  - 従来は Preview→Edit→Preview の再切替で初めて反映されていた
+
 ## v0.28.2 (2026-06-13)
 
 ### 修正 (列名 Excel化の根本対応)

@@ -931,6 +931,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // 起動時に外部テンプレート一覧を読み込む
     refreshTemplateSelectExternalOptions().then(() => updateSidebarTemplateStatus());
 
+    // テンプレ切替後の共通後処理: ページ数が変わるので currentPage をクランプし、
+    // ページ送りインジケータと Preview を更新する (切替直後はページ送り不可だったバグ修正)
+    const afterTemplateChange = () => {
+        if (typeof getTotalPages === 'function' && typeof currentPage !== 'undefined') {
+            const tp = getTotalPages();
+            if (currentPage > tp - 1) currentPage = Math.max(0, tp - 1);
+        }
+        if (typeof updatePageIndicator === 'function') updatePageIndicator();
+        if (typeof updateTemplatePreview === 'function'
+            && typeof currentMode !== 'undefined' && currentMode === 'preview') {
+            updateTemplatePreview();
+        }
+    };
+
     templateSelect.addEventListener('change', async (e) => {
         const v = e.target.value;
         if (v === '__new_external__') {
@@ -945,17 +959,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 && projectLoadedExternalTemplate) {
                 await applyProjectExternalTemplate(projectLoadedExternalTemplate);
                 updateSidebarTemplateStatus();
-                if (typeof updateTemplatePreview === 'function' && typeof currentMode !== 'undefined' && currentMode === 'preview') updateTemplatePreview();
+                afterTemplateChange();
                 return;
             }
             const id = v.substring(4);
             await setCurrentExternalTemplate(id);
             updateSidebarTemplateStatus();
-            if (typeof updateTemplatePreview === 'function') updateTemplatePreview();
+            afterTemplateChange();
             return;
         }
         // 標準テンプレート選択時は外部テンプレートを解除 (バグ1修正: 強制同期ヘルパー使用)
         await resetToStandardTemplate();
+        afterTemplateChange();
     });
 
     // 追加ボタン: 常に有効、外部テンプレ管理モーダルを開く
