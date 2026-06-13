@@ -32,9 +32,10 @@ const APP_CHANGELOG = `# Changelog
 ### 追加 (columns超過対応 Phase C-5: ラベル/notice/警告)
 - gengaDouga シート種別ラベル (tpl.sheetTypeLabels、テンプレ単位で可変)
   - 既定 ja: 原画/動画、en: KEY/INBTWN
-- SplitPage: 動画領域 (action2/cell2) 上部に上括弧 + 「こちらが動画シートです」notice
-  - showSplitNotice で ON/OFF (既定 ON)、BOOK帯と干渉しない位置
-- SeparatePages: ページ上部に「原画シート」/「動画シート」ラベル
+- SplitPage: 動画領域 (action2/cell2) の BOOK帯高さに上括弧 + 「こちらが動画シートです」notice
+  - showSplitNotice で ON/OFF (既定 ON)。動画側は BOOK が無いので原画側 BOOK帯と同高さに配置
+- SeparatePages: 右側 (camera2 付近) の BOOK帯にページ種別ラベル「原画シート」/「動画シート」
+  - 左側 action1 の BOOK と干渉しない位置
 - 未描画列の警告
   - Preview更新時に警告トースト (同一状態は抑制)
   - シート右下に「ACTION +n / CELL +n 列 未表示」注記

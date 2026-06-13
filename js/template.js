@@ -3673,8 +3673,9 @@ function drawSplitDougaNotice(ctx, extTpl, bboxToCanvas, scale) {
     const left = rA2.x;
     const right = rC2 ? Math.max(rA2.x + rA2.w, rC2.x + rC2.w) : (rA2.x + rA2.w);
     const m = (mm) => mm * scale;
-    // BOOK帯 (原画側) と干渉しないよう、動画領域上端から少し上に置く
-    const bracketY = rA2.y - m(4);
+    // 動画領域には BOOK が無いので、原画側 BOOK帯と同じ高さの帯に描画する
+    const cellH = rA2.h / (a2.frames || 72);
+    const bracketY = rA2.y - cellH * 2 - m(4.5);   // 原画側 BOOK ボックスと同程度の高さ
     const tick = m(1.5);
 
     ctx.save();
@@ -3758,25 +3759,31 @@ function drawGengaDougaSeparatePage(ctx, extTpl, bboxToCanvas, scale, pageOffset
     drawSeparatePageLabel(ctx, extTpl, bboxToCanvas, scale, sheetKind);
 }
 
-// SeparatePages: ページ種別 (原画/動画) をシート上部に明記
+// SeparatePages: ページ種別 (原画/動画) をシート上部に明記。
+// 左側 (action1) の BOOK と干渉しないよう、右側の camera2 付近の BOOK帯に描画する。
 function drawSeparatePageLabel(ctx, extTpl, bboxToCanvas, scale, sheetKind) {
-    const a1 = extTpl.bboxes.action1;
+    const bx = extTpl.bboxes;
+    const a1 = bx.action1;
     if (!a1 || !a1.enabled) return;
     const labels = (window.externalTemplate && typeof window.externalTemplate.resolveSheetTypeLabels === 'function')
         ? window.externalTemplate.resolveSheetTypeLabels(extTpl) : null;
     const text = sheetKind === 'douga'
         ? ((labels && labels.separateDougaNotice) || '動画シート')
         : ((labels && labels.separateGengaNotice) || '原画シート');
-    const r = bboxToCanvas(a1);
+    // 描画基準: camera2 → camera1 → cell2 → action2 の順で右側の枠を採用
+    const anchorB = [bx.camera2, bx.camera1, bx.cell2, bx.action2].find(b => b && b.enabled) || a1;
+    const r = bboxToCanvas(anchorB);
+    const rA1 = bboxToCanvas(a1);
     const m = (mm) => mm * scale;
+    // 高さは原画側 BOOK帯と同程度 (action1 基準で算出)
+    const cellH = rA1.h / (a1.frames || 72);
+    let y = rA1.y - cellH * 2 - m(2);
+    if (y < m(4)) y = rA1.y - m(1);
     ctx.save();
     ctx.fillStyle = (typeof TEMPLATE !== 'undefined' && TEMPLATE.TEMPLATE_COLOR) || '#7cb342';
     ctx.font = `bold ${m(3.2)}px sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
-    // action1 上端のさらに上 (BOOK帯より上)。負域に出る場合は上端付近へクランプ
-    let y = r.y - m(8);
-    if (y < m(3)) y = r.y - m(1);
     ctx.fillText(text, r.x, y);
     ctx.restore();
 }
