@@ -6,6 +6,26 @@
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
 
+## v0.26.0 (2026-06-13)
+
+### 追加 (columns超過対応 Phase B: pageChunks)
+- 外部テンプレに列超過モード (tpl.columnOverflowMode: none / pageChunks) を追加
+  - pageChunks: BBox の columns を超える列を列チャンクとしてページ分割
+  - ページ順はフレームページ内で連続 (1-1 → 1-2 → 2-1 → 2-2)
+- 論理ページ記述子 PageDesc (framePage / chunk / sheetKind) を導入
+  - getExternalTemplatePageDesc / getExternalTemplatePageLabel / getExternalTemplateChunkCount / getUsedColumnCount
+  - totalPages は総物理ページ数 (フレームページ数 × チャンク数、0ページ除く)
+  - currentPage は枝番表記 "1-1" (チャンク無し時は従来の "1")
+- 描画の列オフセット対応 (extColOffset)
+  - ACTION/CELL のセル値 / option / fontColorId / Rep / 止メ / ブレ / 棒線・波線 / BOOK / カラムヘッダー列名すべて colOffset 適用で未描画列ゼロ
+  - chunk 間で列幅・列範囲を揃えるため描画列数は min(cols1, cols2) に統一
+- ページ別描画ルール
+  - meta系 (title/cut/currentPage等): 全ページ
+  - direction/memo/staff/custom と SOUND/CAMERA/セリフ: 各 framePage の chunk 0 のみ
+  - BOOK: 最初のフレームページの該当チャンクに列範囲分を描画
+  - 'none' モードは従来挙動を完全維持
+- Project HTML に columnOverflowMode を保存/復元
+
 ## v0.25.0 (2026-06-12)
 
 ### 追加 (columns超過対応 Phase A: カラムヘッダー印字)

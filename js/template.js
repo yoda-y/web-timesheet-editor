@@ -131,9 +131,12 @@ function renderExternalTemplateDataOnly(dpi, pageIndex) {
     const pageOffset = (typeof getExternalTemplatePageStartFrame === 'function')
         ? getExternalTemplatePageStartFrame(pageIndex)
         : 0;
-    drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex);
-    drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset);
-    drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex);
+    const pageDesc = (typeof getExternalTemplatePageDesc === 'function')
+        ? getExternalTemplatePageDesc(pageIndex)
+        : null;
+    drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex, pageDesc);
+    drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset, pageDesc);
+    drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, pageDesc);
     return canvas;
 }
 window.renderExternalTemplateDataOnly = renderExternalTemplateDataOnly;
@@ -190,9 +193,13 @@ function renderTemplate(dpi, pageIndex = 0) {
             const pageOffset = (typeof getExternalTemplatePageStartFrame === 'function')
                 ? getExternalTemplatePageStartFrame(pageIndex)
                 : 0;
-            drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex);
-            drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset);
-            drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex);
+            // Phase B: 論理ページ記述子 (framePage / chunk / sheetKind)
+            const pageDesc = (typeof getExternalTemplatePageDesc === 'function')
+                ? getExternalTemplatePageDesc(pageIndex)
+                : null;
+            drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex, pageDesc);
+            drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset, pageDesc);
+            drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, pageDesc);
         }
         return canvas;
     }
@@ -404,7 +411,7 @@ function drawPage0Timeline(ctx, scale, startX, startY, bodyW, pageIndex) {
 
 // === Phase 3b: 外部テンプレート メタ/staff BBox 描画 ===
 
-function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex) {
+function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageIndex, pageDesc) {
     if (!extTpl.bboxes || typeof metaData === 'undefined') return;
 
     // 1ページ目限定で描画するタグ（標準A3のDirection欄ルールに準拠）
@@ -414,6 +421,13 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
     const hasZeroPage = (typeof hasPage0 === 'function') && hasPage0();
     const isFirstPage = (typeof pageIndex !== 'number')
         || (hasZeroPage ? pageIndex === 1 : pageIndex === 0);
+    // Phase B (pageChunks): direction/memo/staff/custom は各 framePage の primary chunk
+    // (chunk 0) にのみ描画する。meta系 (title/cut/currentPage等) は全ページ。
+    const chunkMode = (extTpl.columnOverflowMode || 'none') === 'pageChunks'
+        && pageDesc && !pageDesc.isPage0
+        && (typeof window.getExternalTemplateChunkCount === 'function')
+        && window.getExternalTemplateChunkCount() > 1;
+    const isPrimaryChunk = !pageDesc || pageDesc.chunk === 0;
 
     const tagDefs = (window.externalTemplate && window.externalTemplate.tags) || {};
 
@@ -426,6 +440,10 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
             case 'cut':         return m.cut || '';
             case 'sheet':       return '';  // 廃止タグ（後方互換: 空文字を返す）
             case 'currentPage': {
+                // Phase B: pageChunks では "1-1" 形式の枝番付きラベル
+                if (typeof window.getExternalTemplatePageLabel === 'function' && typeof pageIndex === 'number') {
+                    return window.getExternalTemplatePageLabel(pageIndex);
+                }
                 // hasPage0時: pageIndex 0 → 0(headMargin), pageIndex 1 → 1, ...
                 // 通常: pageIndex 0 → 1
                 const hasZero = (typeof hasPage0 === 'function') && hasPage0();
@@ -463,12 +481,20 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
         const bbox = extTpl.bboxes[tagKey];
         if (!bbox || !bbox.enabled) continue;
 
-        // 1ページ目限定のタグは、2ページ目以降スキップ
-        if (PAGE1_ONLY_TAGS.has(tagKey) && !isFirstPage) continue;
-
         const tagDef = tagDefs[tagKey];
         if (!tagDef) continue;
         if (tagDef.category !== 'meta' && tagDef.category !== 'staff' && tagDef.category !== 'custom') continue;
+
+        if (chunkMode) {
+            // pageChunks: direction/memo/staff/custom は各 framePage の primary chunk のみ。
+            // meta系 (title/cut/page等、ページ識別に必要) は全ページに描画
+            const primaryOnly = tagKey === 'direction' || tagKey === 'memo'
+                || tagDef.category === 'staff' || tagDef.category === 'custom';
+            if (primaryOnly && !isPrimaryChunk) continue;
+        } else {
+            // 従来: direction は最初の通常ページのみ
+            if (PAGE1_ONLY_TAGS.has(tagKey) && !isFirstPage) continue;
+        }
 
         let value = getMetaValue(tagKey);
         if (!value) continue;
@@ -3371,18 +3397,35 @@ window.drawExternalTemplateMetaBoxes = drawExternalTemplateMetaBoxes;
 // - action1 BBox がある場合のみ
 // - 1ページ目のみ (pageIndex === 0)
 // - action1 の上側にボックスを並べ、各列位置に分岐ライン
-function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex) {
-    // 0ページ存在時は最初の通常ページ (pageIndex === 1) で描画
-    const hasZeroPage = (typeof hasPage0 === 'function') && hasPage0();
-    const firstNormalIdx = hasZeroPage ? 1 : 0;
-    if (pageIndex !== firstNormalIdx) return;
+function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, pageDesc) {
+    // 最初の通常フレームページのみ描画 (pageChunks では各チャンクに該当列分を描画)
+    if (pageDesc) {
+        if (pageDesc.isPage0 || pageDesc.framePage !== 0) return;
+    } else {
+        // 0ページ存在時は最初の通常ページ (pageIndex === 1) で描画
+        const hasZeroPage = (typeof hasPage0 === 'function') && hasPage0();
+        const firstNormalIdx = hasZeroPage ? 1 : 0;
+        if (pageIndex !== firstNormalIdx) return;
+    }
     if (typeof booksData === 'undefined' || !booksData || !booksData['ACTION']) return;
     if (!extTpl.bboxes) return;
     const b1 = extTpl.bboxes['action1'];
     if (!b1 || !b1.enabled) return;
 
     const rect = bboxToCanvas(b1);
-    const columns = b1.columns || 5;
+    let columns = b1.columns || 5;
+    // pageChunks: チャンクの列範囲に該当する BOOK のみ (列幅も timeline と同じ cap に揃える)
+    let chunkOffset = 0;
+    if ((extTpl.columnOverflowMode || 'none') === 'pageChunks' && pageDesc
+        && typeof window.getExternalTemplateChunkCount === 'function'
+        && window.getExternalTemplateChunkCount() > 1
+        && typeof window.getExternalTemplateColumnCapacity === 'function') {
+        const cap = window.getExternalTemplateColumnCapacity(extTpl, 'action');
+        if (cap > 0) {
+            columns = cap;
+            chunkOffset = (pageDesc.chunk || 0) * cap;
+        }
+    }
     const colW = rect.w / columns;
     const m = (mm) => mm * scale;
 
@@ -3390,8 +3433,8 @@ function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex) 
     const allBooks = [];
     for (const lineIdx in booksData['ACTION']) {
         const books = booksData['ACTION'][lineIdx];
-        const colIndex = parseInt(lineIdx);
-        if (colIndex >= columns) continue;
+        const colIndex = parseInt(lineIdx) - chunkOffset;
+        if (colIndex < 0 || colIndex >= columns) continue;
         books.forEach((bookName, bookIdx) => {
             const colX = rect.x + colIndex * colW;
             allBooks.push({ text: bookName, colIndex, x: colX, seq: bookIdx });
@@ -3491,7 +3534,14 @@ function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex) 
     ctx.textBaseline = 'alphabetic';
 }
 
-function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset) {
+// pageChunks (Phase B): 現在描画中チャンクの列オフセット。
+// drawExternalTemplateTimelineBoxes / Books がグループごとに設定し、
+// データ参照 (cellData キー / colIndex比較 / 列名) は extCol(ci) で絶対列に変換する。
+// 描画座標 (rect.x + ci*cellW) はローカル列 ci のまま。
+let extColOffset = 0;
+function extCol(ci) { return ci + extColOffset; }
+
+function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pageOffset, pageDesc) {
     if (!extTpl.bboxes || typeof cellData === 'undefined') return;
     if (typeof pageOffset !== 'number') pageOffset = 0;
 
@@ -3506,13 +3556,35 @@ function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pag
     const isPage0 = pageOffset < 0;
     const totalToRender = isPage0 ? (-pageOffset) : null;  // null = 通常 (BBox容量分すべて)
 
+    const mode = extTpl.columnOverflowMode || 'none';
+    const chunk = (mode === 'pageChunks' && pageDesc && !pageDesc.isPage0) ? (pageDesc.chunk || 0) : 0;
+    const chunkActive = (mode === 'pageChunks')
+        && (typeof window.getExternalTemplateChunkCount === 'function')
+        && window.getExternalTemplateChunkCount() > 1;
+
     groups.forEach(grp => {
         const b1 = extTpl.bboxes[grp.tag1];
         const b2 = extTpl.bboxes[grp.tag2];
         if (!b1 || !b1.enabled) return;
 
         const frames1Cap = b1.frames || 72;
-        const cols1   = b1.columns || 5;
+        let cols1 = b1.columns || 5;
+
+        // pageChunks: ACTION/CELL は列チャンク、SOUND/CAMERA は各 framePage の chunk 0 のみ
+        const isChunkedGroup = (grp.type === 'action' || grp.type === 'cell');
+        if (chunk > 0 && !isChunkedGroup) return;  // 続きチャンクでは枠 (画像) のみ
+        extColOffset = 0;
+        let cols2Limit = null;
+        if (chunkActive && isChunkedGroup) {
+            const cap = (typeof window.getExternalTemplateColumnCapacity === 'function')
+                ? window.getExternalTemplateColumnCapacity(extTpl, grp.type) : cols1;
+            if (cap > 0) {
+                // チャンク間で列幅・列範囲を揃えるため、描画列数も cap に統一
+                cols1 = cap;
+                cols2Limit = cap;
+                extColOffset = chunk * cap;
+            }
+        }
 
         // カラムヘッダー実効設定 (テンプレ共通 + BBox override)
         const resolveHeader = (window.externalTemplate && typeof window.externalTemplate.resolveColumnHeader === 'function')
@@ -3526,14 +3598,16 @@ function drawExternalTemplateTimelineBoxes(ctx, extTpl, bboxToCanvas, scale, pag
         // BBox2: 0ページで残量がなければスキップ
         if (b2 && b2.enabled) {
             const frames2Cap = b2.frames || 72;
-            const cols2   = b2.columns || 5;
+            const cols2 = (cols2Limit != null) ? cols2Limit : (b2.columns || 5);
             const remaining2 = isPage0 ? Math.max(0, totalToRender - use1) : frames2Cap;
             if (remaining2 > 0) {
                 drawTimelineBBox(ctx, grp.type, b2, bboxToCanvas, scale, pageOffset + use1, pageOffset + use1 + remaining2, cols2, frames2Cap,
                     resolveHeader ? resolveHeader(extTpl, b2) : null);
             }
         }
+        extColOffset = 0;
     });
+    extColOffset = 0;
 }
 
 // 外部テンプレ ACTION列のRep省略フレームを収集 (止メ範囲は3aでは省略しない)
@@ -3545,8 +3619,8 @@ function computeActionRepeatSkipSet(columns, frameStart, frameEnd) {
     if (totalF <= 0) return skip;
     for (let ci = 0; ci < columns; ci++) {
         const colData = [];
-        for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
-        const reps = checkRepeatColumns(colData, totalF, ci);
+        for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${extCol(ci)}-${f}`] || null;
+        const reps = checkRepeatColumns(colData, totalF, extCol(ci));
         reps.forEach(r => {
             if (r.isHold) {
                 // 止メ: 1コマ目以外を省略
@@ -3559,8 +3633,9 @@ function computeActionRepeatSkipSet(columns, frameStart, frameEnd) {
     if (typeof customRepeats !== 'undefined' && Array.isArray(customRepeats)) {
         customRepeats.forEach(rep => {
             if (rep.colType !== 'ACTION') return;
-            if (rep.colIndex < 0 || rep.colIndex >= columns) return;
-            for (let f = rep.startF; f <= rep.endF; f++) skip.add(`${rep.colIndex}-${f}`);
+            const localCi = rep.colIndex - extColOffset;
+            if (localCi < 0 || localCi >= columns) return;
+            for (let f = rep.startF; f <= rep.endF; f++) skip.add(`${localCi}-${f}`);
         });
     }
     return skip;
@@ -3658,8 +3733,8 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
 
     for (let ci = 0; ci < columns; ci++) {
         const colData = [];
-        for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${ci}-${f}`] || null;
-        const reps = checkRepeatColumns(colData, totalF, ci);
+        for (let f = 0; f < totalF; f++) colData[f] = cellData[`ACTION-${extCol(ci)}-${f}`] || null;
+        const reps = checkRepeatColumns(colData, totalF, extCol(ci));
         const tx = rect.x + ci * cellW + cellW / 2;
 
         reps.forEach(r => {
@@ -3713,9 +3788,10 @@ function drawActionRepeatsInBBox(ctx, rect, cellW, cellH, columns, frameStart, f
     if (typeof customRepeats !== 'undefined' && Array.isArray(customRepeats)) {
         customRepeats.forEach(rep => {
             if (rep.colType !== 'ACTION') return;
-            if (rep.colIndex < 0 || rep.colIndex >= columns) return;
+            const localCi = rep.colIndex - extColOffset;
+            if (localCi < 0 || localCi >= columns) return;
             if (rep.endF < frameStart || rep.startF >= frameEnd) return;
-            const tx = rect.x + rep.colIndex * cellW + cellW / 2;
+            const tx = rect.x + localCi * cellW + cellW / 2;
             const chunkStartFrame = rep.startF;
             const firstData = rep.pattern?.[0] || null;
             const firstVal = firstData?.value || '';
@@ -3788,11 +3864,11 @@ function drawBarLinesInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, 
     const lineGap = parseInt((typeof settings !== 'undefined' && settings?.draw?.lineGap) || '3', 10) || 3;
 
     const getVal = (ci, f) => {
-        const key = `${upperType}-${ci}-${f}`;
+        const key = `${upperType}-${extCol(ci)}-${f}`;
         const d = cellData[key];
         if (d && d.value) return d.value;
         if (upperType === 'CELL' && typeof getTemplateCustomRepeatAt === 'function') {
-            const rep = getTemplateCustomRepeatAt(upperType, ci, f);
+            const rep = getTemplateCustomRepeatAt(upperType, extCol(ci), f);
             const repData = (typeof getTemplateCustomRepeatData === 'function') ? getTemplateCustomRepeatData(rep, f) : null;
             return repData?.value || '';
         }
@@ -3814,8 +3890,8 @@ function drawBarLinesInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, 
         if (totalF > 0) {
             for (let ci = 0; ci < columns; ci++) {
                 const colDataArr = [];
-                for (let f = 0; f < totalF; f++) colDataArr[f] = cellData[`ACTION-${ci}-${f}`] || null;
-                const reps = checkRepeatColumns(colDataArr, totalF, ci);
+                for (let f = 0; f < totalF; f++) colDataArr[f] = cellData[`ACTION-${extCol(ci)}-${f}`] || null;
+                const reps = checkRepeatColumns(colDataArr, totalF, extCol(ci));
                 reps.forEach(r => {
                     if (r.isHold) {
                         // 止メ表記の 「止」(frame 1) と 「メ」(frame 2) のセルをスキップ
@@ -3839,7 +3915,7 @@ function drawBarLinesInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, 
                 const inActionRep = customRepeats.some(rep => {
                     const patternLen = Array.isArray(rep.pattern) ? rep.pattern.length : 0;
                     const sourceStart = rep.startF - patternLen;
-                    return rep.colType === 'ACTION' && rep.colIndex === ci && patternLen > 0 && f >= sourceStart && f <= rep.endF;
+                    return rep.colType === 'ACTION' && rep.colIndex === extCol(ci) && patternLen > 0 && f >= sourceStart && f <= rep.endF;
                 });
                 if (inActionRep) continue;
             }
@@ -3870,7 +3946,7 @@ function drawBarLinesInBBox(ctx, type, rect, cellW, cellH, columns, frameStart, 
             const drawY_bottom = rect.y + (f - frameStart + 1) * cellH;
 
             // 線色: startVal セルの fontColorId を反映 (数字と同色)
-            const startCell = cellData[`${upperType}-${ci}-${startF}`];
+            const startCell = cellData[`${upperType}-${extCol(ci)}-${startF}`];
             const startColorId = (startCell && startCell.fontColorId) || 0;
             const lineColor = (startColorId > 0 && typeof getFontColorById === 'function')
                 ? getFontColorById(startColorId)
@@ -3959,7 +4035,7 @@ function drawColumnHeadersInBBox(ctx, type, rect, cellW, cellH, columns, scale, 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let ci = 0; ci < columns; ci++) {
-        const name = getColumnHeaderName(type, ci);
+        const name = getColumnHeaderName(type, extCol(ci));
         if (!name) continue;
         const cx = rect.x + ci * cellW + cellW / 2 + m(cfg.offsetX || 0);
         const cy = rect.y - cellH / 2 + m(cfg.offsetY || 0);
@@ -4065,7 +4141,7 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
 
     for (let ci = 0; ci < columns; ci++) {
         for (let f = frameStart; f < frameEnd; f++) {
-            const key  = `${upperType}-${ci}-${f}`;
+            const key  = `${upperType}-${extCol(ci)}-${f}`;
             const data = cellData[key];
             if (!data || !data.value) continue;
 
@@ -4120,7 +4196,7 @@ function drawActionCellInBBox(ctx, type, rect, cellW, cellH, columns, frameStart
                 // option装飾（KEYFRAME円 / REFERENCEFRAME三角）を先に描画
                 let dispOpt = data.option;
                 if (type === 'cell') {
-                    const actKey = `ACTION-${ci}-${f}`;
+                    const actKey = `ACTION-${extCol(ci)}-${f}`;
                     if (cellData[actKey] && cellData[actKey].option) dispOpt = cellData[actKey].option;
                 }
                 if (dispOpt && !['●','○','×','―'].includes(value)) {

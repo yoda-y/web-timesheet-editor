@@ -1010,12 +1010,112 @@ function getExternalTemplateSheetCapacity() {
 }
 window.getExternalTemplateSheetCapacity = getExternalTemplateSheetCapacity;
 
+// ─── columns超過対応 Phase B: pageChunks ─────────────────────────────────────
+
+// 実使用列数 (max index + 1)。cellData / dialogue / camera / BOOK / customRepeats を走査
+function getUsedColumnCount(type) {
+    const upper = String(type || '').toUpperCase();
+    let maxIdx = -1;
+    if (typeof cellData !== 'undefined' && typeof parseCellKey === 'function') {
+        for (const key in cellData) {
+            const p = parseCellKey(key);
+            if (!p || p[0] !== upper) continue;
+            const d = cellData[key];
+            if (!d || !d.value) continue;
+            const ci = parseInt(p[1], 10);
+            if (!isNaN(ci) && ci > maxIdx) maxIdx = ci;
+        }
+    }
+    if (upper === 'SOUND' && typeof dialogueBlocks !== 'undefined' && Array.isArray(dialogueBlocks)) {
+        dialogueBlocks.forEach(b => { if (typeof b.colIndex === 'number' && b.colIndex > maxIdx) maxIdx = b.colIndex; });
+    }
+    if (upper === 'CAMERA' && typeof cameraBlocks !== 'undefined' && Array.isArray(cameraBlocks)) {
+        cameraBlocks.forEach(b => {
+            const last = (b.colIndex || 0) + ((b.colspan || 1) - 1);
+            if (last > maxIdx) maxIdx = last;
+        });
+    }
+    if (upper === 'ACTION' && typeof booksData !== 'undefined' && booksData && booksData['ACTION']) {
+        Object.keys(booksData['ACTION']).forEach(k => {
+            const ci = parseInt(k, 10);
+            const arr = booksData['ACTION'][k];
+            if (!isNaN(ci) && Array.isArray(arr) && arr.length && ci > maxIdx) maxIdx = ci;
+        });
+    }
+    if (typeof customRepeats !== 'undefined' && Array.isArray(customRepeats)) {
+        customRepeats.forEach(rep => {
+            if (rep.colType === upper && typeof rep.colIndex === 'number' && rep.colIndex > maxIdx) maxIdx = rep.colIndex;
+        });
+    }
+    return maxIdx + 1;
+}
+window.getUsedColumnCount = getUsedColumnCount;
+
+// グループのページあたり列容量。b2有効時は min(cols1, cols2) (チャンク間で列幅を揃えるため)
+function getExternalTemplateColumnCapacity(tpl, type) {
+    if (!tpl || !tpl.bboxes) return 0;
+    const b1 = tpl.bboxes[type + '1'];
+    if (!b1 || !b1.enabled) return 0;
+    const c1 = b1.columns || 5;
+    const b2 = tpl.bboxes[type + '2'];
+    if (b2 && b2.enabled) return Math.min(c1, b2.columns || 5);
+    return c1;
+}
+window.getExternalTemplateColumnCapacity = getExternalTemplateColumnCapacity;
+
+// 列チャンク数 (pageChunks モード時のみ >1)。容量は ACTION/CELL のみで決める
+function getExternalTemplateChunkCount() {
+    const tpl = currentExternalTemplate;
+    if (!tpl || tpl.columnOverflowMode !== 'pageChunks') return 1;
+    let chunks = 1;
+    ['action', 'cell'].forEach(type => {
+        const cap = getExternalTemplateColumnCapacity(tpl, type);
+        if (cap <= 0) return;
+        const used = getUsedColumnCount(type);
+        if (used > cap) chunks = Math.max(chunks, Math.ceil(used / cap));
+    });
+    return chunks;
+}
+window.getExternalTemplateChunkCount = getExternalTemplateChunkCount;
+
+// 物理ページ index → 論理ページ記述子 PageDesc
+// { framePage, chunk, sheetKind, isPage0 }
+// 並び: フレームページ内で chunk を連続 (1-1 → 1-2 → 2-1 → 2-2)
+function getExternalTemplatePageDesc(physicalIndex) {
+    const hasZero = (typeof hasPage0 === 'function') && hasPage0();
+    if (hasZero && physicalIndex === 0) {
+        return { framePage: 0, chunk: 0, sheetKind: 'normal', isPage0: true };
+    }
+    const chunkCount = getExternalTemplateChunkCount();
+    const idx = Math.max(0, hasZero ? physicalIndex - 1 : physicalIndex);
+    return {
+        framePage: Math.floor(idx / chunkCount),
+        chunk: idx % chunkCount,
+        sheetKind: 'normal',
+        isPage0: false
+    };
+}
+window.getExternalTemplatePageDesc = getExternalTemplatePageDesc;
+
+// ページ表記 (currentPage BBox 用)。chunkCount>1 のとき "1-1" 形式
+function getExternalTemplatePageLabel(physicalIndex) {
+    const desc = getExternalTemplatePageDesc(physicalIndex);
+    if (desc.isPage0) return '0';
+    const chunkCount = getExternalTemplateChunkCount();
+    const fp = desc.framePage + 1;
+    if (chunkCount <= 1) return String(fp);
+    return `${fp}-${desc.chunk + 1}`;
+}
+window.getExternalTemplatePageLabel = getExternalTemplatePageLabel;
+
+// 総物理ページ数 = フレームページ数 × チャンク数 (+0ページ)
 function getExternalTemplateTotalPages() {
     if (!currentExternalTemplate) return 0;
     const capacity = getExternalTemplateSheetCapacity();
     if (capacity <= 0) return 1;
     if (typeof targetFrames === 'undefined' || !targetFrames || targetFrames <= 0) return 1;
-    const normalPages = Math.max(1, Math.ceil(targetFrames / capacity));
+    const framePages = Math.max(1, Math.ceil(targetFrames / capacity));
+    const normalPages = framePages * getExternalTemplateChunkCount();
     // headMargin有効時は 0ページ目を追加
     const hasZero = (typeof hasPage0 === 'function') && hasPage0();
     return hasZero ? normalPages + 1 : normalPages;
@@ -1025,16 +1125,12 @@ window.getExternalTemplateTotalPages = getExternalTemplateTotalPages;
 function getExternalTemplatePageStartFrame(pageIndex) {
     const capacity = getExternalTemplateSheetCapacity();
     if (capacity <= 0) return 0;
-    const hasZero = (typeof hasPage0 === 'function') && hasPage0();
-    if (hasZero) {
-        if (pageIndex === 0) {
-            // 0ページ: -headMargin から開始
-            const headMargin = (typeof getHeadMarginForPage === 'function') ? getHeadMarginForPage() : 0;
-            return -headMargin;
-        }
-        // 通常ページ: 1ページ目以降は 0, capacity, 2*capacity, ...
-        return (pageIndex - 1) * capacity;
+    const desc = getExternalTemplatePageDesc(pageIndex);
+    if (desc.isPage0) {
+        // 0ページ: -headMargin から開始
+        const headMargin = (typeof getHeadMarginForPage === 'function') ? getHeadMarginForPage() : 0;
+        return -headMargin;
     }
-    return pageIndex * capacity;
+    return desc.framePage * capacity;
 }
 window.getExternalTemplatePageStartFrame = getExternalTemplatePageStartFrame;
