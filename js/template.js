@@ -4195,27 +4195,18 @@ function drawCutLengthInBBox(ctx, rect, cellH, frameStart, frameEnd, scale) {
 
 // Excel 列名風の連番ラベル。index は 0-based。
 //   0 -> A, 25 -> Z, 26 -> AA, 27 -> AB ...  lower=true で小文字 (a..z, aa..)
-function toColumnLetters(index, lower) {
-    let n = Math.max(0, Math.floor(index));
-    let s = '';
-    const base = lower ? 97 : 65;
-    do {
-        s = String.fromCharCode(base + (n % 26)) + s;
-        n = Math.floor(n / 26) - 1;
-    } while (n >= 0);
-    return s;
-}
-
-// カラムヘッダー名の取得 (Edit の sections[].chars。空は自動名 fallback)
+// カラムヘッダー名の取得 (Edit の sections[].chars。空/壊れた自動名は Excel列名で補完)
+// toColumnLetters / resolveColumnDisplayName は utils.js
 function getColumnHeaderName(type, ci) {
     type = extSeriesType(type);   // gengaDouga: 列名も描画系列に合わせる
     const secType = { action: 'ACTION', cell: 'CELL', sound: 'SOUND', camera: 'CAMERA' }[type];
     const sec = (typeof sections !== 'undefined' && Array.isArray(sections))
         ? sections.find(s => s.type === secType) : null;
     const name = sec && Array.isArray(sec.chars) ? sec.chars[ci] : null;
-    if (name) return String(name);   // ユーザー定義列名を優先
-    if (type === 'action') return toColumnLetters(ci, false);   // A, B, ... Z, AA, AB...
-    if (type === 'cell')   return toColumnLetters(ci, true);    // a, b, ... z, aa, ab...
+    // ACTION/CELL: 意図ある名前は維持、空 or 壊れた自動名 ([ \ 等) は Excel列名へ
+    if (type === 'action') return resolveColumnDisplayName(name, ci, false);  // A..Z, AA, AB...
+    if (type === 'cell')   return resolveColumnDisplayName(name, ci, true);   // a..z, aa, ab...
+    if (name) return String(name);
     if (type === 'camera') return 'CAM' + (ci + 1);
     return 'S' + (ci + 1);
 }

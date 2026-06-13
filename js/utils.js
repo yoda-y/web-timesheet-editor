@@ -141,6 +141,33 @@ function getAutoRelatedColor(key, mainHex) {
     }
 }
 
+// Excel 列名風の連番ラベル。index は 0-based。
+//   0 -> A, 25 -> Z, 26 -> AA, 27 -> AB ...  lower=true で小文字 (a..z, aa..)
+function toColumnLetters(index, lower) {
+    let n = Math.max(0, Math.floor(index));
+    let s = '';
+    const base = lower ? 97 : 65;
+    do {
+        s = String.fromCharCode(base + (n % 26)) + s;
+        n = Math.floor(n / 26) - 1;
+    } while (n >= 0);
+    return s;
+}
+
+// 列の自動採番で Z/z を超えた際に生じる壊れた名前 ([ \ ] ^ _ ` 等の単一ASCII) を判定。
+// これらはユーザー意図ではない自動生成のため Excel列名へ置換してよい。
+function isBrokenAutoColumnName(name) {
+    if (typeof name !== 'string' || name.length !== 1) return false;
+    const c = name.charCodeAt(0);
+    return (c >= 91 && c <= 96) || (c >= 123 && c <= 126);  // Z<…<a / z<…<~
+}
+
+// 列表示名の解決: 壊れた自動名や空なら Excel列名で補完。意図ある名前は維持。
+function resolveColumnDisplayName(name, index, lower) {
+    if (name && !isBrokenAutoColumnName(name)) return String(name);
+    return toColumnLetters(index, lower);
+}
+
 // セルデータキー "TYPE-COL-FRAME" を分解（FRAMEが負数でも正しく動作）
 function parseCellKey(k) {
     const a = k.indexOf('-');
