@@ -485,15 +485,16 @@ function drawExternalTemplateMetaBoxes(ctx, extTpl, bboxToCanvas, scale, pageInd
         if (!tagDef) continue;
         if (tagDef.category !== 'meta' && tagDef.category !== 'staff' && tagDef.category !== 'custom') continue;
 
-        if (chunkMode) {
-            // pageChunks: direction/memo/staff/custom は各 framePage の primary chunk のみ。
+        // direction はカット全体の指示なので、常に最初の物理ページ (1-1) のみ。
+        // pageChunks の chunkMode でも framePage 1+ には出さない (C-1)。
+        if (PAGE1_ONLY_TAGS.has(tagKey)) {
+            if (!isFirstPage) continue;
+        } else if (chunkMode) {
+            // pageChunks: memo/staff/custom は各 framePage の primary chunk のみ。
             // meta系 (title/cut/page等、ページ識別に必要) は全ページに描画
-            const primaryOnly = tagKey === 'direction' || tagKey === 'memo'
+            const primaryOnly = tagKey === 'memo'
                 || tagDef.category === 'staff' || tagDef.category === 'custom';
             if (primaryOnly && !isPrimaryChunk) continue;
-        } else {
-            // 従来: direction は最初の通常ページのみ
-            if (PAGE1_ONLY_TAGS.has(tagKey) && !isFirstPage) continue;
         }
 
         let value = getMetaValue(tagKey);
