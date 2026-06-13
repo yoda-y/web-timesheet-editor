@@ -3395,9 +3395,9 @@ window.drawExternalTemplateMetaBoxes = drawExternalTemplateMetaBoxes;
 // =====================================
 
 // 外部テンプレ用 BOOKラベル描画
-// - action1 BBox がある場合のみ
-// - 1ページ目のみ (pageIndex === 0)
-// - action1 の上側にボックスを並べ、各列位置に分岐ライン
+// - action1 BBox がある場合のみ (SplitPage では cell1=ACTION続き列にも描画)
+// - 最初の通常フレームページのみ
+// - BBox の上側にボックスを並べ、各列位置に分岐ライン
 function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, pageDesc) {
     // 最初の通常フレームページのみ描画 (pageChunks では各チャンクに該当列分を描画)
     if (pageDesc) {
@@ -3413,11 +3413,12 @@ function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, 
     const b1 = extTpl.bboxes['action1'];
     if (!b1 || !b1.enabled) return;
 
-    const rect = bboxToCanvas(b1);
-    let columns = b1.columns || 5;
+    const mode = getEffectiveOverflowMode(extTpl);
+
     // pageChunks: チャンクの列範囲に該当する BOOK のみ (列幅も timeline と同じ cap に揃える)
+    let columns = b1.columns || 5;
     let chunkOffset = 0;
-    if ((extTpl.columnOverflowMode || 'none') === 'pageChunks' && pageDesc
+    if (mode === 'pageChunks' && pageDesc
         && typeof window.getExternalTemplateChunkCount === 'function'
         && window.getExternalTemplateChunkCount() > 1
         && typeof window.getExternalTemplateColumnCapacity === 'function') {
@@ -3426,7 +3427,30 @@ function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, 
             columns = cap;
             chunkOffset = (pageDesc.chunk || 0) * cap;
         }
+        drawBooksIntoBBox(ctx, bboxToCanvas(b1), scale, chunkOffset, columns, b1.frames || 72);
+        return;
     }
+
+    // gengaDougaSplitPage: action1 (ACTION 0..) と cell1 (ACTION 続き列) の両方に描画
+    if (mode === 'gengaDougaSplitPage') {
+        const a1Cols = b1.columns || 5;
+        drawBooksIntoBBox(ctx, bboxToCanvas(b1), scale, 0, a1Cols, b1.frames || 72);
+        const cont = extTpl.bboxes['cell1'];
+        if (cont && cont.enabled) {
+            drawBooksIntoBBox(ctx, bboxToCanvas(cont), scale, a1Cols, cont.columns || 5, cont.frames || b1.frames || 72);
+        }
+        return;
+    }
+
+    // none: action1 のみ、列範囲は b1.columns
+    drawBooksIntoBBox(ctx, bboxToCanvas(b1), scale, 0, columns, b1.frames || 72);
+}
+
+// BOOK ラベルを指定 BBox に描画。
+// colOffset: この BBox が受け持つ絶対列の先頭 (booksData の colIndex - colOffset がローカル列)
+// columns: この BBox のローカル列数
+function drawBooksIntoBBox(ctx, rect, scale, colOffset, columns, bookFrames) {
+    if (!rect || rect.w <= 0 || columns <= 0) return;
     const colW = rect.w / columns;
     const m = (mm) => mm * scale;
 
@@ -3434,7 +3458,7 @@ function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, 
     const allBooks = [];
     for (const lineIdx in booksData['ACTION']) {
         const books = booksData['ACTION'][lineIdx];
-        const colIndex = parseInt(lineIdx) - chunkOffset;
+        const colIndex = parseInt(lineIdx) - colOffset;
         if (colIndex < 0 || colIndex >= columns) continue;
         books.forEach((bookName, bookIdx) => {
             const colX = rect.x + colIndex * colW;
@@ -3479,8 +3503,8 @@ function drawExternalTemplateBooks(ctx, extTpl, bboxToCanvas, scale, pageIndex, 
         }
     });
 
-    // 基準Y (action1の上端から 2コマ分 上)
-    const frames1 = b1.frames || 72;
+    // 基準Y (BBox上端から 2コマ分 上)
+    const frames1 = bookFrames || 72;
     const cellH = rect.h / frames1;
     const baseBookY = rect.y - cellH * 2;
     const gridY = rect.y;
@@ -3596,6 +3620,22 @@ function drawGengaDougaSplitPage(ctx, extTpl, bboxToCanvas, scale, pageOffset) {
 
     drawArea(bx.action1, bx.cell1, 'action');  // 原画領域
     drawArea(bx.action2, bx.cell2, 'cell');    // 動画領域
+
+    // SOUND / CAMERA / セリフは原画側の補助情報として sound1/camera1 に通常描画する。
+    // (extSourceType は使わず自系列をそのまま読む。動画側への複製や sound2/camera2 への
+    //  列続き描画は将来 (continuation) 対応。drawSoundInBBox/drawCameraInBBox は
+    //  colOffset 非対応のため、ここでは offset 0 の主BBoxのみ。)
+    const drawAux = (type, b1) => {
+        if (!b1 || !b1.enabled) return;
+        const cap1 = b1.frames || 72;
+        const use1 = isPage0 ? Math.min(totalToRender, cap1) : cap1;
+        extColOffset = 0;
+        drawTimelineBBox(ctx, type, b1, bboxToCanvas, scale, pageOffset, pageOffset + use1, b1.columns || 5, cap1,
+            resolveHeader ? resolveHeader(extTpl, b1) : null);
+    };
+    drawAux('sound', bx.sound1);
+    drawAux('camera', bx.camera1);
+
     extColOffset = 0;
     extSourceType = null;
     // TODO (C-5): 動画領域 (action2/cell2) の上部に notice + 上括弧

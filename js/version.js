@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.27.0';
+const APP_VERSION = '0.27.1';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,17 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.27.1 (2026-06-13)
+
+### 修正 (gengaDougaSplitPage)
+- SplitPage で SOUND / CAMERA / セリフが描画されない問題を修正
+  - 原画側 (sound1 / camera1) に通常描画を追加
+  - sound2/camera2 への続き列描画・動画側複製は将来対応 (continuation)
+- SplitPage で cell1 (ACTION続き列) に BOOK が描画されない問題を修正
+  - BOOK描画コアを drawBooksIntoBBox に切り出し、action1 + cell1 の両方へ描画
+  - cell1 側は action1.columns 分の列オフセットを反映
+  - pageChunks / none の BOOK 表示は従来通り (リグレッションなし)
 
 ## v0.27.0 (2026-06-13)
 
