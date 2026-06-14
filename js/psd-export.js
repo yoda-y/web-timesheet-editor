@@ -265,6 +265,12 @@ function drawHeaderDataOnlyForPsd(ctx, scale, pageIndex) {
             const fr = metaData.lengthFrame || '00';
             const valueSize = fitTextSize(ctx, sec + '+' + fr, fw - m(2), h - m(3), baseValueSize);
             ctx.font = `bold ${valueSize}px sans-serif`;
+            // 「+」は template 層では clearHeaderValuesForPsdTemplate で消えるため、
+            // Clip Studio でも確実に見えるよう data raster 層に焼き込む（Preview/PNG と同じ緑）
+            ctx.fillStyle = TEMPLATE.TEMPLATE_COLOR;
+            ctx.textAlign = 'center';
+            ctx.fillText('+', cx + fw / 2, y + h - m(1));
+            ctx.fillStyle = TEMPLATE.TEXT_COLOR;
             ctx.textAlign = 'right';
             ctx.fillText(sec, cx + fw / 2 - m(3.5), y + h - m(1));
             ctx.textAlign = 'left';
