@@ -1,6 +1,6 @@
 // Service Worker for Web Timesheet Editor
 // CACHE_NAME を更新するとクライアントが旧キャッシュを破棄してリロード
-const CACHE_NAME = 'timesheet-editor-v2-0.30.1';
+const CACHE_NAME = 'timesheet-editor-v2-0.31.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

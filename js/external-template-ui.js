@@ -21,12 +21,31 @@ function confirmExtTplDiscardIfDirty() {
         '保存していない変更があります。閉じると変更は破棄されます。閉じますか？'));
 }
 
+// 設定モーダルを開いた時の初期編集対象IDを決める。
+// 優先: 適用中テンプレ id → 適用中テンプレ sourceTemplateId → 既存 extTplCurrentId
+//       → list[0].id → null。いずれもローカルライブラリ(list)に存在するもののみ。
+// 注意: これは「編集対象の選択」であり、適用中テンプレ(currentExternalTemplate)は変えない。
+function getInitialExternalTemplateModalSelectionId(list) {
+    if (!Array.isArray(list) || list.length === 0) return null;
+    const has = (id) => id && list.some(t => t.id === id);
+    const applied = (typeof window.getCurrentExternalTemplate === 'function')
+        ? window.getCurrentExternalTemplate() : null;
+    if (applied) {
+        if (has(applied.id)) return applied.id;
+        if (has(applied.sourceTemplateId)) return applied.sourceTemplateId;
+    }
+    if (has(extTplCurrentId)) return extTplCurrentId;
+    return list[0].id;
+}
+
 // ── モーダル開閉 ──────────────────────────────────────────
 async function openExternalTemplateModal() {
     document.getElementById('external-template-modal').style.display = 'flex';
     setExtTplDirty(false);
-    await refreshExternalTemplateList();
-    showExternalTemplateDetail(null);
+    const items = await refreshExternalTemplateList();
+    // 適用中テンプレ等を初期選択 (編集対象の選択のみ。Preview適用は変更しない)
+    const initialId = getInitialExternalTemplateModalSelectionId(items);
+    showExternalTemplateDetail(initialId);
 }
 function closeExternalTemplateModal(force) {
     if (!force && !confirmExtTplDiscardIfDirty()) return;
@@ -45,7 +64,7 @@ async function refreshExternalTemplateList() {
     if (!items.length) {
         const emptyText = i18n('extTpl.empty', 'テンプレートがまだありません');
         listEl.innerHTML = `<div class="ext-tpl-empty">${emptyText}</div>`;
-        return;
+        return items;
     }
     const lblDup = i18n('extTpl.duplicate', '複製');
     const lblExp = i18n('extTpl.export', '書出');
@@ -110,6 +129,7 @@ async function refreshExternalTemplateList() {
         const sel = listEl.querySelector(`.ext-tpl-list-item[data-id="${extTplCurrentId}"]`);
         if (sel) sel.classList.add('selected');
     }
+    return items;
 }
 
 // ── 詳細表示/編集 ──────────────────────────────────────────
