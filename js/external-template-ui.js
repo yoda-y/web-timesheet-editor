@@ -163,9 +163,9 @@ function ensureDraftColumnHeader() {
 }
 
 // ── sheetTypeLabels (原動画ラベル) 編集 ──────────────────────
+// genga / douga は sheetType BBox 描画が未実装のため UI からは隠す
+// (データ構造・既定値・Project HTML 互換は維持。将来 sheetType 描画実装時に戻す)
 const EXT_TPL_SL_INPUTS = [
-    { id: 'ext-tpl-sl-genga',     key: 'genga' },
-    { id: 'ext-tpl-sl-douga',     key: 'douga' },
     { id: 'ext-tpl-sl-splitdouga', key: 'splitDougaNotice' },
     { id: 'ext-tpl-sl-sepgenga',  key: 'separateGengaNotice' },
     { id: 'ext-tpl-sl-sepdouga',  key: 'separateDougaNotice' }
