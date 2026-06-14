@@ -812,6 +812,12 @@
       <input type="number" id="drawRepMinCycles" min="2" max="10" value="2" style="width:60px; margin-left:12px;">
       <span class="settings-hint" data-i18n="draw.repAutoHint">最小サイクル数（2=パターン+1リピート）</span>
     </div>
+    <div class="settings-row">
+      <label data-i18n="draw.paperAutoExpand">用紙の横拡張:</label>
+      <label style="min-width:0; display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="drawPaperAutoExpand"><span data-i18n="draw.paperAutoExpandHint"> ON（標準A3でACTION/CELL列が初期超過時、圧縮せず用紙を横に広げる）</span>
+      </label>
+    </div>
     <div class="settings-actions">
       <button id="settings-draw-reset" data-i18n="draw.resetThis">この画面をリセット</button>
       <button id="settings-draw-cancel" data-i18n="btn.cancel">キャンセル</button>

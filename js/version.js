@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.31.0';
+const APP_VERSION = '0.32.0';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,21 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.32.0 (2026-06-14)
+
+### 追加 (標準A3 用紙横拡張)
+- ACTION/CELL の実使用列数が初期(7列)を超えたら、列幅を圧縮せず用紙を横に拡張
+  - 2段組 (0-71fr / 72-143fr) は維持し、各段の列幅を標準値で保つ
+  - getStandardA3PaperWidthMm(): 標準列幅固定で必要 WIDTH_MM を算出
+  - renderTemplate は標準A3パスのみ WIDTH_MM を一時拡張 (外部テンプレは不変)
+  - ヘッダー/Direction/BOOK・Preview fit/zoom・PNG/JPG/PSD書き出し・サイズヒントが追従
+- 設定「用紙の横拡張」(settings.draw.paperAutoExpand、既定 ON) で OFF 可能
+- 列数が初期以下なら従来描画と完全一致 (リグレッション基準)
+- 手書き書き出し (renderHandwritingPageToCanvas) を拡張幅に追従 (getEffectivePaperWidthMm)
+- PSD の data層 / ヘッダー値クリアを拡張幅で生成 (withStandardPaperWidthMm) し
+  template/data/手書き各層の幅・座標を一致
+- SOUND/CAMERA 基準・印刷注意表示は後続
 
 ## v0.31.0 (2026-06-14)
 

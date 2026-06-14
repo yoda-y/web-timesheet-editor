@@ -689,7 +689,10 @@ async function loadImageForCanvas(src) {
 async function renderHandwritingPageToCanvas(pageIndex, dpi = HANDWRITING_BASE_DPI, sourcePages = handwritingPages) {
     const scale = dpi / HANDWRITING_BASE_DPI;
     const canvas = document.createElement('canvas');
-    canvas.width = Math.round(TEMPLATE.WIDTH_MM * dpi / 25.4);
+    // 用紙横拡張に追従 (標準A3でACTION/CELL列超過時。外部テンプレ/通常は297)
+    const paperWidthMm = (typeof getEffectivePaperWidthMm === 'function')
+        ? getEffectivePaperWidthMm(pageIndex) : TEMPLATE.WIDTH_MM;
+    canvas.width = Math.round(paperWidthMm * dpi / 25.4);
     canvas.height = Math.round(TEMPLATE.HEIGHT_MM * dpi / 25.4);
     const ctx = canvas.getContext('2d');
     const page = sourcePages?.[getHandwritingPageKey(pageIndex)];

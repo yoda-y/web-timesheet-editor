@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS = {
         tailMargin: 18,             // 末尾マージン（コマ数）
         repAutoEnabled: true,       // Rep自動付与 ON/OFF
         repMinCycles: 2,            // Rep付与に必要な最小サイクル数（2 = 元パターン + リピート部分）
+        paperAutoExpand: true,      // 標準A3: ACTION/CELL 列が初期超過時に用紙を横拡張 (圧縮回避)
         fontSize: {
             cell: 2.7,              // mm
             dialogue: 3.5,          // mm
