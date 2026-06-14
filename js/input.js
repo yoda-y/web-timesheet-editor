@@ -480,7 +480,7 @@ document.getElementById('meta-wrapper').addEventListener('mousedown', (e) => {
             return;
         }
         if (field.id === 'sheetName') {
-            // VERSION フィールド: ドロップダウンを開く
+            // SHEET NAME フィールド: シート切替ドロップダウンを開く
             saveInput();
             buildVersionSheetList();
             const dropdown = document.getElementById('version-dropdown');

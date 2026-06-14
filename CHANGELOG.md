@@ -6,6 +6,17 @@
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
 
+## v0.34.0 (2026-06-14)
+
+### 変更 (UI整理)
+- Edit画面上部メタ欄を整理
+  - 未出力の残骸だった「SHEET」欄 (id:"page" の "1/1") を削除
+    (印刷/Preview の SHEET=ページ番号は getSheetLabel で自動算出のため不要)
+  - 旧「VERSION」欄は実体が TDTS/XDTS の table.name (=アプリのシート名) のため
+    ラベルを「SHEET NAME」に変更 (内部キー sheetName・保存形式は不変)
+  - メタ欄の比率を印刷ヘッダー (drawHeader) と統一し、隙間/ズレを解消
+  - metaData.sheetName / metaData.page のデータ構造・保存/読込は維持
+
 ## v0.33.0 (2026-06-14)
 
 ### 追加 (columns超過 Phase C-5: Auto切替の可視化)

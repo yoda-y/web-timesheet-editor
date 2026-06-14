@@ -242,14 +242,19 @@ function updateSectionPositions() {
     baseWidth = Math.max(window.innerWidth, endX + 50);
     document.getElementById('meta-wrapper').style.width = baseWidth + 'px';
     const availableWidth = baseWidth - 50;
-    const wTitle = availableWidth * 0.25;
-    const wEp = availableWidth * 0.08;
-    const wSc = availableWidth * 0.08;
-    const wCut = availableWidth * 0.08;
-    const wTime = availableWidth * 0.12;
-    const wName = availableWidth * 0.18;
-    const wDate = availableWidth * 0.12;
-    const wPage = availableWidth - (wTitle + wEp + wSc + wCut + wTime + wName + wDate);
+    // 印刷ヘッダー (template.js drawHeader) と同じ比率に統一。
+    // 末尾は sheetName 欄 (= TDTS/XDTS の table.name = アプリのシート名)。
+    // 旧 "VERSION" ラベルは誤称のため "SHEET NAME" に変更。
+    // 旧 "SHEET" 欄 (id:"page" の "1/1") は未出力の残骸のため削除
+    //   (印刷/Preview の SHEET=ページ番号は getSheetLabel で自動算出)。
+    // metaData.sheetName / metaData.page のデータ構造は保持 (保存/読込互換維持)。
+    const wTitle = availableWidth * 0.28;
+    const wEp = availableWidth * 0.10;
+    const wSc = availableWidth * 0.10;
+    const wCut = availableWidth * 0.10;
+    const wTime = availableWidth * 0.13;
+    const wName = availableWidth * 0.19;
+    const wSheet = availableWidth - (wTitle + wEp + wSc + wCut + wTime + wName);
     let cx = 25;
     metaFields = [
         { id: "title", x: cx, y: 15, w: wTitle, h: 40, label: "TITLE" },
@@ -259,7 +264,6 @@ function updateSectionPositions() {
         { id: "lengthSec", x: (cx += wCut) - 1, y: 15, w: (wTime * 0.5) + 1, h: 40, label: "TIME(秒)" },
         { id: "lengthFrame", x: (cx += (wTime * 0.5)) - 1, y: 15, w: (wTime * 0.5) + 1, h: 40, label: "+(コマ)" },
         { id: "creator", x: (cx += (wTime * 0.5)) - 1, y: 15, w: wName + 1, h: 40, label: "NAME" },
-        { id: "sheetName", x: (cx += wName) - 1, y: 15, w: wDate + 1, h: 40, label: "VERSION" },
-        { id: "page", x: (cx += wDate) - 1, y: 15, w: wPage + 1, h: 40, label: "SHEET" }
+        { id: "sheetName", x: (cx += wName) - 1, y: 15, w: wSheet + 1, h: 40, label: "SHEET NAME" }
     ];
 }
