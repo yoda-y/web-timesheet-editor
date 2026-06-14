@@ -542,6 +542,32 @@ function updateTemplatePreview() {
 
     // 外部テンプレ 未描画列の警告 (C-5)
     maybeWarnUnrenderedColumns();
+    // gengaDougaAuto が列超過で SeparatePages に解決された時の通知 (C-5 / v0.33.0)
+    maybeWarnAutoSeparate();
+}
+
+// gengaDougaAuto が列超過で別ページ (SeparatePages) に自動切替された時だけ通知。
+// 明示的に gengaDougaSeparatePages を選んだ場合は通知しない。
+// 同一状態は抑制し、列数が戻って再度超過したら再通知する。
+let lastAutoSeparateWarnKey = null;
+function maybeWarnAutoSeparate() {
+    const tpl = (typeof currentExternalTemplate !== 'undefined') ? currentExternalTemplate : null;
+    const rawMode = tpl && tpl.columnOverflowMode;
+    if (rawMode !== 'gengaDougaAuto') { lastAutoSeparateWarnKey = null; return; }
+    if (typeof window.getExternalTemplateEffectiveMode !== 'function') return;
+    let effMode;
+    try { effMode = window.getExternalTemplateEffectiveMode(); } catch (e) { return; }
+    if (effMode !== 'gengaDougaSeparatePages') { lastAutoSeparateWarnKey = null; return; }
+    // 列数を含むキーで抑制 (列が戻って再超過したら再通知)
+    const aUsed = (typeof window.getUsedColumnCount === 'function') ? window.getUsedColumnCount('action') : 0;
+    const cUsed = (typeof window.getUsedColumnCount === 'function') ? window.getUsedColumnCount('cell') : 0;
+    const key = `${aUsed}/${cUsed}`;
+    if (key === lastAutoSeparateWarnKey) return;
+    lastAutoSeparateWarnKey = key;
+    const msg = (typeof t === 'function')
+        ? t('extTpl.autoSeparateInfo')
+        : '列数超過のため動画シートを別ページにしました';
+    if (typeof showToast === 'function') showToast(msg, 4000);
 }
 
 // 未描画列がある場合に警告トースト (同一内容の連続表示は抑制)

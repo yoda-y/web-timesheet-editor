@@ -1046,10 +1046,11 @@ function getExternalTemplateSheetCapacity() {
         });
         return max;
     };
-    // gengaDouga: '2'側は同一フレーム範囲の別領域 (動画) なのでフレーム容量は '1'側のみ。
-    // none/pageChunks: '1'+'2' (action2 は時間継続)。
-    const mode = tpl.columnOverflowMode || 'none';
-    if (mode === 'gengaDougaSplitPage' || mode === 'gengaDougaSeparatePages' || mode === 'gengaDougaAuto') {
+    // gengaDouga: '2'側は同一フレーム範囲の別領域 (動画) なのでフレーム容量は '1'側のみ (3秒)。
+    // none/pageChunks: '1'+'2' (action2 は時間継続、6秒)。
+    // Auto は実効モードで判定 (none に解決された時は6秒シート扱い)。
+    const mode = getExternalTemplateEffectiveMode();
+    if (mode === 'gengaDougaSplitPage' || mode === 'gengaDougaSeparatePages') {
         return getMaxFrames('1');
     }
     return getMaxFrames('1') + getMaxFrames('2');
@@ -1135,17 +1136,25 @@ function getGengaDougaAreaCapacity(tpl, mainKey, contKey) {
     return cap;
 }
 
-// 実効モード解決: gengaDougaAuto は列が SplitPage 容量に収まれば SplitPage、
-// 収まらなければ SeparatePages。それ以外はそのまま。
+// 実効モード解決: gengaDougaAuto は
+//   1. 通常の6秒シート (none) に収まれば none — 列が少なければ分割しない
+//   2. SplitPage 容量に収まれば SplitPage (原画/動画を同一ページの左右領域に)
+//   3. 収まらなければ SeparatePages (原画/動画を別ページに)
+// それ以外のモードはそのまま。
 function getExternalTemplateEffectiveMode() {
     const tpl = currentExternalTemplate;
     const mode = (tpl && tpl.columnOverflowMode) || 'none';
     if (mode !== 'gengaDougaAuto') return mode;
-    if (!tpl || !tpl.bboxes) return 'gengaDougaSplitPage';
-    const gengaCap = getGengaDougaAreaCapacity(tpl, 'action1', 'cell1');  // ACTION用 (原画領域)
-    const dougaCap = getGengaDougaAreaCapacity(tpl, 'action2', 'cell2');  // CELL用 (動画領域)
+    if (!tpl || !tpl.bboxes) return 'none';
     const actionUsed = getUsedColumnCount('action');
     const cellUsed = getUsedColumnCount('cell');
+    // 通常6秒シート容量: 1側BBoxの列数 (action2/cell2 は時間継続で同一列のため加算しない)
+    const a1 = tpl.bboxes.action1, c1 = tpl.bboxes.cell1;
+    const normalActionCap = (a1 && a1.enabled) ? (a1.columns || 5) : 0;
+    const normalCellCap = (c1 && c1.enabled) ? (c1.columns || 5) : 0;
+    if (actionUsed <= normalActionCap && cellUsed <= normalCellCap) return 'none';
+    const gengaCap = getGengaDougaAreaCapacity(tpl, 'action1', 'cell1');  // ACTION用 (原画領域)
+    const dougaCap = getGengaDougaAreaCapacity(tpl, 'action2', 'cell2');  // CELL用 (動画領域)
     if (actionUsed <= gengaCap && cellUsed <= dougaCap) return 'gengaDougaSplitPage';
     return 'gengaDougaSeparatePages';
 }
