@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.30.0';
+const APP_VERSION = '0.30.1';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,19 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.30.1 (2026-06-14)
+
+### 修正 (Phase D / sheetTypeLabels レビュー対応)
+- スポイト fallback が HTMLImageElement も受付 (外部テンプレ設定の img プレビューで動作)
+  - img は一時 canvas へ描画してサンプリング。EyeDropper 非対応ブラウザでも拾える
+- スポイト fallback の端クリック失敗を修正 (Math.round → floor + 0..w-1/h-1 クランプ)
+- BBox側スポイトを「テンプレ共通設定を使う」ON時に disabled (押せても無反応だった)
+- sheetTypeLabels を全項目空にしたらオブジェクトごと削除 (Project HTML に {} を残さない)
+  - 入力時と保存前 (normalizeDraftBeforeSave) の両方で正規化
+- sheetTypeLabels 編集UI整理: genga/douga は sheetType BBox 描画未実装のため非表示
+  (データ/既定値/Project HTML 互換は維持、既存値も削除しない)
+  - 表示3項目を用途が分かる日本語に + 各欄に説明文。見出しを「原動画シート表示ラベル」に
 
 ## v0.30.0 (2026-06-14)
 

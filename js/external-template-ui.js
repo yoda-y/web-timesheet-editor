@@ -163,9 +163,9 @@ function ensureDraftColumnHeader() {
 }
 
 // ── sheetTypeLabels (原動画ラベル) 編集 ──────────────────────
+// genga / douga は sheetType BBox 描画が未実装のため UI からは隠す
+// (データ構造・既定値・Project HTML 互換は維持。将来 sheetType 描画実装時に戻す)
 const EXT_TPL_SL_INPUTS = [
-    { id: 'ext-tpl-sl-genga',     key: 'genga' },
-    { id: 'ext-tpl-sl-douga',     key: 'douga' },
     { id: 'ext-tpl-sl-splitdouga', key: 'splitDougaNotice' },
     { id: 'ext-tpl-sl-sepgenga',  key: 'separateGengaNotice' },
     { id: 'ext-tpl-sl-sepdouga',  key: 'separateDougaNotice' }
@@ -175,6 +175,14 @@ function ensureDraftSheetTypeLabels() {
     if (!extTplDraft) return null;
     if (!extTplDraft.sheetTypeLabels) extTplDraft.sheetTypeLabels = {};
     return extTplDraft.sheetTypeLabels;
+}
+
+// 保存前正規化: 空の sheetTypeLabels は削除 ('未設定に戻す' をデータ上も完全に)
+function normalizeDraftBeforeSave() {
+    if (extTplDraft && extTplDraft.sheetTypeLabels
+        && Object.keys(extTplDraft.sheetTypeLabels).length === 0) {
+        delete extTplDraft.sheetTypeLabels;
+    }
 }
 
 function loadExtTplSheetTypeLabelsForm(tpl) {
@@ -316,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             extTplDraft.name = document.getElementById('ext-tpl-name-input').value.trim() || _ei18n('extTpl.untitled', '無名テンプレート');
             extTplDraft.updatedAt = Date.now();
+            normalizeDraftBeforeSave();
             await window.externalTemplate.save(extTplDraft);
             await refreshExternalTemplateList();
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
@@ -343,6 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 未保存の draft 内容を先に保存してから開く（画像反映のため）
             extTplDraft.name = document.getElementById('ext-tpl-name-input').value.trim() || _ei18n('extTpl.untitled', '無名テンプレート');
             extTplDraft.updatedAt = Date.now();
+            normalizeDraftBeforeSave();
             await window.externalTemplate.save(extTplDraft);
             await refreshExternalTemplateList();
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
@@ -401,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (chEyedropper) {
         chEyedropper.addEventListener('click', async () => {
             if (!extTplDraft || typeof window.pickColorEyedropper !== 'function') return;
-            const hex = await window.pickColorEyedropper(document.getElementById('ext-tpl-image-preview-canvas'));
+            const hex = await window.pickColorEyedropper(document.getElementById('ext-tpl-image-preview'));
             if (!hex) return;
             const ch = ensureDraftColumnHeader();
             if (!ch) return;
@@ -422,6 +432,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const v = el.value;
             if (v.trim() === '') delete sl[def.key];   // 空欄は既定 (i18n) に戻す
             else sl[def.key] = v;
+            // 全項目が空になったらオブジェクトごと削除 ('未設定に戻す' をデータ上も完全に)
+            if (Object.keys(sl).length === 0) delete extTplDraft.sheetTypeLabels;
             setExtTplDirty(true);
         });
     });

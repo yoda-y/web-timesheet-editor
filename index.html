@@ -462,14 +462,22 @@
               <label style="display:inline-flex; align-items:center; gap:4px;"><span data-i18n="colHeader.fontSize">文字サイズ(mm):</span> <input type="number" id="ext-tpl-ch-fontsize" step="0.1" min="0.5" placeholder="自動" style="width:56px;"></label>
             </div>
           </div>
-          <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:5px; border-top:1px solid var(--border-color); margin-top:10px; padding-top:8px;">
-            <label style="font-weight:bold; font-size:12px;" data-i18n="sheetLabel.sectionTitle">原動画ラベル (gengaDouga)</label>
-            <div style="display:grid; grid-template-columns:auto 1fr; gap:4px 8px; align-items:center; font-size:11px; width:100%;">
-              <span data-i18n="sheetLabel.genga">原画ラベル:</span><input type="text" id="ext-tpl-sl-genga" style="width:100%;">
-              <span data-i18n="sheetLabel.douga">動画ラベル:</span><input type="text" id="ext-tpl-sl-douga" style="width:100%;">
-              <span data-i18n="sheetLabel.splitDouga">SplitPage 動画側:</span><input type="text" id="ext-tpl-sl-splitdouga" style="width:100%;">
-              <span data-i18n="sheetLabel.separateGenga">Separate 原画ページ:</span><input type="text" id="ext-tpl-sl-sepgenga" style="width:100%;">
-              <span data-i18n="sheetLabel.separateDouga">Separate 動画ページ:</span><input type="text" id="ext-tpl-sl-sepdouga" style="width:100%;">
+          <div class="settings-row" style="flex-direction:column; align-items:flex-start; gap:8px; border-top:1px solid var(--border-color); margin-top:10px; padding-top:8px;">
+            <label style="font-weight:bold; font-size:12px;" data-i18n="sheetLabel.sectionTitle">原動画シート表示ラベル</label>
+            <div style="display:flex; flex-direction:column; gap:2px; width:100%;">
+              <span style="font-size:11px;" data-i18n="sheetLabel.splitDouga">同一ページ分割: 動画欄ラベル</span>
+              <input type="text" id="ext-tpl-sl-splitdouga" style="width:100%;">
+              <span style="font-size:10px; color:var(--grid-medium);" data-i18n="sheetLabel.splitDougaHint">action2/cell2 側に出す「こちらが動画シートです」等</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:2px; width:100%;">
+              <span style="font-size:11px;" data-i18n="sheetLabel.separateGenga">別ページ分割: 原画ページラベル</span>
+              <input type="text" id="ext-tpl-sl-sepgenga" style="width:100%;">
+              <span style="font-size:10px; color:var(--grid-medium);" data-i18n="sheetLabel.separateGengaHint">原画ページ上部に出す「原画シート」等</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:2px; width:100%;">
+              <span style="font-size:11px;" data-i18n="sheetLabel.separateDouga">別ページ分割: 動画ページラベル</span>
+              <input type="text" id="ext-tpl-sl-sepdouga" style="width:100%;">
+              <span style="font-size:10px; color:var(--grid-medium);" data-i18n="sheetLabel.separateDougaHint">動画ページ上部に出す「動画シート」等</span>
             </div>
           </div>
           <div class="settings-row" style="margin-top:12px; gap:8px;">
