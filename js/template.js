@@ -184,6 +184,28 @@ function getStandardA3PaperWidthMm() {
 }
 window.getStandardA3PaperWidthMm = getStandardA3PaperWidthMm;
 
+// 現在の実効用紙幅(mm)。外部テンプレ適用時は通常幅(297、画像fit)、
+// 標準A3時は横拡張を反映。手書き書き出し等 renderTemplate 外から幅を揃えるのに使う。
+function getEffectivePaperWidthMm(pageIndex) {
+    const isExt = (typeof getCurrentExternalTemplate === 'function') && getCurrentExternalTemplate()
+        && (typeof getCurrentExternalTemplateImage === 'function')
+        && getCurrentExternalTemplateImage(pageIndex || 0);
+    return isExt ? TEMPLATE_WIDTH_MM_DEFAULT : getStandardA3PaperWidthMm();
+}
+window.getEffectivePaperWidthMm = getEffectivePaperWidthMm;
+
+// 標準A3 の拡張幅で fn を実行する (TEMPLATE.WIDTH_MM を一時設定→復帰)。
+// renderTemplate 外で独自に canvas を作る描画 (PSD data層など) の幅を揃える用。
+// 外部テンプレ適用時は拡張しない。同期描画専用。
+function withStandardPaperWidthMm(fn) {
+    const saved = TEMPLATE.WIDTH_MM;
+    const isExt = (typeof getCurrentExternalTemplate === 'function') && getCurrentExternalTemplate()
+        && (typeof getCurrentExternalTemplateImage === 'function') && getCurrentExternalTemplateImage(0);
+    if (!isExt) TEMPLATE.WIDTH_MM = getStandardA3PaperWidthMm();
+    try { return fn(); } finally { TEMPLATE.WIDTH_MM = saved; }
+}
+window.withStandardPaperWidthMm = withStandardPaperWidthMm;
+
 function renderTemplate(dpi, pageIndex = 0) {
     applyTemplateColorSettings();
     const scale = dpi / 25.4;

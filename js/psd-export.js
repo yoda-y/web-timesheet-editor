@@ -50,7 +50,9 @@ async function buildPsdPageLayers(pageIndex, dpi, includeHandwriting) {
     // data 層: 外部テンプレ専用パスかどうかで分岐
     const dataCanvas = isExternal && typeof renderExternalTemplateDataOnly === 'function'
         ? renderExternalTemplateDataOnly(dpi, pageIndex)
-        : renderDataOnlyForPsd(dpi, pageIndex);
+        : (typeof withStandardPaperWidthMm === 'function'
+            ? withStandardPaperWidthMm(() => renderDataOnlyForPsd(dpi, pageIndex))
+            : renderDataOnlyForPsd(dpi, pageIndex));
     // template層:
     //   - 標準A3: 白を透明化 (グリッド線のみ視認)
     //   - 外部テンプレ: 画像を完全不透明 (白を透明化すると画像が破壊される可能性)
@@ -112,7 +114,12 @@ function renderBlankTemplateForPsd(dpi, pageIndex) {
         dialogueBlocks = [];
         cameraBlocks = [];
         const canvas = renderTemplate(dpi, pageIndex);
-        clearHeaderValuesForPsdTemplate(canvas, dpi);
+        // ヘッダー値クリアは renderTemplate 復帰後の WIDTH_MM を使うため、拡張幅で実行
+        if (typeof withStandardPaperWidthMm === 'function') {
+            withStandardPaperWidthMm(() => clearHeaderValuesForPsdTemplate(canvas, dpi));
+        } else {
+            clearHeaderValuesForPsdTemplate(canvas, dpi);
+        }
         return canvas;
     } finally {
         metaData = keep.metaData;

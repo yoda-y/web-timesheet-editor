@@ -16,7 +16,10 @@
   - ヘッダー/Direction/BOOK・Preview fit/zoom・PNG/JPG/PSD書き出し・サイズヒントが追従
 - 設定「用紙の横拡張」(settings.draw.paperAutoExpand、既定 ON) で OFF 可能
 - 列数が初期以下なら従来描画と完全一致 (リグレッション基準)
-- SOUND/CAMERA 基準・手書き座標検証・印刷注意表示は後続
+- 手書き書き出し (renderHandwritingPageToCanvas) を拡張幅に追従 (getEffectivePaperWidthMm)
+- PSD の data層 / ヘッダー値クリアを拡張幅で生成 (withStandardPaperWidthMm) し
+  template/data/手書き各層の幅・座標を一致
+- SOUND/CAMERA 基準・印刷注意表示は後続
 
 ## v0.31.0 (2026-06-14)
 
