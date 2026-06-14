@@ -494,6 +494,8 @@ function openDrawSettings() {
     document.getElementById('drawRepeatColor').value = rgbaToHex(settings.draw.repeatDashColor) || '#4285f4';
     document.getElementById('drawRepAutoEnabled').checked = settings.draw.repAutoEnabled !== false;
     document.getElementById('drawRepMinCycles').value = settings.draw.repMinCycles || 2;
+    const paperExpandEl = document.getElementById('drawPaperAutoExpand');
+    if (paperExpandEl) paperExpandEl.checked = settings.draw.paperAutoExpand !== false;
     modal.style.display = 'flex';
     setTimeout(() => document.getElementById('gapSettingInput').focus(), 10);
 }
@@ -529,9 +531,12 @@ document.getElementById('settings-draw-ok').addEventListener('click', () => {
     let mc = parseInt(document.getElementById('drawRepMinCycles').value, 10);
     if (isNaN(mc) || mc < 2) mc = 2; if (mc > 10) mc = 10;
     settings.draw.repMinCycles = mc;
+    const paperExpandEl = document.getElementById('drawPaperAutoExpand');
+    if (paperExpandEl) settings.draw.paperAutoExpand = paperExpandEl.checked;
     saveSettings();
     closeDrawSettings();
     drawAll();
+    if (typeof currentMode !== 'undefined' && currentMode === 'preview' && typeof updateTemplatePreview === 'function') updateTemplatePreview();
 });
 document.getElementById('settings-draw-cancel').addEventListener('click', closeDrawSettings);
 document.getElementById('settings-draw-reset').addEventListener('click', () => {

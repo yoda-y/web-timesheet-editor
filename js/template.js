@@ -157,17 +157,57 @@ function applyTemplateColorSettings() {
     TEMPLATE.BG_COLOR = resolve('templateBg', 'templateBg', TEMPLATE_COLOR_DEFAULTS.BG_COLOR);
 }
 
+// 標準A3 用紙横拡張 (PR-2): ACTION/CELL の列数が初期(7列)を超えたら、
+// 列幅を圧縮せず用紙幅(WIDTH_MM)を右に拡張する。2段組(0-71/72-143fr)は維持。
+// 列数が初期以下なら 297 を返す → 従来描画と完全一致 (リグレッション基準)。
+const TEMPLATE_WIDTH_MM_DEFAULT = 297;
+function getStandardA3PaperWidthMm() {
+    const def = TEMPLATE_WIDTH_MM_DEFAULT;
+    // 設定で OFF なら拡張しない (既定 ON)
+    if (typeof settings !== 'undefined' && settings.draw && settings.draw.paperAutoExpand === false) return def;
+    if (typeof getActualColCounts !== 'function') return def;
+    const cols = getActualColCounts();
+    // デフォルト列構成 (ACTION7 + SOUND2*1.5 + CELL7 + CAMERA3 = 20 parts) での標準列幅(mm)
+    const ML = TEMPLATE.MARGIN_LEFT, MR = TEMPLATE.MARGIN_RIGHT, BHM = TEMPLATE.BODY_H_MARGIN;
+    const frameNumW = 5; // mm (drawTimelineColumn の m(5))
+    const soundRatio = 1.5;
+    const defaultBodyW = (def - ML - MR - BHM) / 2;
+    const defaultParts = 7 + 2 * soundRatio + 7 + 3;
+    const stdUnit = (defaultBodyW - frameNumW) / defaultParts;
+    if (stdUnit <= 0) return def;
+    // 実列数での必要 body 幅 (ACTION/CELL 基準。SOUND/CAMERA は getActualColCounts が既定維持)
+    const parts = cols.ACTION + cols.SOUND * soundRatio + cols.CELL + cols.CAMERA;
+    const reqBodyW = parts * stdUnit + frameNumW;
+    if (reqBodyW <= defaultBodyW + 0.01) return def;  // 初期以下は拡張しない
+    const reqContentW = reqBodyW * 2 + BHM;
+    return reqContentW + ML + MR;
+}
+window.getStandardA3PaperWidthMm = getStandardA3PaperWidthMm;
+
 function renderTemplate(dpi, pageIndex = 0) {
     applyTemplateColorSettings();
-    const canvas = createTemplateCanvas(dpi);
-    const ctx = canvas.getContext('2d');
     const scale = dpi / 25.4;
     const m = (mm) => mm * scale;
 
-    // 外部テンプレートが選択されていれば、画像のみを描画してreturn
+    // 外部テンプレ判定を先に行い、標準A3パスのみ用紙幅を拡張する
     const extTpl = (typeof getCurrentExternalTemplate === 'function') ? getCurrentExternalTemplate() : null;
     const extImg = (typeof getCurrentExternalTemplateImage === 'function') ? getCurrentExternalTemplateImage(pageIndex) : null;
-    if (extTpl && extImg) {
+    const isExternal = !!(extTpl && extImg);
+    const savedWidthMm = TEMPLATE.WIDTH_MM;
+    if (!isExternal) TEMPLATE.WIDTH_MM = getStandardA3PaperWidthMm();
+    try {
+        return renderTemplateInner(dpi, pageIndex, scale, m, extTpl, extImg, isExternal);
+    } finally {
+        TEMPLATE.WIDTH_MM = savedWidthMm;  // グローバル汚染を防ぐため必ず復帰
+    }
+}
+
+function renderTemplateInner(dpi, pageIndex, scale, m, extTpl, extImg, isExternal) {
+    const canvas = createTemplateCanvas(dpi);
+    const ctx = canvas.getContext('2d');
+
+    // 外部テンプレートが選択されていれば、画像のみを描画してreturn
+    if (isExternal) {
         // 外部テンプレ画像には標準テンプレ色を適用しない (下地は常に白)
         ctx.fillStyle = TEMPLATE_COLOR_DEFAULTS.BG_COLOR;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -3151,7 +3191,12 @@ function updateImageExportSizeHint() {
     const hint = document.getElementById('image-export-size-hint');
     const dpi = parseInt(document.getElementById('image-export-dpi')?.value || TEMPLATE.DPI_EXPORT, 10);
     if (!hint || !dpi) return;
-    const w = Math.round(TEMPLATE.WIDTH_MM / 25.4 * dpi);
+    // 標準A3 が横拡張される場合はそれを反映 (外部テンプレ適用時は通常幅)
+    const isExternal = (typeof getCurrentExternalTemplate === 'function') && getCurrentExternalTemplate()
+        && (typeof getCurrentExternalTemplateImage === 'function') && getCurrentExternalTemplateImage(0);
+    const widthMm = (!isExternal && typeof getStandardA3PaperWidthMm === 'function')
+        ? getStandardA3PaperWidthMm() : TEMPLATE.WIDTH_MM;
+    const w = Math.round(widthMm / 25.4 * dpi);
     const h = Math.round(TEMPLATE.HEIGHT_MM / 25.4 * dpi);
     hint.textContent = `${w} x ${h}px`;
 }
