@@ -1,5 +1,5 @@
 // === アプリバージョン ===
-const APP_VERSION = '0.32.0';
+const APP_VERSION = '0.32.1';
 const APP_VERSION_LABEL = `v${APP_VERSION} Beta`;
 
 // 更新履歴（CHANGELOG.md と同期して更新すること）
@@ -10,6 +10,18 @@ const APP_CHANGELOG = `# Changelog
 - メジャー: Beta終了 / 互換性破壊変更
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
+
+## v0.32.1 (2026-06-14)
+
+### 修正
+- PSD書き出し時、TIME欄の「+」がClip Studioで表示されない問題
+  - 原因: template層では clearHeaderValuesForPsdTemplate が値領域を塗りつぶし「+」を消去、
+    data層 (drawHeaderDataOnlyForPsd) は sec/fr のみで「+」を描いていなかった
+  - 対処: data raster層の TIME 分岐に「+」(Preview/PNGと同じ緑) を焼き込み、
+    Clip Studio でも確実に表示。Preview/PNG/JPG は full template 経由のため見た目不変
+- Preview のネイティブスクロールバーがスペース/左ドラッグと干渉する問題
+  - #preview-container を overflow: auto → hidden に変更
+  - pan/zoom は従来通りアプリ側 transform で管理 (scroll値は0でも座標式は整合)
 
 ## v0.32.0 (2026-06-14)
 

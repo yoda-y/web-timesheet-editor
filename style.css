@@ -485,7 +485,9 @@ button:hover { background: var(--border-color); }
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  overflow: auto;
+  /* pan/zoom はアプリ側 transform で管理。ネイティブスクロールバーは
+     スペース/左ドラッグと干渉し、表示位置とも意味が一致しないため非表示 */
+  overflow: hidden;
   background: #666;
   padding: 20px;
   position: relative;
