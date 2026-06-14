@@ -3723,6 +3723,11 @@ function drawGengaDougaSplitPage(ctx, extTpl, bboxToCanvas, scale, pageOffset) {
     drawSplitDougaNotice(ctx, extTpl, bboxToCanvas, scale);
 }
 
+// SplitPage / SeparatePages のラベル末尾に付ける「（3秒シート）」注記
+function threeSecSheetSuffix() {
+    return (typeof t === 'function') ? t('sheetLabel.threeSecSuffix') : '（3秒シート）';
+}
+
 // SplitPage: 動画領域 (action2/cell2) を上括弧で括り「こちらが動画シートです」を描画
 function drawSplitDougaNotice(ctx, extTpl, bboxToCanvas, scale) {
     const bx = extTpl.bboxes;
@@ -3731,7 +3736,7 @@ function drawSplitDougaNotice(ctx, extTpl, bboxToCanvas, scale) {
     const labels = (window.externalTemplate && typeof window.externalTemplate.resolveSheetTypeLabels === 'function')
         ? window.externalTemplate.resolveSheetTypeLabels(extTpl) : null;
     if (labels && labels.showSplitNotice === false) return;
-    const text = (labels && labels.splitDougaNotice) || 'こちらが動画シートです';
+    const text = ((labels && labels.splitDougaNotice) || 'こちらが動画シートです') + threeSecSheetSuffix();
 
     // 動画領域の左端〜右端 (action2 左端 〜 cell2 右端 or action2 右端)
     const rA2 = bboxToCanvas(a2);
@@ -3834,9 +3839,9 @@ function drawSeparatePageLabel(ctx, extTpl, bboxToCanvas, scale, sheetKind) {
     if (!a1 || !a1.enabled) return;
     const labels = (window.externalTemplate && typeof window.externalTemplate.resolveSheetTypeLabels === 'function')
         ? window.externalTemplate.resolveSheetTypeLabels(extTpl) : null;
-    const text = sheetKind === 'douga'
+    const text = (sheetKind === 'douga'
         ? ((labels && labels.separateDougaNotice) || '動画シート')
-        : ((labels && labels.separateGengaNotice) || '原画シート');
+        : ((labels && labels.separateGengaNotice) || '原画シート')) + threeSecSheetSuffix();
     // 描画基準: camera2 → camera1 → cell2 → action2 の順で右側の枠を採用
     const anchorB = [bx.camera2, bx.camera1, bx.cell2, bx.action2].find(b => b && b.enabled) || a1;
     const r = bboxToCanvas(anchorB);
@@ -3851,7 +3856,12 @@ function drawSeparatePageLabel(ctx, extTpl, bboxToCanvas, scale, sheetKind) {
     ctx.font = `bold ${m(3.2)}px sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(text, r.x, y);
+    // ラベルが用紙右端で途切れないよう、はみ出す場合は左へ寄せる
+    const tw = ctx.measureText(text).width;
+    const maxX = ctx.canvas.width - m(3);
+    let x = r.x;
+    if (x + tw > maxX) x = Math.max(m(3), maxX - tw);
+    ctx.fillText(text, x, y);
     ctx.restore();
 }
 

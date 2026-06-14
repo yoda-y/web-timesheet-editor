@@ -6,6 +6,29 @@
 - マイナー: 機能追加・大きな改修
 - パッチ: バグ修正のみ
 
+## v0.33.0 (2026-06-14)
+
+### 追加 (columns超過 Phase C-5: Auto切替の可視化)
+- gengaDougaAuto が列数超過で SeparatePages に自動解決された時、トーストで通知
+  - 文言「列数超過のため動画シートを別ページにしました」(extTpl.autoSeparateInfo)
+  - 明示的に gengaDougaSeparatePages を選んだ場合は通知しない
+  - 同一状態 (action/cell 使用列数) は抑制。列が戻って再超過したら再通知
+  - none / pageChunks / SplitPage には影響なし
+- SplitPage 動画欄notice と SeparatePages ページ種別ラベルの末尾に「（3秒シート）」注記
+  - sheetLabel.threeSecSuffix。SplitPage/SeparatePages でのみ表示 (none/pageChunks 不変)
+
+### 修正
+- gengaDougaAuto が列の少ない時でも強制的に SplitPage になる問題
+  - Auto を「通常6秒シート(none) → SplitPage → SeparatePages」の3段階解決に変更
+  - 1側BBox列数に収まれば none (分割せず6秒シート)。getExternalTemplateSheetCapacity
+    も実効モード基準にし、none 解決時は6秒(144fr)容量でページ計算
+- SeparatePages のページ種別ラベルが用紙右端で途切れる問題
+  - 文字幅を測り、はみ出す場合は左へ寄せて全体を表示 (drawSeparatePageLabel)
+
+### 補足
+- C-5 の notice / 上括弧 / ページ種別ラベル / 未描画列警告は v0.29.0 で実装済み
+  - 紙面への「(自動分割)」注記は今回見送り (成果物に残るため。要望次第で設定化)
+
 ## v0.32.1 (2026-06-14)
 
 ### 修正

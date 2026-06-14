@@ -184,6 +184,7 @@ const I18N = {
         'extTpl.overflowPageChunks': '列ページ分割 (1-1, 1-2…)',
         'extTpl.overflowAuto': '通常 (原動画 自動)',
         'extTpl.unrenderedWarn': '表示しきれない列があります ({cols})。列ページ分割の利用を検討してください。',
+        'extTpl.autoSeparateInfo': '列数超過のため動画シートを別ページにしました',
         // カラムヘッダー印字 (Phase A)
         'colHeader.sectionTitle': 'カラムヘッダー印字 (テンプレ共通)',
         'colHeader.sectionTitleBBox': 'カラムヘッダー印字',
@@ -206,6 +207,7 @@ const I18N = {
         'sheetLabel.separateGengaHint': '原画ページ上部に出す「原画シート」等',
         'sheetLabel.separateDouga': '別ページ分割: 動画ページラベル',
         'sheetLabel.separateDougaHint': '動画ページ上部に出す「動画シート」等',
+        'sheetLabel.threeSecSuffix': '（3秒シート）',
         'extTpl.alert.selectTemplate': 'テンプレートを選択してください',
         'extTpl.alert.imageRequired': '先に背景画像を設定してから「保存」してください',
         'extTpl.alert.openFailed': 'BBoxエディタを開けませんでした: ',
@@ -809,6 +811,7 @@ const I18N = {
         'extTpl.overflowPageChunks': 'Page chunks (1-1, 1-2…)',
         'extTpl.overflowAuto': 'Auto (key/inbetween)',
         'extTpl.unrenderedWarn': 'Some columns cannot be shown ({cols}). Consider using page chunks.',
+        'extTpl.autoSeparateInfo': 'Inbetween sheet moved to a separate page (column overflow).',
         // Column header printing (Phase A)
         'colHeader.sectionTitle': 'Column Headers (template default)',
         'colHeader.sectionTitleBBox': 'Column Headers',
@@ -831,6 +834,7 @@ const I18N = {
         'sheetLabel.separateGengaHint': 'Shown at top of key page, e.g. "Key sheet"',
         'sheetLabel.separateDouga': 'Separate pages: In-between sheet label',
         'sheetLabel.separateDougaHint': 'Shown at top of inbetween page, e.g. "Inbetween sheet"',
+        'sheetLabel.threeSecSuffix': ' (3-sec sheet)',
         'extTpl.alert.selectTemplate': 'Select a template',
         'extTpl.alert.imageRequired': 'Set a background image and save first',
         'extTpl.alert.openFailed': 'Could not open BBox editor: ',
