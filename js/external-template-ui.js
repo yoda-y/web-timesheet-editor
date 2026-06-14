@@ -177,6 +177,14 @@ function ensureDraftSheetTypeLabels() {
     return extTplDraft.sheetTypeLabels;
 }
 
+// 保存前正規化: 空の sheetTypeLabels は削除 ('未設定に戻す' をデータ上も完全に)
+function normalizeDraftBeforeSave() {
+    if (extTplDraft && extTplDraft.sheetTypeLabels
+        && Object.keys(extTplDraft.sheetTypeLabels).length === 0) {
+        delete extTplDraft.sheetTypeLabels;
+    }
+}
+
 function loadExtTplSheetTypeLabelsForm(tpl) {
     const resolved = (window.externalTemplate && typeof window.externalTemplate.resolveSheetTypeLabels === 'function')
         ? window.externalTemplate.resolveSheetTypeLabels(tpl) : {};
@@ -316,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             extTplDraft.name = document.getElementById('ext-tpl-name-input').value.trim() || _ei18n('extTpl.untitled', '無名テンプレート');
             extTplDraft.updatedAt = Date.now();
+            normalizeDraftBeforeSave();
             await window.externalTemplate.save(extTplDraft);
             await refreshExternalTemplateList();
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
@@ -343,6 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 未保存の draft 内容を先に保存してから開く（画像反映のため）
             extTplDraft.name = document.getElementById('ext-tpl-name-input').value.trim() || _ei18n('extTpl.untitled', '無名テンプレート');
             extTplDraft.updatedAt = Date.now();
+            normalizeDraftBeforeSave();
             await window.externalTemplate.save(extTplDraft);
             await refreshExternalTemplateList();
             if (typeof window.refreshTemplateSelectExternalOptions === 'function') await window.refreshTemplateSelectExternalOptions();
@@ -401,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (chEyedropper) {
         chEyedropper.addEventListener('click', async () => {
             if (!extTplDraft || typeof window.pickColorEyedropper !== 'function') return;
-            const hex = await window.pickColorEyedropper(document.getElementById('ext-tpl-image-preview-canvas'));
+            const hex = await window.pickColorEyedropper(document.getElementById('ext-tpl-image-preview'));
             if (!hex) return;
             const ch = ensureDraftColumnHeader();
             if (!ch) return;
@@ -422,6 +432,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const v = el.value;
             if (v.trim() === '') delete sl[def.key];   // 空欄は既定 (i18n) に戻す
             else sl[def.key] = v;
+            // 全項目が空になったらオブジェクトごと削除 ('未設定に戻す' をデータ上も完全に)
+            if (Object.keys(sl).length === 0) delete extTplDraft.sheetTypeLabels;
             setExtTplDirty(true);
         });
     });

@@ -329,6 +329,9 @@ function renderBBoxColumnHeaderForm(bbox) {
         else if (def.kind === 'number-nullable') el.value = (typeof cfg[def.key] === 'number') ? cfg[def.key] : '';
         else el.value = cfg[def.key] != null ? cfg[def.key] : (def.kind === 'number' ? 0 : '#000000');
     });
+    // スポイトボタンも override 時のみ有効
+    const eyedropBtn = document.getElementById('bbox-ch-eyedropper');
+    if (eyedropBtn) eyedropBtn.disabled = useTpl;
 }
 window.renderBBoxEditorPropsForm = renderBBoxEditorPropsForm;
 
@@ -611,6 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const bboxChEyedropper = document.getElementById('bbox-ch-eyedropper');
     if (bboxChEyedropper) {
         bboxChEyedropper.addEventListener('click', async () => {
+            if (bboxChEyedropper.disabled) return;
             if (!bboxEditorSelectedTag || !bboxEditorTemplate) return;
             const bbox = bboxEditorTemplate.bboxes[bboxEditorSelectedTag];
             if (!bbox || !bbox.columnHeader) return;

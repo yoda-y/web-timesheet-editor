@@ -28,9 +28,11 @@ function showToast(message, duration = 3000, onClick = null) {
 }
 
 // ----- スポイト (色取得) -----
-// Phase D: ネイティブ EyeDropper API を優先。非対応なら canvas からの手動ピックへ。
+// Phase D: ネイティブ EyeDropper API を優先。非対応なら canvas/img からの手動ピックへ。
+// fallbackTarget は HTMLCanvasElement または HTMLImageElement を受け付ける。
+// img の場合は一時 canvas へ描画してサンプリングする。
 // 戻り値 Promise<string|null> (#rrggbb、キャンセル時 null)
-async function pickColorEyedropper(fallbackCanvas) {
+async function pickColorEyedropper(fallbackTarget) {
     // 1. ネイティブ EyeDropper API (Chrome/Edge 95+)。画面全体から拾える・Esc対応・crosshair
     if (typeof window.EyeDropper === 'function') {
         try {
@@ -40,21 +42,35 @@ async function pickColorEyedropper(fallbackCanvas) {
             return null;  // ユーザーキャンセル (Esc) 含む
         }
     }
-    // 2. フォールバック: 指定 canvas 上のクリックで getImageData
-    const canvas = fallbackCanvas;
-    if (!canvas || typeof canvas.getContext !== 'function') {
+    // 2. フォールバック: 指定要素 (canvas または img) 上のクリックで色を取得
+    const el = fallbackTarget;
+    const isImg = (typeof HTMLImageElement !== 'undefined') && (el instanceof HTMLImageElement);
+    const isCanvas = el && typeof el.getContext === 'function';
+    if (!el || (!isImg && !isCanvas)) {
         if (typeof showToast === 'function') {
             showToast(typeof t === 'function' ? t('colHeader.eyedropperUnsupported')
                 : 'スポイト非対応のブラウザです', 3000);
         }
         return null;
     }
+    // img はサンプリング用に内部 canvas を用意 (自然サイズで描画)
+    let sampleCanvas = null;
+    if (isImg) {
+        const iw = el.naturalWidth || el.width;
+        const ih = el.naturalHeight || el.height;
+        if (!iw || !ih) return null;
+        sampleCanvas = document.createElement('canvas');
+        sampleCanvas.width = iw; sampleCanvas.height = ih;
+        try { sampleCanvas.getContext('2d').drawImage(el, 0, 0, iw, ih); }
+        catch (e) { return null; }
+    }
+    const srcCanvas = isImg ? sampleCanvas : el;
     return new Promise((resolve) => {
-        const prevCursor = canvas.style.cursor;
-        canvas.style.cursor = 'crosshair';
+        const prevCursor = el.style.cursor;
+        el.style.cursor = 'crosshair';
         const cleanup = () => {
-            canvas.style.cursor = prevCursor;
-            canvas.removeEventListener('click', onClick, true);
+            el.style.cursor = prevCursor;
+            el.removeEventListener('click', onClick, true);
             window.removeEventListener('keydown', onKey, true);
         };
         const onKey = (e) => {
@@ -63,15 +79,18 @@ async function pickColorEyedropper(fallbackCanvas) {
         const onClick = (e) => {
             e.preventDefault(); e.stopPropagation();
             try {
-                const rect = canvas.getBoundingClientRect();
-                const x = Math.round((e.clientX - rect.left) * (canvas.width / rect.width));
-                const y = Math.round((e.clientY - rect.top) * (canvas.height / rect.height));
-                const d = canvas.getContext('2d').getImageData(x, y, 1, 1).data;
+                const rect = el.getBoundingClientRect();
+                const sx = (e.clientX - rect.left) * (srcCanvas.width / rect.width);
+                const sy = (e.clientY - rect.top) * (srcCanvas.height / rect.height);
+                // 端クリックで範囲外にならないよう floor + clamp
+                const x = Math.max(0, Math.min(srcCanvas.width - 1, Math.floor(sx)));
+                const y = Math.max(0, Math.min(srcCanvas.height - 1, Math.floor(sy)));
+                const d = srcCanvas.getContext('2d').getImageData(x, y, 1, 1).data;
                 const hex = '#' + [d[0], d[1], d[2]].map(v => v.toString(16).padStart(2, '0')).join('');
                 cleanup(); resolve(hex);
             } catch (err) { cleanup(); resolve(null); }
         };
-        canvas.addEventListener('click', onClick, true);
+        el.addEventListener('click', onClick, true);
         window.addEventListener('keydown', onKey, true);
     });
 }
